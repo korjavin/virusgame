@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderBoard() {
         gameBoard.innerHTML = '';
         gameBoard.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
+        gameBoard.style.gridTemplateRows = `repeat(${rows}, 40px)`;
         for (let i = 0; i < rows; i++) {
             for (let j = 0; j < cols; j++) {
                 const cell = document.createElement('div');
