@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const newGameButton = document.getElementById('new-game-button');
     const rowsInput = document.getElementById('rows-input');
     const colsInput = document.getElementById('cols-input');
+    const aiEnabledCheckbox = document.getElementById('ai-enabled');
 
     let rows = 10;
     let cols = 10;
@@ -13,10 +14,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let player1Base;
     let player2Base;
     let gameOver = false;
+    let aiEnabled = false;
 
     function initGame() {
         rows = parseInt(rowsInput.value);
         cols = parseInt(colsInput.value);
+        aiEnabled = aiEnabledCheckbox.checked;
 
         board = Array(rows).fill(null).map(() => Array(cols).fill(null));
 
@@ -66,6 +69,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     newGameButton.addEventListener('click', initGame);
+    aiEnabledCheckbox.addEventListener('change', () => {
+        aiEnabled = aiEnabledCheckbox.checked;
+    });
     gameBoard.addEventListener('click', handleCellClick);
 
     function checkWinCondition() {
@@ -92,6 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const winner = currentPlayer === 1 ? 2 : 1;
             statusDisplay.textContent = `Player ${winner} wins! Player ${currentPlayer} has no more moves.`;
             gameOver = true;
+        }
+
+        if (aiEnabled && currentPlayer === 2 && !gameOver) {
+            setTimeout(playAITurn, 500);
         }
     }
 
@@ -167,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleCellClick(event) {
-        if (gameOver) return;
+        if (gameOver || (aiEnabled && currentPlayer === 2)) return;
         const cell = event.target.closest('.cell');
         if (!cell) return;
 
