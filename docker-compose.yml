@@ -1,0 +1,21 @@
+# docker-compose.yml
+version: "3.8"
+
+services:
+  virusgame:
+    # The image tag will be replaced by the GitHub Actions workflow
+    image: ghcr.io/korjavin/virusgame:latest
+    container_name: virusgame
+    networks:
+      - ${NETWORK_NAME}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.virusgame.rule=Host(`${HOSTNAME}`)"
+      - "traefik.http.routers.virusgame.entrypoints=websecure"
+      - "traefik.http.routers.virusgame.tls.certresolver=myresolver"
+    restart: unless-stopped
+
+networks:
+  ${NETWORK_NAME}:
+    external: true
+    name: ${NETWORK_NAME}
