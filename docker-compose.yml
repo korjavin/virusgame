@@ -7,7 +7,7 @@ services:
     image: ghcr.io/korjavin/virusgame:latest
     container_name: virusgame
     networks:
-      - ${NETWORK_NAME}
+      - net1
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.virusgame.rule=Host(`${HOSTNAME}`)"
@@ -16,6 +16,6 @@ services:
     restart: unless-stopped
 
 networks:
-  ${NETWORK_NAME}:
+  net1:
     external: true
     name: ${NETWORK_NAME}
