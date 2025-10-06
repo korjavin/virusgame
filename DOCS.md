@@ -27,6 +27,12 @@ A move consists of one of the following actions:
 -   Fortified cells are visually distinct, appearing with a solid background color.
 -   You can use your fortified cells to grow and attack from, just like your normal pieces.
 
+## Putting Neutrals
+
+Once per game, each player has the ability to place two neutral fields on their own, non-fortified cells. This action replaces your entire turn (all three moves).
+
+To use this ability, click the "Put Neutrals" button and then select two of your own cells to neutralize. This can be a strategic move to block an opponent's advance.
+
 ## Winning the Game
 
 A player wins when their opponent has no pieces left on the board.

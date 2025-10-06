@@ -1,5 +1,9 @@
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
-let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox;
+let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton;
+let player1NeutralsUsed = false;
+let player2NeutralsUsed = false;
+let neutralMode = false;
+let neutralsPlaced = 0;
 
 function isConnectedToBase(startRow, startCol, player) {
     const base = player === 1 ? player1Base : player2Base;
@@ -85,6 +89,8 @@ function renderBoard() {
             } else if (cellValue === '2-fortified') {
                 cell.classList.add('player2-fortified');
                 cell.textContent = 'O';
+            } else if (cellValue === 'killed') {
+                cell.classList.add('killed');
             }
 
             gameBoard.appendChild(cell);
@@ -94,7 +100,11 @@ function renderBoard() {
 
 function updateStatus() {
     if (gameOver) return;
-    statusDisplay.textContent = `Player ${currentPlayer}'s turn. Moves left: ${movesLeft}.`;
+    if (neutralMode) {
+        statusDisplay.textContent = `Player ${currentPlayer}: Place ${2 - neutralsPlaced} neutral field(s).`;
+    } else {
+        statusDisplay.textContent = `Player ${currentPlayer}'s turn. Moves left: ${movesLeft}.`;
+    }
 }
 
 function endTurn() {
@@ -102,6 +112,12 @@ function endTurn() {
     movesLeft = 3;
     updateStatus();
     checkWinCondition();
+
+    if (currentPlayer === 1) {
+        putNeutralsButton.disabled = player1NeutralsUsed;
+    } else {
+        putNeutralsButton.disabled = player2NeutralsUsed;
+    }
 
     if (!gameOver && !canMakeMove(currentPlayer)) {
         const winner = currentPlayer === 1 ? 2 : 1;
@@ -147,6 +163,27 @@ function handleCellClick(event) {
     const row = parseInt(cell.dataset.row);
     const col = parseInt(cell.dataset.col);
 
+    if (neutralMode) {
+        const cellValue = board[row][col];
+        if (cellValue === currentPlayer) {
+            board[row][col] = 'killed';
+            neutralsPlaced++;
+            renderBoard();
+            updateStatus();
+            if (neutralsPlaced === 2) {
+                if (currentPlayer === 1) {
+                    player1NeutralsUsed = true;
+                } else {
+                    player2NeutralsUsed = true;
+                }
+                neutralMode = false;
+                neutralsPlaced = 0;
+                endTurn();
+            }
+        }
+        return;
+    }
+
     if (movesLeft > 0 && isValidMove(row, col, currentPlayer)) {
         const opponent = currentPlayer === 1 ? 2 : 1;
         const cellValue = board[row][col];
@@ -176,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
     rowsInput = document.getElementById('rows-input');
     colsInput = document.getElementById('cols-input');
     aiEnabledCheckbox = document.getElementById('ai-enabled');
+    putNeutralsButton = document.getElementById('put-neutrals-button');
 
     function initGame() {
         rows = parseInt(rowsInput.value);
@@ -187,6 +225,11 @@ document.addEventListener('DOMContentLoaded', () => {
         currentPlayer = 1;
         movesLeft = 3;
         gameOver = false;
+        player1NeutralsUsed = false;
+        player2NeutralsUsed = false;
+        neutralMode = false;
+        neutralsPlaced = 0;
+        putNeutralsButton.disabled = false;
 
         player1Base = { row: 0, col: 0 };
         player2Base = { row: rows - 1, col: cols - 1 };
@@ -201,6 +244,15 @@ document.addEventListener('DOMContentLoaded', () => {
     newGameButton.addEventListener('click', initGame);
     aiEnabledCheckbox.addEventListener('change', () => {
         aiEnabled = aiEnabledCheckbox.checked;
+    });
+    putNeutralsButton.addEventListener('click', () => {
+        if (currentPlayer === 1 && !player1NeutralsUsed) {
+            neutralMode = true;
+            updateStatus();
+        } else if (currentPlayer === 2 && !player2NeutralsUsed) {
+            neutralMode = true;
+            updateStatus();
+        }
     });
     gameBoard.addEventListener('click', handleCellClick);
 

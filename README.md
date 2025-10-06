@@ -14,6 +14,8 @@ Crucially, any expansion (grow or attack) must originate from a chain of cells t
 
 When an opponent's cell is attacked, it becomes a **fortified cell** for the attacker. Fortified cells cannot be re-taken.
 
+Once per game, each player can choose to place two **neutral fields** on their own territory instead of making their moves. This can be used to create defensive barriers.
+
 For a complete explanation of the rules, please see [DOCS.md](DOCS.md).
 
 ## Running the Game
