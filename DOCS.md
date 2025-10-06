@@ -1,39 +1,34 @@
-# Documentation
+# Virus Game Rules
 
-## Game Rules
+This document outlines the rules for the Virus Game.
 
-The game is played on a 10x10 grid. There are two players, Player 1 (X) and Player 2 (O).
+## Objective
 
-### Initial Setup
+The objective of the game is to eliminate all of your opponent's pieces from the board.
 
-Player 1 starts with three pieces at the top-left corner of the board:
-- (0, 0), (0, 1), (1, 0)
+## Gameplay
 
-Player 2 starts with three pieces at the bottom-right corner of the board:
-- (9, 9), (9, 8), (8, 9)
+The game is played on a grid of a customizable size. Two players, X (Player 1) and O (Player 2), take turns to expand their territory.
 
-### Turns
+Each player has **three moves** per turn.
 
-Players take turns making three moves. A player can choose to pass their turn at any time.
+A move consists of one of the following actions:
 
-### Moves
+1.  **Grow:** Place a new piece in an empty cell adjacent to one of your existing pieces. This expands your territory.
 
-A move can be one of the following:
+2.  **Attack:** Attack an opponent's piece in a cell adjacent to one of your existing pieces. When you attack an opponent's cell, it is converted into a **fortified cell** of your color. 
 
-*   **Place:** Place a new piece on an empty cell. The new piece must be adjacent (horizontally, vertically, or diagonally) to one of the player's existing pieces.
-*   **Kill:** Remove an opponent's piece from the board. The opponent's piece must be adjacent to one of the player's existing pieces. A player can also "chain-kill" through a line of already killed enemy pieces.
-*   **Neutral:** Place a neutral piece on any empty cell. Neutral pieces cannot be killed or moved.
+## Fortified Cells
 
-### Winning the Game
+-   When you successfully attack an opponent's cell, it becomes a fortified cell.
+-   Fortified cells are permanently owned by the attacking player and **cannot be re-taken** for the rest of the game.
+-   Fortified cells are visually distinct, appearing with a solid background color.
+-   You can use your fortified cells to grow and attack from, just like your normal pieces.
 
-A player wins the game when the other player has no more pieces on the board.
+## Winning the Game
 
-## How to Play
+A player wins when their opponent has no pieces left on the board.
 
-1.  Open the `index.html` file in a web browser.
-2.  The game will start automatically.
-3.  The status display at the top of the page will show whose turn it is and how many moves are left.
-4.  To make a move, click on the desired cell on the board.
-5.  To switch between "Place" and "Kill" modes, use the "Switch to Kill Mode" / "Switch to Place Mode" button.
-6.  To place a neutral piece, click the "Place Neutral" button and then click on an empty cell.
-7.  To pass your turn, click the "Pass Turn" button.
+## Passing a Turn
+
+If a player cannot make a move, or chooses not to, they can pass their turn by clicking the "Pass Turn" button.

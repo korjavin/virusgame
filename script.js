@@ -44,14 +44,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 cell.dataset.row = i;
                 cell.dataset.col = j;
 
-                if (board[i][j] === 1) {
+                const cellValue = board[i][j];
+                if (cellValue === 1) {
                     cell.classList.add('player1');
                     cell.textContent = 'X';
-                } else if (board[i][j] === 2) {
+                } else if (cellValue === 2) {
                     cell.classList.add('player2');
                     cell.textContent = 'O';
-                } else if (board[i][j] === 'killed') {
-                    cell.classList.add('killed');
+                } else if (cellValue === '1-fortified') {
+                    cell.classList.add('player1-fortified');
+                    cell.textContent = 'X';
+                } else if (cellValue === '2-fortified') {
+                    cell.classList.add('player2-fortified');
+                    cell.textContent = 'O';
                 }
 
                 gameBoard.appendChild(cell);
@@ -65,8 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     function checkWinCondition() {
-        const player1Pieces = board.flat().filter(cell => cell === 1).length;
-        const player2Pieces = board.flat().filter(cell => cell === 2).length;
+        const player1Pieces = board.flat().filter(cell => String(cell).startsWith('1')).length;
+        const player2Pieces = board.flat().filter(cell => String(cell).startsWith('2')).length;
 
         if (player1Pieces === 0) {
             statusDisplay.textContent = 'Player 2 wins!';
@@ -88,16 +93,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const row = parseInt(cell.dataset.row);
         const col = parseInt(cell.dataset.col);
+        const cellValue = board[row][col];
+
+        if (typeof cellValue === 'string' && cellValue.includes('fortified')) {
+            return; // Cannot attack fortified cells
+        }
 
         if (movesLeft > 0) {
             const opponent = currentPlayer === 1 ? 2 : 1;
 
-            if (board[row][col] === null && isAdjacent(row, col, currentPlayer)) {
+            if (cellValue === null && isAdjacent(row, col, currentPlayer)) {
                 board[row][col] = currentPlayer;
                 movesLeft--;
-                    } else if (board[row][col] === opponent && isAdjacent(row, col, currentPlayer)) {
-                        board[row][col] = currentPlayer; // Capture the opponent's cell
-                        movesLeft--;            }
+            } else if (String(cellValue).startsWith(opponent) && isAdjacent(row, col, currentPlayer)) {
+                board[row][col] = `${currentPlayer}-fortified`;
+                movesLeft--;
+            }
 
             if (movesLeft === 0) {
                 endTurn();
@@ -115,8 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const newRow = row + i;
                 const newCol = col + j;
 
-                if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols && board[newRow][newCol] === player) {
-                    return true;
+                if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
+                    const adjacentCellValue = board[newRow][newCol];
+                    if (adjacentCellValue && String(adjacentCellValue).startsWith(player)) {
+                        return true;
+                    }
                 }
             }
         }

@@ -32,3 +32,13 @@ body {
     color: red;
 }
 
+.player1-fortified {
+    background-color: blue;
+    color: white;
+}
+
+.player2-fortified {
+    background-color: red;
+    color: white;
+}
+
