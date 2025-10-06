@@ -114,6 +114,61 @@ function endTurn() {
     }
 }
 
+function checkWinCondition() {
+    if (gameOver) return;
+    const player1Pieces = board.flat().filter(cell => String(cell).startsWith('1')).length;
+    const player2Pieces = board.flat().filter(cell => String(cell).startsWith('2')).length;
+
+    if (player1Pieces === 0) {
+        statusDisplay.textContent = 'Player 2 wins!';
+        gameOver = true;
+    } else if (player2Pieces === 0) {
+        statusDisplay.textContent = 'Player 1 wins!';
+        gameOver = true;
+    }
+}
+
+function canMakeMove(player) {
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (isValidMove(r, c, player)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function handleCellClick(event) {
+    if (gameOver || (aiEnabled && currentPlayer === 2)) return;
+    const cell = event.target.closest('.cell');
+    if (!cell) return;
+
+    const row = parseInt(cell.dataset.row);
+    const col = parseInt(cell.dataset.col);
+
+    if (movesLeft > 0 && isValidMove(row, col, currentPlayer)) {
+        const opponent = currentPlayer === 1 ? 2 : 1;
+        const cellValue = board[row][col];
+
+        if (cellValue === null) {
+            board[row][col] = currentPlayer;
+        } else if (String(cellValue).startsWith(opponent)) {
+            board[row][col] = `${currentPlayer}-fortified`;
+        }
+
+        movesLeft--;
+
+        renderBoard();
+
+        if (movesLeft === 0) {
+            endTurn();
+        } else {
+            updateStatus();
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     gameBoard = document.getElementById('game-board');
     statusDisplay = document.getElementById('status');
@@ -148,61 +203,6 @@ document.addEventListener('DOMContentLoaded', () => {
         aiEnabled = aiEnabledCheckbox.checked;
     });
     gameBoard.addEventListener('click', handleCellClick);
-
-    function checkWinCondition() {
-        if (gameOver) return;
-        const player1Pieces = board.flat().filter(cell => String(cell).startsWith('1')).length;
-        const player2Pieces = board.flat().filter(cell => String(cell).startsWith('2')).length;
-
-        if (player1Pieces === 0) {
-            statusDisplay.textContent = 'Player 2 wins!';
-            gameOver = true;
-        } else if (player2Pieces === 0) {
-            statusDisplay.textContent = 'Player 1 wins!';
-            gameOver = true;
-        }
-    }
-
-    function canMakeMove(player) {
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                if (isValidMove(r, c, player)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    function handleCellClick(event) {
-        if (gameOver || (aiEnabled && currentPlayer === 2)) return;
-        const cell = event.target.closest('.cell');
-        if (!cell) return;
-
-        const row = parseInt(cell.dataset.row);
-        const col = parseInt(cell.dataset.col);
-
-        if (movesLeft > 0 && isValidMove(row, col, currentPlayer)) {
-            const opponent = currentPlayer === 1 ? 2 : 1;
-            const cellValue = board[row][col];
-
-            if (cellValue === null) {
-                board[row][col] = currentPlayer;
-            } else if (String(cellValue).startsWith(opponent)) {
-                board[row][col] = `${currentPlayer}-fortified`;
-            }
-
-            movesLeft--;
-
-            renderBoard();
-
-            if (movesLeft === 0) {
-                endTurn();
-            } else {
-                updateStatus();
-            }
-        }
-    }
 
     // Initial game start
     initGame();
