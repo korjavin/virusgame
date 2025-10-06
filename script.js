@@ -185,10 +185,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             movesLeft--;
+
+            renderBoard();
+
             if (movesLeft === 0) {
                 endTurn();
             } else {
-                renderBoard();
                 updateStatus();
             }
         }
