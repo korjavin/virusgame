@@ -1,8 +1,6 @@
 const gameBoard = document.getElementById('game-board');
 const statusDisplay = document.getElementById('status');
-const modeButton = document.getElementById('mode-button');
 const passButton = document.getElementById('pass-button');
-const neutralButton = document.getElementById('neutral-button');
 const newGameButton = document.getElementById('new-game-button');
 const rowsInput = document.getElementById('rows-input');
 const colsInput = document.getElementById('cols-input');
@@ -12,7 +10,6 @@ let cols = 10;
 let board = [];
 let currentPlayer = 1;
 let movesLeft = 3;
-let gameMode = 'place'; // 'place' or 'kill'
 
 function initGame() {
     rows = parseInt(rowsInput.value);
@@ -22,7 +19,6 @@ function initGame() {
 
     currentPlayer = 1;
     movesLeft = 3;
-    gameMode = 'place';
 
     // Initial setup
     board[0][0] = 1;
@@ -63,19 +59,7 @@ function renderBoard() {
     }
 }
 
-modeButton.addEventListener('click', () => {
-    if (gameMode === 'place') {
-        gameMode = 'kill';
-        modeButton.textContent = 'Switch to Place Mode';
-    } else {
-        gameMode = 'place';
-        modeButton.textContent = 'Switch to Kill Mode';
-    }
-    updateStatus();
-});
-
 passButton.addEventListener('click', endTurn);
-
 newGameButton.addEventListener('click', initGame);
 
 function checkWinCondition() {
@@ -84,49 +68,31 @@ function checkWinCondition() {
 
     if (player1Pieces === 0) {
         statusDisplay.textContent = 'Player 2 wins!';
-        // gameBoard.removeEventListener('click', handleCellClick); // This is problematic, better to handle in handleCellClick
     } else if (player2Pieces === 0) {
         statusDisplay.textContent = 'Player 1 wins!';
-        // gameBoard.removeEventListener('click', handleCellClick);
     }
 }
 
 function endTurn() {
     currentPlayer = currentPlayer === 1 ? 2 : 1;
     movesLeft = 3;
-    gameMode = 'place';
-    modeButton.textContent = 'Switch to Kill Mode';
     updateStatus();
     checkWinCondition();
 }
-
-neutralButton.addEventListener('click', () => {
-    gameMode = 'neutral';
-    modeButton.textContent = 'Switch to Place Mode';
-    updateStatus();
-});
 
 function handleCellClick(event) {
     const row = parseInt(event.target.dataset.row);
     const col = parseInt(event.target.dataset.col);
 
     if (movesLeft > 0) {
-        if (gameMode === 'place') {
-            if (board[row][col] === null && isAdjacent(row, col, currentPlayer)) {
-                board[row][col] = currentPlayer;
-                movesLeft--;
-            }
-        } else if (gameMode === 'kill') {
-            const opponent = currentPlayer === 1 ? 2 : 1;
-            if (board[row][col] === opponent && isAdjacent(row, col, currentPlayer)) {
-                board[row][col] = 'killed';
-                movesLeft--;
-            }
-        } else if (gameMode === 'neutral') {
-            if (board[row][col] === null) {
-                board[row][col] = 'killed';
-                movesLeft--;
-            }
+        const opponent = currentPlayer === 1 ? 2 : 1;
+
+        if (board[row][col] === null && isAdjacent(row, col, currentPlayer)) {
+            board[row][col] = currentPlayer;
+            movesLeft--;
+        } else if (board[row][col] === opponent && isAdjacent(row, col, currentPlayer)) {
+            board[row][col] = 'killed';
+            movesLeft--;
         }
 
         if (movesLeft === 0) {
@@ -139,8 +105,6 @@ function handleCellClick(event) {
 }
 
 function isAdjacent(row, col, player) {
-    // This function logic needs to be improved for larger boards and complex scenarios.
-    // For now, it checks for any adjacent friendly piece.
     for (let i = -1; i <= 1; i++) {
         for (let j = -1; j <= 1; j++) {
             if (i === 0 && j === 0) continue;
@@ -156,7 +120,7 @@ function isAdjacent(row, col, player) {
 }
 
 function updateStatus() {
-    statusDisplay.textContent = `Player ${currentPlayer}'s turn. Moves left: ${movesLeft}. Mode: ${gameMode}`;
+    statusDisplay.textContent = `Player ${currentPlayer}'s turn. Moves left: ${movesLeft}.`;
 }
 
 // Initial game start
