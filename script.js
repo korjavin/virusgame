@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let board = [];
     let currentPlayer = 1;
     let movesLeft = 3;
+    let player1Base;
+    let player2Base;
 
     function initGame() {
         rows = parseInt(rowsInput.value);
@@ -21,14 +23,11 @@ document.addEventListener('DOMContentLoaded', () => {
         currentPlayer = 1;
         movesLeft = 3;
 
-        // Initial setup
-        board[0][0] = 1;
-        board[0][1] = 1;
-        board[1][0] = 1;
+        player1Base = { row: 0, col: 0 };
+        player2Base = { row: rows - 1, col: cols - 1 };
 
-        board[rows - 1][cols - 1] = 2;
-        board[rows - 1][cols - 2] = 2;
-        board[rows - 2][cols - 1] = 2;
+        board[player1Base.row][player1Base.col] = 1;
+        board[player2Base.row][player2Base.col] = 2;
 
         renderBoard();
         updateStatus();
@@ -87,6 +86,38 @@ document.addEventListener('DOMContentLoaded', () => {
         checkWinCondition();
     }
 
+    function isConnectedToBase(startRow, startCol, player) {
+        const base = player === 1 ? player1Base : player2Base;
+        const visited = new Set();
+        const stack = [{ row: startRow, col: startCol }];
+        visited.add(`${startRow},${startCol}`);
+
+        while (stack.length > 0) {
+            const { row, col } = stack.pop();
+
+            if (row === base.row && col === base.col) {
+                return true;
+            }
+
+            for (let i = -1; i <= 1; i++) {
+                for (let j = -1; j <= 1; j++) {
+                    if (i === 0 && j === 0) continue;
+                    const newRow = row + i;
+                    const newCol = col + j;
+
+                    if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols && !visited.has(`${newRow},${newCol}`)) {
+                        const cellValue = board[newRow][newCol];
+                        if (cellValue && String(cellValue).startsWith(player)) {
+                            visited.add(`${newRow},${newCol}`);
+                            stack.push({ row: newRow, col: newCol });
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     function handleCellClick(event) {
         const cell = event.target.closest('.cell');
         if (!cell) return;
@@ -101,40 +132,40 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (movesLeft > 0) {
             const opponent = currentPlayer === 1 ? 2 : 1;
+            let moveMade = false;
 
-            if (cellValue === null && isAdjacent(row, col, currentPlayer)) {
-                board[row][col] = currentPlayer;
-                movesLeft--;
-            } else if (String(cellValue).startsWith(opponent) && isAdjacent(row, col, currentPlayer)) {
-                board[row][col] = `${currentPlayer}-fortified`;
-                movesLeft--;
-            }
+            for (let i = -1; i <= 1; i++) {
+                for (let j = -1; j <= 1; j++) {
+                    if (i === 0 && j === 0) continue;
+                    const adjRow = row + i;
+                    const adjCol = col + j;
 
-            if (movesLeft === 0) {
-                endTurn();
-            }
-
-            renderBoard();
-            updateStatus();
-        }
-    }
-
-    function isAdjacent(row, col, player) {
-        for (let i = -1; i <= 1; i++) {
-            for (let j = -1; j <= 1; j++) {
-                if (i === 0 && j === 0) continue;
-                const newRow = row + i;
-                const newCol = col + j;
-
-                if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
-                    const adjacentCellValue = board[newRow][newCol];
-                    if (adjacentCellValue && String(adjacentCellValue).startsWith(player)) {
-                        return true;
+                    if (adjRow >= 0 && adjRow < rows && adjCol >= 0 && adjCol < cols) {
+                        const adjCellValue = board[adjRow][adjCol];
+                        if (adjCellValue && String(adjCellValue).startsWith(currentPlayer) && isConnectedToBase(adjRow, adjCol, currentPlayer)) {
+                            if (cellValue === null) {
+                                board[row][col] = currentPlayer;
+                                moveMade = true;
+                            } else if (String(cellValue).startsWith(opponent)) {
+                                board[row][col] = `${currentPlayer}-fortified`;
+                                moveMade = true;
+                            }
+                            break;
+                        }
                     }
                 }
+                if (moveMade) break;
+            }
+
+            if (moveMade) {
+                movesLeft--;
+                if (movesLeft === 0) {
+                    endTurn();
+                }
+                renderBoard();
+                updateStatus();
             }
         }
-        return false;
     }
 
     function updateStatus() {

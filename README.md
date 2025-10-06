@@ -6,11 +6,13 @@ The game is played on a 10x10 grid. Two players, represented by 'X' and 'O', tak
 
 ## Rules
 
-The game is a turn-based strategy game where two players, X and O, compete to control the board.
+Each player starts with a single base cell in their corner of the board. The goal is to eliminate the opponent by capturing all their cells.
 
-Each player has **three moves** per turn. A move can be either to **grow** into an adjacent empty cell or to **attack** an adjacent opponent's cell.
+Players take turns making **three moves**. A move can be to **grow** into an adjacent empty cell or to **attack** an adjacent opponent's cell. 
 
-When an opponent's cell is attacked, it becomes a **fortified cell** for the attacker. Fortified cells cannot be re-taken and can be used for further expansion.
+Crucially, any expansion (grow or attack) must originate from a chain of cells that is connected to your initial **base cell**.
+
+When an opponent's cell is attacked, it becomes a **fortified cell** for the attacker. Fortified cells cannot be re-taken.
 
 For a complete explanation of the rules, please see [DOCS.md](DOCS.md).
 
