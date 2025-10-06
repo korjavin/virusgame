@@ -95,10 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (board[row][col] === null && isAdjacent(row, col, currentPlayer)) {
                 board[row][col] = currentPlayer;
                 movesLeft--;
-            } else if (board[row][col] === opponent && isAdjacent(row, col, currentPlayer)) {
-                board[row][col] = 'killed';
-                movesLeft--;
-            }
+                    } else if (board[row][col] === opponent && isAdjacent(row, col, currentPlayer)) {
+                        board[row][col] = currentPlayer; // Capture the opponent's cell
+                        movesLeft--;            }
 
             if (movesLeft === 0) {
                 endTurn();
