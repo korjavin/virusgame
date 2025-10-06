@@ -30,7 +30,3 @@ A move consists of one of the following actions:
 ## Winning the Game
 
 A player wins when their opponent has no pieces left on the board.
-
-## Passing a Turn
-
-If a player cannot make a move, or chooses not to, they can pass their turn by clicking the "Pass Turn" button.
