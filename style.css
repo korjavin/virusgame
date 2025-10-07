@@ -46,3 +46,13 @@ body {
     background-color: #ddd;
 }
 
+.player1-base {
+    background-color: #a2faa3;
+    border: 2px solid blue;
+}
+
+.player2-base {
+    background-color: #a2faa3;
+    border: 2px solid red;
+}
+

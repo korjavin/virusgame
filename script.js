@@ -39,8 +39,8 @@ function isConnectedToBase(startRow, startCol, player) {
 
 function isValidMove(row, col, player) {
     const cellValue = board[row][col];
-    if (typeof cellValue === 'string' && cellValue.includes('fortified')) {
-        return false; // Cannot attack fortified cells
+    if (typeof cellValue === 'string' && (cellValue.includes('fortified') || cellValue.includes('base'))) {
+        return false; // Cannot attack fortified or base cells
     }
 
     const opponent = player === 1 ? 2 : 1;
@@ -88,6 +88,12 @@ function renderBoard() {
                 cell.textContent = 'X';
             } else if (cellValue === '2-fortified') {
                 cell.classList.add('player2-fortified');
+                cell.textContent = 'O';
+            } else if (cellValue === '1-base') {
+                cell.classList.add('player1-base');
+                cell.textContent = 'X';
+            } else if (cellValue === '2-base') {
+                cell.classList.add('player2-base');
                 cell.textContent = 'O';
             } else if (cellValue === 'killed') {
                 cell.classList.add('killed');
@@ -238,8 +244,8 @@ document.addEventListener('DOMContentLoaded', () => {
         player1Base = { row: 0, col: 0 };
         player2Base = { row: rows - 1, col: cols - 1 };
 
-        board[player1Base.row][player1Base.col] = 1;
-        board[player2Base.row][player2Base.col] = 2;
+        board[player1Base.row][player1Base.col] = '1-base';
+        board[player2Base.row][player2Base.col] = '2-base';
 
         renderBoard();
         updateStatus();
