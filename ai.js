@@ -40,6 +40,12 @@ function playAITurn() {
             movesLeft--;
             renderBoard();
             updateStatus();
+
+            if (!canMakeMove(2)) {
+                statusDisplay.textContent = 'Player 1 wins! Player 2 has no more moves.';
+                gameOver = true;
+                return;
+            }
         }
 
         if (movesLeft > 0) {

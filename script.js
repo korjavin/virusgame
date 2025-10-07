@@ -208,6 +208,13 @@ function handleCellClick(event) {
 
         renderBoard();
 
+        if (!canMakeMove(currentPlayer)) {
+            const winner = currentPlayer === 1 ? 2 : 1;
+            statusDisplay.textContent = `Player ${winner} wins! Player ${currentPlayer} has no more moves.`;
+            gameOver = true;
+            return;
+        }
+
         if (movesLeft === 0) {
             endTurn();
         } else {
