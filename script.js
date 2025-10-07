@@ -107,6 +107,10 @@ function updateStatus() {
     }
 }
 
+function countNonFortifiedCells(player) {
+    return board.flat().filter(cell => cell === player).length;
+}
+
 function endTurn() {
     currentPlayer = currentPlayer === 1 ? 2 : 1;
     movesLeft = 3;
@@ -114,9 +118,9 @@ function endTurn() {
     checkWinCondition();
 
     if (currentPlayer === 1) {
-        putNeutralsButton.disabled = player1NeutralsUsed;
+        putNeutralsButton.disabled = player1NeutralsUsed || countNonFortifiedCells(1) < 2;
     } else {
-        putNeutralsButton.disabled = player2NeutralsUsed;
+        putNeutralsButton.disabled = player2NeutralsUsed || countNonFortifiedCells(2) < 2;
     }
 
     if (!gameOver && !canMakeMove(currentPlayer)) {
@@ -239,6 +243,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderBoard();
         updateStatus();
+
+        if (countNonFortifiedCells(1) < 2) {
+            putNeutralsButton.disabled = true;
+        }
     }
 
     newGameButton.addEventListener('click', initGame);
@@ -246,10 +254,10 @@ document.addEventListener('DOMContentLoaded', () => {
         aiEnabled = aiEnabledCheckbox.checked;
     });
     putNeutralsButton.addEventListener('click', () => {
-        if (currentPlayer === 1 && !player1NeutralsUsed) {
+        if (currentPlayer === 1 && !player1NeutralsUsed && countNonFortifiedCells(1) >= 2) {
             neutralMode = true;
             updateStatus();
-        } else if (currentPlayer === 2 && !player2NeutralsUsed) {
+        } else if (currentPlayer === 2 && !player2NeutralsUsed && countNonFortifiedCells(2) >= 2) {
             neutralMode = true;
             updateStatus();
         }

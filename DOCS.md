@@ -33,6 +33,8 @@ Once per game, each player has the ability to place two neutral fields on their 
 
 To use this ability, click the "Put Neutrals" button and then select two of your own cells to neutralize. This can be a strategic move to block an opponent's advance.
 
+**Note:** This ability is only available if you have at least two non-fortified cells to convert.
+
 ## Winning the Game
 
 A player wins when their opponent has no pieces left on the board.
