@@ -62,6 +62,17 @@ function getAIMoveWasm() {
     }
 
     try {
+        // Count cells for debugging
+        let p1Cells = 0, p2Cells = 0;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const cell = board[r][c];
+                if (cell && String(cell).startsWith('1')) p1Cells++;
+                if (cell && String(cell).startsWith('2')) p2Cells++;
+            }
+        }
+
+        console.log('WASM AI: JS has p1=' + p1Cells + ' p2=' + p2Cells + ' cells before calling WASM');
         console.log('WASM AI: Calling with bases:', {
             player1: {row: player1Base.row, col: player1Base.col},
             player2: {row: player2Base.row, col: player2Base.col},
