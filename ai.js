@@ -38,7 +38,7 @@ function updateAIProgress() {
     const progressText = document.getElementById('ai-progress-text');
 
     if (progressDiv && progressText) {
-        progressDiv.style.display = 'block';
+        progressDiv.classList.remove('hidden');
         progressText.textContent = `${aiProgressCurrent}/${aiProgressTotal}`;
         console.log('AI Progress:', aiProgressCurrent, '/', aiProgressTotal);
     } else {
@@ -49,7 +49,7 @@ function updateAIProgress() {
 function hideAIProgress() {
     const progressDiv = document.getElementById('ai-progress');
     if (progressDiv) {
-        progressDiv.style.display = 'none';
+        progressDiv.classList.add('hidden');
     }
 }
 

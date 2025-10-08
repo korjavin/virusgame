@@ -546,6 +546,10 @@ body.dark-theme .sidebar-section h3 {
     font-size: 12px;
 }
 
+#ai-progress.hidden {
+    display: none;
+}
+
 body.dark-theme #ai-progress {
     color: #aaa;
 }
