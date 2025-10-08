@@ -62,6 +62,12 @@ function getAIMoveWasm() {
     }
 
     try {
+        console.log('WASM AI: Calling with bases:', {
+            player1: {row: player1Base.row, col: player1Base.col},
+            player2: {row: player2Base.row, col: player2Base.col},
+            rows, cols, depth: aiDepth
+        });
+
         const move = window.wasmGetAIMove(
             board,
             rows,
@@ -74,8 +80,11 @@ function getAIMoveWasm() {
         );
 
         if (!move) {
+            console.warn('WASM returned null move');
             return null;
         }
+
+        console.log('WASM AI: Selected move:', move);
 
         return {
             row: move.row,
@@ -117,8 +126,8 @@ function getAIMoveJS() {
 // Override the original getAIMove to use WASM if available
 const originalGetAIMove = getAIMove;
 getAIMove = function() {
-    // TEMPORARILY DISABLED WASM FOR DEBUGGING
-    const useWASM = false; // Set to true to enable WASM
+    // Enable WASM for comparison testing
+    const useWASM = true; // Set to false to disable WASM
 
     if (wasmAIReady && useWASM) {
         console.log('Using WASM AI (depth:', aiDepth, ')');
