@@ -247,16 +247,78 @@ function isValidMoveOnBoard(boardState, row, col, player) {
     const cell = boardState[row][col];
     const opponent = player === 1 ? 2 : 1;
 
-    // Can attack opponent's non-fortified cell
-    if (cell === opponent) {
-        return true;
+    // Cannot move on fortified or base cells
+    if (typeof cell === 'string' && (cell.includes('fortified') || cell.includes('base'))) {
+        return false;
     }
 
-    // Can expand to empty cell if adjacent to own territory
-    if (cell === null) {
-        return isAdjacentToPlayerOnBoard(boardState, row, col, player);
+    // Can only attack opponent's non-fortified cells or expand to empty cells
+    if (cell !== null && !String(cell).startsWith(opponent.toString())) {
+        return false;
     }
 
+    // Check if adjacent to own territory
+    if (!isAdjacentToPlayerOnBoard(boardState, row, col, player)) {
+        return false;
+    }
+
+    // Check if the adjacent cell is connected to base
+    // Find an adjacent cell that belongs to the player
+    for (let i = -1; i <= 1; i++) {
+        for (let j = -1; j <= 1; j++) {
+            if (i === 0 && j === 0) continue;
+            const adjRow = row + i;
+            const adjCol = col + j;
+
+            if (adjRow >= 0 && adjRow < rows && adjCol >= 0 && adjCol < cols) {
+                const adjCell = boardState[adjRow][adjCol];
+                if (adjCell && String(adjCell).startsWith(player.toString())) {
+                    // Check if this adjacent cell is connected to base
+                    if (isConnectedToBaseOnBoard(boardState, adjRow, adjCol, player)) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Check if a cell is connected to the player's base on a specific board
+ */
+function isConnectedToBaseOnBoard(boardState, startRow, startCol, player) {
+    const base = player === 1 ? player1Base : player2Base;
+    const visited = new Set();
+    const stack = [{ row: startRow, col: startCol }];
+    visited.add(`${startRow},${startCol}`);
+
+    while (stack.length > 0) {
+        const { row, col } = stack.pop();
+
+        // Found the base
+        if (row === base.row && col === base.col) {
+            return true;
+        }
+
+        // Explore adjacent cells
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                if (i === 0 && j === 0) continue;
+                const newRow = row + i;
+                const newCol = col + j;
+
+                if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols && !visited.has(`${newRow},${newCol}`)) {
+                    const cellValue = boardState[newRow][newCol];
+                    if (cellValue && String(cellValue).startsWith(player.toString())) {
+                        visited.add(`${newRow},${newCol}`);
+                        stack.push({ row: newRow, col: newCol });
+                    }
+                }
+            }
+        }
+    }
     return false;
 }
 
