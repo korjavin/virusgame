@@ -194,7 +194,7 @@ class MultiplayerClient {
     }
 
     handleOpponentDisconnected(msg) {
-        this.showNotification('Opponent Disconnected', 'Your opponent has disconnected', {persistent: true});
+        this.showNotification('Opponent Disconnected', 'Your opponent has disconnected', {duration: 10000});
         this.endMultiplayerGame();
     }
 
@@ -393,13 +393,14 @@ class MultiplayerClient {
             container.appendChild(notification);
         }
 
-        // Auto-remove after 5 seconds if no buttons
+        // Auto-remove after duration (default 5 seconds if no buttons/persistent flag)
         if (!options.buttons && !options.persistent) {
+            const duration = options.duration || 5000;
             setTimeout(() => {
                 if (notification.parentNode) {
                     notification.remove();
                 }
-            }, 5000);
+            }, duration);
         }
 
         return notification;
