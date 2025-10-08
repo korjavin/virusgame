@@ -1,0 +1,26 @@
+# Git files
+.git
+.gitignore
+.github
+
+# Documentation (included manually in Dockerfile)
+*.md
+!README.md
+!DOCS.md
+
+# Development files
+.vscode
+.idea
+
+# Temporary files
+*.log
+*.tmp
+
+# Backend directory (we copy specific files in Dockerfile)
+backend/README.md
+
+# Local test files
+start-server.sh
+CACHE_CLEAR.md
+MULTIPLAYER_QUICKSTART.md
+DEPLOYMENT.md

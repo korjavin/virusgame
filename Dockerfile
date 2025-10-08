@@ -1,12 +1,44 @@
-# Dockerfile
-FROM nginx:alpine
+# Multi-stage Dockerfile for Virus Game with Go backend
+
+# Stage 1: Build the Go backend
+FROM golang:1.21-alpine AS go-builder
+
+WORKDIR /build
+
+# Copy go mod files
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+# Copy backend source
+COPY backend/*.go ./
+
+# Build the Go binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o virusgame-server .
+
+# Stage 2: Create final image
+FROM alpine:latest
+
+# Add ca-certificates for HTTPS
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+# Copy the Go binary from builder
+COPY --from=go-builder /build/virusgame-server .
+
+# Copy all frontend files (HTML, CSS, JS)
+COPY index.html style.css favicon.jpg ./
+COPY script.js ai.js multiplayer.js ./
+COPY DOCS.md README.md ./
 
 # Add build argument for commit SHA
 ARG COMMIT_SHA=unknown
 
-# Copy all static files from the root directory
-COPY . /usr/share/nginx/html
+# Replace the placeholder in the HTML file with the commit SHA
+RUN sed -i "s/__COMMIT_SHA__/${COMMIT_SHA}/g" /app/index.html
 
-# Replace the placeholder in the main HTML file with the commit SHA
-# This allows you to see which version of the code is deployed
-RUN sed -i "s/__COMMIT_SHA__/${COMMIT_SHA}/g" /usr/share/nginx/html/index.html
+# Expose the port
+EXPOSE 8080
+
+# Run the Go server
+CMD ["./virusgame-server"]

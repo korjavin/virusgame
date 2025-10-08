@@ -13,6 +13,11 @@ services:
       - "traefik.http.routers.virusgame.rule=Host(`${HOSTNAME}`)"
       - "traefik.http.routers.virusgame.entrypoints=websecure"
       - "traefik.http.routers.virusgame.tls.certresolver=myresolver"
+      # WebSocket support
+      - "traefik.http.services.virusgame.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.virusgame-ws.headers.customrequestheaders.Connection=upgrade"
+      - "traefik.http.middlewares.virusgame-ws.headers.customrequestheaders.Upgrade=websocket"
+      - "traefik.http.routers.virusgame.middlewares=virusgame-ws"
     restart: unless-stopped
 
 networks:
