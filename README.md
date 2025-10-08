@@ -20,7 +20,9 @@ For a complete explanation of the rules, please see [DOCS.md](DOCS.md).
 
 ## Running the Game
 
-To run the game, you can either:
+### Local Mode (Single Player or AI)
+
+To run the game locally, you can either:
 
 1.  Open the `index.html` file directly in a web browser.
 2.  Run a simple web server in the project directory. For example:
@@ -28,3 +30,40 @@ To run the game, you can either:
     ```bash
     npx http-server
     ```
+
+### Multiplayer Mode
+
+To play multiplayer, you need to run the Go backend server:
+
+1. Install Go (version 1.21 or higher) if you haven't already
+2. Navigate to the backend directory:
+   ```bash
+   cd backend
+   ```
+3. Download dependencies:
+   ```bash
+   go mod download
+   ```
+4. Run the server:
+   ```bash
+   go run .
+   ```
+5. Open your browser to `http://localhost:8080`
+
+The server will:
+- Serve the game frontend
+- Handle WebSocket connections for multiplayer
+- Assign random names to players (e.g., "BraveOctopus42")
+- Manage game challenges and sessions
+
+### How to Play Multiplayer
+
+1. Open the game in your browser
+2. You'll automatically be assigned a random username
+3. See other online players in the left sidebar
+4. Click "Challenge" next to any available player
+5. When challenged, accept or decline the game
+6. Play the game in real-time with your opponent
+7. After the game, click "Request Rematch" to play again
+
+For detailed multiplayer architecture, see [MULTIPLAYER.md](MULTIPLAYER.md).

@@ -106,6 +106,23 @@ function renderBoard() {
 
 function updateStatus() {
     if (gameOver) return;
+
+    // Multiplayer mode status
+    if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+        const isYourTurn = currentPlayer === mpClient.yourPlayer;
+        const playerSymbol = mpClient.yourPlayer === 1 ? 'X' : 'O';
+
+        if (neutralMode) {
+            statusDisplay.textContent = `Place ${2 - neutralsPlaced} neutral field(s).`;
+        } else if (isYourTurn) {
+            statusDisplay.textContent = `Your turn (${playerSymbol}) vs ${mpClient.opponentUsername}. Moves left: ${movesLeft}.`;
+        } else {
+            statusDisplay.textContent = `${mpClient.opponentUsername}'s turn. Waiting...`;
+        }
+        return;
+    }
+
+    // Local mode status
     if (neutralMode) {
         statusDisplay.textContent = `Player ${currentPlayer}: Place ${2 - neutralsPlaced} neutral field(s).`;
     } else {
@@ -145,12 +162,27 @@ function checkWinCondition() {
     const player1Pieces = board.flat().filter(cell => String(cell).startsWith('1')).length;
     const player2Pieces = board.flat().filter(cell => String(cell).startsWith('2')).length;
 
+    let winner = 0;
     if (player1Pieces === 0) {
-        statusDisplay.textContent = 'Player 2 wins!';
-        gameOver = true;
+        winner = 2;
     } else if (player2Pieces === 0) {
-        statusDisplay.textContent = 'Player 1 wins!';
+        winner = 1;
+    }
+
+    if (winner > 0) {
         gameOver = true;
+
+        // Multiplayer mode
+        if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+            const youWon = winner === mpClient.yourPlayer;
+            statusDisplay.textContent = youWon ? 'You win!' : 'You lose!';
+            // Show rematch button
+            const rematchBtn = document.getElementById('rematch-button');
+            if (rematchBtn) rematchBtn.style.display = 'block';
+        } else {
+            // Local mode
+            statusDisplay.textContent = `Player ${winner} wins!`;
+        }
     }
 }
 
@@ -167,6 +199,14 @@ function canMakeMove(player) {
 
 function handleCellClick(event) {
     if (gameOver || (aiEnabled && currentPlayer === 2)) return;
+
+    // In multiplayer mode, check if it's your turn
+    if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+        if (currentPlayer !== mpClient.yourPlayer) {
+            return; // Not your turn
+        }
+    }
+
     const cell = event.target.closest('.cell');
     if (!cell) return;
 
@@ -178,6 +218,11 @@ function handleCellClick(event) {
         if (cellValue === currentPlayer) {
             board[row][col] = 'killed';
             neutralsPlaced++;
+
+            // Store cells for multiplayer
+            if (!window.neutralCells) window.neutralCells = [];
+            window.neutralCells.push({row, col});
+
             renderBoard();
             updateStatus();
             if (neutralsPlaced === 2) {
@@ -188,6 +233,13 @@ function handleCellClick(event) {
                 }
                 neutralMode = false;
                 neutralsPlaced = 0;
+
+                // Send neutrals to server in multiplayer
+                if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+                    mpClient.sendNeutrals(window.neutralCells);
+                    window.neutralCells = [];
+                }
+
                 endTurn();
             }
         }
@@ -205,6 +257,11 @@ function handleCellClick(event) {
         }
 
         movesLeft--;
+
+        // Send move to server in multiplayer
+        if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+            mpClient.sendMove(row, col);
+        }
 
         renderBoard();
 
