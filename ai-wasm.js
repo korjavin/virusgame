@@ -113,7 +113,10 @@ function getAIMoveJS() {
 // Override the original getAIMove to use WASM if available
 const originalGetAIMove = getAIMove;
 getAIMove = function() {
-    if (wasmAIReady) {
+    // TEMPORARILY DISABLED WASM FOR DEBUGGING
+    const useWASM = false; // Set to true to enable WASM
+
+    if (wasmAIReady && useWASM) {
         console.log('Using WASM AI (depth:', aiDepth, ')');
         const startTime = performance.now();
         const move = getAIMoveWasm();
