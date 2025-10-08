@@ -63,6 +63,25 @@ func wasmGetAIMove(this js.Value, args []js.Value) interface{} {
 
 	// Get all valid moves
 	possibleMoves := getAllValidMoves(board, 2)
+
+	// DEBUG: Log board state
+	fmt.Printf("WASM DEBUG: Board size: %dx%d\n", rows, cols)
+	fmt.Printf("WASM DEBUG: Found %d valid moves for player 2\n", len(possibleMoves))
+
+	// Check what cells player 2 has
+	player2Cells := 0
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			cell := board[r][c]
+			cellStr := cellToString(cell)
+			if startsWithPlayer(cellStr, 2) {
+				player2Cells++
+				fmt.Printf("Player 2 cell at [%d,%d]: %v\n", r, c, cell)
+			}
+		}
+	}
+	fmt.Printf("WASM DEBUG: Player 2 has %d cells total\n", player2Cells)
+
 	if len(possibleMoves) == 0 {
 		return js.Null()
 	}
