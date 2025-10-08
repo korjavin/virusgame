@@ -529,13 +529,14 @@ body.dark-theme .sidebar-section h3 {
 #game-controls {
     display: flex;
     gap: 10px;
-    margin-bottom: 15px;
+    margin-top: 15px;
     justify-content: center;
 }
 
 #game-controls button {
     padding: 8px 16px;
 }
+
 
 /* Your turn indicator */
 #status {
