@@ -160,11 +160,23 @@ func (h *Hub) handleChallenge(from *User, msg *Message) {
 		return
 	}
 
+	// Get board size from message, default to 10x10
+	rows := msg.Rows
+	cols := msg.Cols
+	if rows < 5 || rows > 50 {
+		rows = 10
+	}
+	if cols < 5 || cols > 50 {
+		cols = 10
+	}
+
 	challengeID := uuid.New().String()
 	challenge := &Challenge{
 		ID:        challengeID,
 		FromUser:  from,
 		ToUser:    to,
+		Rows:      rows,
+		Cols:      cols,
 		Timestamp: time.Now(),
 	}
 	h.challenges[challengeID] = challenge
@@ -178,7 +190,7 @@ func (h *Hub) handleChallenge(from *User, msg *Message) {
 	}
 	h.sendToUser(to, &challengeMsg)
 
-	log.Printf("Challenge created: %s -> %s", from.Username, to.Username)
+	log.Printf("Challenge created: %s -> %s (%dx%d)", from.Username, to.Username, rows, cols)
 }
 
 func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
@@ -193,10 +205,10 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 		return
 	}
 
-	// Create game
+	// Create game with board size from challenge
 	gameID := uuid.New().String()
-	rows := 10
-	cols := 10
+	rows := challenge.Rows
+	cols := challenge.Cols
 
 	board := make([][]interface{}, rows)
 	for i := range board {

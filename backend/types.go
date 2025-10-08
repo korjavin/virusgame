@@ -51,6 +51,8 @@ type Challenge struct {
 	ID        string
 	FromUser  *User
 	ToUser    *User
+	Rows      int
+	Cols      int
 	Timestamp time.Time
 }
 

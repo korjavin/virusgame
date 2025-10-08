@@ -1,5 +1,5 @@
 // Multiplayer WebSocket client for Virus Game
-// Version 1.2 - Fixed game end detection
+// Version 1.3 - Mobile-friendly UI, custom notifications, board size
 
 class MultiplayerClient {
     constructor() {
@@ -132,7 +132,7 @@ class MultiplayerClient {
     }
 
     handleChallengeDeclined(msg) {
-        alert('Your challenge was declined');
+        this.showNotification('Challenge Declined', 'Your challenge was declined');
     }
 
     handleGameStart(msg) {
@@ -188,24 +188,30 @@ class MultiplayerClient {
     }
 
     handleRematchReceived(msg) {
-        if (confirm(`${this.opponentUsername} wants a rematch. Accept?`)) {
-            this.acceptRematch(msg.gameId);
-        }
+        // Rematch is now just a regular challenge, so this won't be called
+        // But keep it for compatibility
+        this.showNotification('Rematch Request', `${this.opponentUsername} wants a rematch!`);
     }
 
     handleOpponentDisconnected(msg) {
-        alert('Your opponent has disconnected');
+        this.showNotification('Opponent Disconnected', 'Your opponent has disconnected', {persistent: true});
         this.endMultiplayerGame();
     }
 
     handleError(msg) {
-        alert(`Error: ${msg.username}`);
+        this.showNotification('Error', msg.username || 'An error occurred');
     }
 
     challengeUser(userId) {
+        // Get current board size settings
+        const rows = rowsInput ? parseInt(rowsInput.value) || 10 : 10;
+        const cols = colsInput ? parseInt(colsInput.value) || 10 : 10;
+
         this.send({
             type: 'challenge',
             targetUserId: userId,
+            rows: rows,
+            cols: cols,
         });
     }
 
@@ -243,15 +249,17 @@ class MultiplayerClient {
     }
 
     requestRematch() {
-        this.send({
-            type: 'rematch',
-            gameId: this.gameId,
-        });
+        if (!this.opponentId) {
+            this.showNotification('Error', 'No opponent to rematch with');
+            return;
+        }
+        // Simply send a new challenge to the same opponent
+        this.challengeUser(this.opponentId);
+        this.showNotification('Rematch', `Rematch request sent to ${this.opponentUsername}!`);
     }
 
     acceptRematch(gameId) {
-        // Create a new challenge back
-        this.challengeUser(this.opponentId);
+        // Not used - rematch is just a new challenge
     }
 
     startMultiplayerGame(rows, cols) {
@@ -325,9 +333,8 @@ class MultiplayerClient {
             btn.addEventListener('click', () => {
                 const userId = btn.getAttribute('data-user-id');
                 const user = this.onlineUsers.find(u => u.userId === userId);
-                if (confirm(`Challenge ${user.username} to a game?`)) {
-                    this.challengeUser(userId);
-                }
+                this.challengeUser(userId);
+                this.showNotification('Challenge Sent', `Challenge sent to ${user.username}!`);
             });
         });
     }
@@ -370,6 +377,32 @@ class MultiplayerClient {
         if (rematchBtn) {
             rematchBtn.style.display = 'block';
         }
+    }
+
+    showNotification(title, message, options = {}) {
+        const notification = document.createElement('div');
+        notification.className = 'custom-notification';
+        notification.innerHTML = `
+            <div class="notification-title">${title}</div>
+            <div class="notification-message">${message}</div>
+            ${options.buttons ? `<div class="notification-buttons">${options.buttons}</div>` : ''}
+        `;
+
+        const container = document.getElementById('notifications');
+        if (container) {
+            container.appendChild(notification);
+        }
+
+        // Auto-remove after 5 seconds if no buttons
+        if (!options.buttons && !options.persistent) {
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 5000);
+        }
+
+        return notification;
     }
 }
 
