@@ -97,12 +97,16 @@ function getAIMoveJS() {
 
     // Reset progress tracking
     const possibleMoves = getAllValidMoves(board, 2);
+    console.log('JS AI: Found', possibleMoves.length, 'valid moves. First 5:', possibleMoves.slice(0, 5));
+
     aiProgressCurrent = 0;
     aiProgressTotal = possibleMoves.length;
     updateAIProgress();
 
     // Use minimax to find the best move
     const result = minimax(board, aiDepth, -Infinity, Infinity, true, true);
+
+    console.log('JS AI: Selected move:', result.move, 'Score:', result.score);
 
     // Hide progress indicator
     hideAIProgress();
