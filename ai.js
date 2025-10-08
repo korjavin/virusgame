@@ -5,6 +5,10 @@
 // Higher = smarter but slower. Recommended: 2-4
 let aiDepth = 3;
 
+// Progress tracking
+let aiProgressCurrent = 0;
+let aiProgressTotal = 0;
+
 // ============================================================================
 // MAIN AI ENTRY POINT
 // ============================================================================
@@ -14,9 +18,36 @@ function getAIMove() {
         return null;
     }
 
+    // Reset progress tracking
+    const possibleMoves = getAllValidMoves(board, 2);
+    aiProgressCurrent = 0;
+    aiProgressTotal = possibleMoves.length;
+    updateAIProgress();
+
     // Use minimax to find the best move
-    const result = minimax(board, aiDepth, -Infinity, Infinity, true);
+    const result = minimax(board, aiDepth, -Infinity, Infinity, true, true);
+
+    // Hide progress indicator
+    hideAIProgress();
+
     return result.move;
+}
+
+function updateAIProgress() {
+    const progressDiv = document.getElementById('ai-progress');
+    const progressText = document.getElementById('ai-progress-text');
+
+    if (progressDiv && progressText) {
+        progressDiv.style.display = 'block';
+        progressText.textContent = `${aiProgressCurrent}/${aiProgressTotal}`;
+    }
+}
+
+function hideAIProgress() {
+    const progressDiv = document.getElementById('ai-progress');
+    if (progressDiv) {
+        progressDiv.style.display = 'none';
+    }
 }
 
 // ============================================================================
@@ -34,7 +65,7 @@ function getAIMove() {
  * @param {boolean} isMaximizing - True if AI's turn (maximizing), false if opponent's turn (minimizing)
  * @returns {Object} {score: number, move: {row, col, score}}
  */
-function minimax(boardState, depth, alpha, beta, isMaximizing) {
+function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = false) {
     // Base case: reached max depth or game over
     if (depth === 0) {
         return {
@@ -66,12 +97,18 @@ function minimax(boardState, depth, alpha, beta, isMaximizing) {
             const newBoard = applyMove(boardState, move.row, move.col, player);
 
             // Recursively evaluate this position
-            const result = minimax(newBoard, depth - 1, alpha, beta, false);
+            const result = minimax(newBoard, depth - 1, alpha, beta, false, false);
 
             // Track best move
             if (result.score > maxScore) {
                 maxScore = result.score;
                 bestMove = move;
+            }
+
+            // Update progress at top level
+            if (isTopLevel) {
+                aiProgressCurrent++;
+                updateAIProgress();
             }
 
             // Alpha-beta pruning

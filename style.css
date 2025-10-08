@@ -539,6 +539,22 @@ body.dark-theme .sidebar-section h3 {
 
 
 /* Your turn indicator */
+#ai-progress {
+    margin: 5px 0;
+    text-align: center;
+    color: #666;
+    font-size: 12px;
+}
+
+body.dark-theme #ai-progress {
+    color: #aaa;
+}
+
+#ai-progress-text {
+    font-family: monospace;
+    font-weight: bold;
+}
+
 #status {
     margin: 20px 0;
     font-size: 18px;
