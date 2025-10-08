@@ -138,7 +138,11 @@ function endTurn() {
     currentPlayer = currentPlayer === 1 ? 2 : 1;
     movesLeft = 3;
     updateStatus();
-    checkWinCondition();
+
+    // In multiplayer mode, let the server check win conditions
+    if (typeof mpClient === 'undefined' || !mpClient.multiplayerMode) {
+        checkWinCondition();
+    }
 
     if (currentPlayer === 1) {
         putNeutralsButton.disabled = player1NeutralsUsed || countNonFortifiedCells(1) < 2;
@@ -146,10 +150,13 @@ function endTurn() {
         putNeutralsButton.disabled = player2NeutralsUsed || countNonFortifiedCells(2) < 2;
     }
 
-    if (!gameOver && !canMakeMove(currentPlayer)) {
-        const winner = currentPlayer === 1 ? 2 : 1;
-        statusDisplay.textContent = `Player ${winner} wins! Player ${currentPlayer} has no more moves.`;
-        gameOver = true;
+    // In local mode, check for no moves condition
+    if (typeof mpClient === 'undefined' || !mpClient.multiplayerMode) {
+        if (!gameOver && !canMakeMove(currentPlayer)) {
+            const winner = currentPlayer === 1 ? 2 : 1;
+            statusDisplay.textContent = `Player ${winner} wins! Player ${currentPlayer} has no more moves.`;
+            gameOver = true;
+        }
     }
 
     if (aiEnabled && currentPlayer === 2 && !gameOver) {

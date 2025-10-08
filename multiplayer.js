@@ -1,5 +1,5 @@
 // Multiplayer WebSocket client for Virus Game
-// Version 1.1 - Fixed null reference errors
+// Version 1.2 - Fixed game end detection
 
 class MultiplayerClient {
     constructor() {

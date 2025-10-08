@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -346,6 +347,31 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		game.CurrentPlayer = opponent
 		game.MovesLeft = 3
 
+		// Check if the new current player can make any moves
+		if !h.canMakeAnyMove(game, game.CurrentPlayer) {
+			// Current player has no moves, opponent wins
+			game.GameOver = true
+			game.Winner = 3 - game.CurrentPlayer // The other player wins
+
+			endMsg := Message{
+				Type:   "game_end",
+				GameID: game.ID,
+				Winner: game.Winner,
+			}
+			h.sendToUser(game.Player1, &endMsg)
+			h.sendToUser(game.Player2, &endMsg)
+
+			// Mark users as not in game
+			game.Player1.InGame = false
+			game.Player2.InGame = false
+
+			// Broadcast updated user list
+			h.broadcastUserList()
+
+			log.Printf("Game ended: %s (winner: player %d, opponent had no moves)", game.ID, game.Winner)
+			return
+		}
+
 		turnMsg := Message{
 			Type:   "turn_change",
 			GameID: msg.GameID,
@@ -355,7 +381,7 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		h.sendToUser(game.Player2, &turnMsg)
 	}
 
-	// Check win condition (simplified)
+	// Check win condition (all pieces captured)
 	h.checkWinCondition(game)
 }
 
@@ -491,6 +517,121 @@ func (h *Hub) checkWinCondition(game *Game) {
 
 		log.Printf("Game ended: %s (winner: player %d)", game.ID, winner)
 	}
+}
+
+func (h *Hub) canMakeAnyMove(game *Game, player int) bool {
+	// Check if player can make any valid move
+	for row := 0; row < game.Rows; row++ {
+		for col := 0; col < game.Cols; col++ {
+			if h.isValidMove(game, row, col, player) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (h *Hub) isValidMove(game *Game, row, col, player int) bool {
+	// Check bounds
+	if row < 0 || row >= game.Rows || col < 0 || col >= game.Cols {
+		return false
+	}
+
+	cellValue := game.Board[row][col]
+
+	// Can't attack fortified or base cells
+	if cellValue != nil {
+		cellStr := fmt.Sprintf("%v", cellValue)
+		if len(cellStr) > 0 && (strings.Contains(cellStr, "fortified") || strings.Contains(cellStr, "base")) {
+			return false
+		}
+	}
+
+	opponent := 3 - player
+
+	// Must be empty or opponent cell
+	if cellValue != nil {
+		cellStr := fmt.Sprintf("%v", cellValue)
+		if len(cellStr) > 0 && cellStr[0] != byte('0'+opponent) {
+			return false
+		}
+	}
+
+	// Check if adjacent to own connected cell
+	for i := -1; i <= 1; i++ {
+		for j := -1; j <= 1; j++ {
+			if i == 0 && j == 0 {
+				continue
+			}
+			adjRow := row + i
+			adjCol := col + j
+
+			if adjRow >= 0 && adjRow < game.Rows && adjCol >= 0 && adjCol < game.Cols {
+				adjCell := game.Board[adjRow][adjCol]
+				if adjCell != nil {
+					adjStr := fmt.Sprintf("%v", adjCell)
+					if len(adjStr) > 0 && adjStr[0] == byte('0'+player) {
+						// Check if this cell is connected to base
+						if h.isConnectedToBase(game, adjRow, adjCol, player) {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func (h *Hub) isConnectedToBase(game *Game, startRow, startCol, player int) bool {
+	var baseRow, baseCol int
+	if player == 1 {
+		baseRow = game.Player1Base.Row
+		baseCol = game.Player1Base.Col
+	} else {
+		baseRow = game.Player2Base.Row
+		baseCol = game.Player2Base.Col
+	}
+
+	visited := make(map[string]bool)
+	stack := []struct{ row, col int }{{startRow, startCol}}
+	visited[fmt.Sprintf("%d,%d", startRow, startCol)] = true
+
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if current.row == baseRow && current.col == baseCol {
+			return true
+		}
+
+		for i := -1; i <= 1; i++ {
+			for j := -1; j <= 1; j++ {
+				if i == 0 && j == 0 {
+					continue
+				}
+				newRow := current.row + i
+				newCol := current.col + j
+
+				if newRow >= 0 && newRow < game.Rows && newCol >= 0 && newCol < game.Cols {
+					key := fmt.Sprintf("%d,%d", newRow, newCol)
+					if !visited[key] {
+						cell := game.Board[newRow][newCol]
+						if cell != nil {
+							cellStr := fmt.Sprintf("%v", cell)
+							if len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+								visited[key] = true
+								stack = append(stack, struct{ row, col int }{newRow, newCol})
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 func (h *Hub) broadcastUserList() {
