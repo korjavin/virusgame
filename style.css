@@ -162,7 +162,7 @@ body.dark-theme .player2-base {
 }
 
 #game-board {
-    display: grid;
+    display: inline-grid;
     grid-template-columns: repeat(10, 40px);
     grid-template-rows: repeat(10, 40px);
     border: 2px solid black;
