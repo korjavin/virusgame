@@ -105,7 +105,11 @@ function renderBoard() {
 }
 
 function updateStatus() {
-    if (gameOver) return;
+    if (gameOver) {
+        // Remove animation when game is over
+        if (statusDisplay) statusDisplay.classList.remove('your-turn');
+        return;
+    }
 
     // Multiplayer mode status
     if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
@@ -114,15 +118,20 @@ function updateStatus() {
 
         if (neutralMode) {
             statusDisplay.textContent = `Place ${2 - neutralsPlaced} neutral field(s).`;
+            if (statusDisplay) statusDisplay.classList.add('your-turn');
         } else if (isYourTurn) {
             statusDisplay.textContent = `Your turn (${playerSymbol}) vs ${mpClient.opponentUsername}. Moves left: ${movesLeft}.`;
+            if (statusDisplay) statusDisplay.classList.add('your-turn');
         } else {
             statusDisplay.textContent = `${mpClient.opponentUsername}'s turn. Waiting...`;
+            if (statusDisplay) statusDisplay.classList.remove('your-turn');
         }
         return;
     }
 
-    // Local mode status
+    // Local mode status - remove animation
+    if (statusDisplay) statusDisplay.classList.remove('your-turn');
+
     if (neutralMode) {
         statusDisplay.textContent = `Player ${currentPlayer}: Place ${2 - neutralsPlaced} neutral field(s).`;
     } else {

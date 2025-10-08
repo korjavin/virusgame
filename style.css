@@ -450,3 +450,32 @@ body.dark-theme #footer {
     padding: 4px 10px;
     font-size: 12px;
 }
+
+/* Your turn indicator */
+#status {
+    margin: 20px 0;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+#status.your-turn {
+    animation: pulse 2s ease-in-out infinite;
+    color: #27ae60;
+    text-shadow: 0 0 10px rgba(39, 174, 96, 0.5);
+}
+
+body.dark-theme #status.your-turn {
+    color: #2ecc71;
+    text-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.05);
+    }
+}

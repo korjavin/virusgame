@@ -104,6 +104,9 @@ func (h *Hub) handleDisconnect(client *Client) {
 				opponent = game.Player1
 			}
 
+			// Mark opponent as no longer in game
+			opponent.InGame = false
+
 			msg := Message{
 				Type:   "opponent_disconnected",
 				GameID: gameID,
