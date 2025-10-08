@@ -18,11 +18,17 @@
         <label for="ai-enabled">Play against AI:</label>
         <input type="checkbox" id="ai-enabled">
         <button id="put-neutrals-button">Put Neutrals</button>
+                    <button id="dark-theme-button">Dark Theme</button>
     </div>
     <div id="game-board"></div>
     <div id="status"></div>
     <script src="script.js"></script>
     <script src="ai.js"></script>
+            <script>
+                document.getElementById('dark-theme-button').addEventListener('click', function() {
+                    document.body.classList.toggle('dark-theme');
+                });
+            </script>
     <div id="commit-sha">Commit: __COMMIT_SHA__</div>
 </body>
 </html>
