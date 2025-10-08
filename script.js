@@ -153,10 +153,12 @@ function endTurn() {
         checkWinCondition();
     }
 
-    if (currentPlayer === 1) {
-        putNeutralsButton.disabled = player1NeutralsUsed || countNonFortifiedCells(1) < 2;
-    } else {
-        putNeutralsButton.disabled = player2NeutralsUsed || countNonFortifiedCells(2) < 2;
+    if (putNeutralsButton) {
+        if (currentPlayer === 1) {
+            putNeutralsButton.disabled = player1NeutralsUsed || countNonFortifiedCells(1) < 2;
+        } else {
+            putNeutralsButton.disabled = player2NeutralsUsed || countNonFortifiedCells(2) < 2;
+        }
     }
 
     // In local mode, check for no moves condition
@@ -303,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
     rowsInput = document.getElementById('rows-input');
     colsInput = document.getElementById('cols-input');
     aiEnabledCheckbox = document.getElementById('ai-enabled');
-    putNeutralsButton = document.getElementById('put-neutrals-button');
+    putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
 
     function initGame() {
         rows = parseInt(rowsInput.value);
@@ -319,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
         player2NeutralsUsed = false;
         neutralMode = false;
         neutralsPlaced = 0;
-        putNeutralsButton.disabled = false;
+        if (putNeutralsButton) putNeutralsButton.disabled = false;
 
         player1Base = { row: 0, col: 0 };
         player2Base = { row: rows - 1, col: cols - 1 };
@@ -330,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBoard();
         updateStatus();
 
-        if (countNonFortifiedCells(1) < 2) {
+        if (putNeutralsButton && countNonFortifiedCells(1) < 2) {
             putNeutralsButton.disabled = true;
         }
     }
@@ -339,15 +341,17 @@ document.addEventListener('DOMContentLoaded', () => {
     aiEnabledCheckbox.addEventListener('change', () => {
         aiEnabled = aiEnabledCheckbox.checked;
     });
-    putNeutralsButton.addEventListener('click', () => {
-        if (currentPlayer === 1 && !player1NeutralsUsed && countNonFortifiedCells(1) >= 2) {
-            neutralMode = true;
-            updateStatus();
-        } else if (currentPlayer === 2 && !player2NeutralsUsed && countNonFortifiedCells(2) >= 2) {
-            neutralMode = true;
-            updateStatus();
-        }
-    });
+    if (putNeutralsButton) {
+        putNeutralsButton.addEventListener('click', () => {
+            if (currentPlayer === 1 && !player1NeutralsUsed && countNonFortifiedCells(1) >= 2) {
+                neutralMode = true;
+                updateStatus();
+            } else if (currentPlayer === 2 && !player2NeutralsUsed && countNonFortifiedCells(2) >= 2) {
+                neutralMode = true;
+                updateStatus();
+            }
+        });
+    }
     gameBoard.addEventListener('click', handleCellClick);
 
     // Initial game start
