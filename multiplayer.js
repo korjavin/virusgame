@@ -148,6 +148,11 @@ class MultiplayerClient {
 
     handleMoveMade(msg) {
         // Apply opponent's move to the board
+        if (msg.row === undefined || msg.col === undefined) {
+            console.error('Move message missing row or col:', msg);
+            return;
+        }
+
         const opponent = msg.player;
         const cellValue = board[msg.row][msg.col];
 
@@ -158,6 +163,7 @@ class MultiplayerClient {
         }
 
         renderBoard();
+        checkWinCondition();
     }
 
     handleNeutralsPlaced(msg) {

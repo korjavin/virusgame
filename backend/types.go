@@ -19,8 +19,8 @@ type Message struct {
 	YourPlayer   int         `json:"yourPlayer,omitempty"`
 	Rows         int         `json:"rows,omitempty"`
 	Cols         int         `json:"cols,omitempty"`
-	Row          int         `json:"row,omitempty"`
-	Col          int         `json:"col,omitempty"`
+	Row          *int        `json:"row,omitempty"`
+	Col          *int        `json:"col,omitempty"`
 	Player       int         `json:"player,omitempty"`
 	Winner       int         `json:"winner,omitempty"`
 	Users        []UserInfo  `json:"users,omitempty"`

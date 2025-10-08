@@ -287,6 +287,15 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		return
 	}
 
+	// Check Row and Col are provided
+	if msg.Row == nil || msg.Col == nil {
+		log.Printf("Move message missing row or col")
+		return
+	}
+
+	row := *msg.Row
+	col := *msg.Col
+
 	// Verify it's the user's turn
 	var playerNum int
 	if game.Player1.ID == user.ID {
@@ -303,12 +312,12 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 
 	// Validate and apply move (simplified - full validation would match frontend logic)
 	opponent := 3 - playerNum // 1->2, 2->1
-	cellValue := game.Board[msg.Row][msg.Col]
+	cellValue := game.Board[row][col]
 
 	if cellValue == nil {
-		game.Board[msg.Row][msg.Col] = playerNum
+		game.Board[row][col] = playerNum
 	} else if cellValue == opponent {
-		game.Board[msg.Row][msg.Col] = fmt.Sprintf("%d-fortified", playerNum)
+		game.Board[row][col] = fmt.Sprintf("%d-fortified", playerNum)
 	} else {
 		return // Invalid move
 	}
