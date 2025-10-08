@@ -1,165 +1,334 @@
-// Smart AI for Virus Game
-// Strategy:
-// 1. Expand territory to create multiple branches
-// 2. Attack opponent when advantageous
-// 3. Avoid getting surrounded/blocked
-// 4. Prioritize moves that keep options open
+// Minimax AI for Virus Game with Alpha-Beta Pruning
+// This AI uses game tree search to find optimal moves by looking ahead several turns
 
-function evaluateMove(row, col, player) {
-    // Score a move based on strategic value
-    let score = 0;
-    const opponent = player === 1 ? 2 : 1;
-    const cellValue = board[row][col];
+// Default search depth - controls how many moves ahead AI thinks
+// Higher = smarter but slower. Recommended: 2-4
+let aiDepth = 3;
 
-    // 1. Attack moves are valuable
-    if (cellValue === opponent || String(cellValue).startsWith(opponent)) {
-        score += 100; // High priority for attacks
+// ============================================================================
+// MAIN AI ENTRY POINT
+// ============================================================================
 
-        // Extra value for attacks that fortify and block opponent
-        const adjacentOpponentCells = countAdjacentCells(row, col, opponent);
-        score += adjacentOpponentCells * 20; // More value if blocking enemy expansion
+function getAIMove() {
+    if (gameOver || currentPlayer !== 2) {
+        return null;
     }
 
-    // 2. Expansion moves that create branches
-    if (cellValue === null) {
-        // Count how many empty cells this opens up
-        const newOpportunities = countAdjacentEmpty(row, col);
-        score += newOpportunities * 15;
+    // Use minimax to find the best move
+    const result = minimax(board, aiDepth, -Infinity, Infinity, true);
+    return result.move;
+}
 
-        // Bonus for moves that spread out (not just clustering)
-        const distanceFromBase = getDistanceFromBase(row, col, player);
-        score += distanceFromBase * 5; // Encourage spreading
+// ============================================================================
+// MINIMAX ALGORITHM WITH ALPHA-BETA PRUNING
+// ============================================================================
 
-        // Penalty for moves too close to existing cells (avoid clustering)
-        const adjacentOwn = countAdjacentCells(row, col, player);
-        if (adjacentOwn > 2) {
-            score -= 10; // Small penalty for clustering
+/**
+ * Minimax algorithm with alpha-beta pruning
+ * Explores the game tree to find optimal move by assuming both players play optimally
+ *
+ * @param {Array} boardState - Current board state
+ * @param {number} depth - How many moves ahead to look (0 = evaluate current state)
+ * @param {number} alpha - Best value maximizer can guarantee (for pruning)
+ * @param {number} beta - Best value minimizer can guarantee (for pruning)
+ * @param {boolean} isMaximizing - True if AI's turn (maximizing), false if opponent's turn (minimizing)
+ * @returns {Object} {score: number, move: {row, col, score}}
+ */
+function minimax(boardState, depth, alpha, beta, isMaximizing) {
+    // Base case: reached max depth or game over
+    if (depth === 0) {
+        return {
+            score: evaluateBoard(boardState),
+            move: null
+        };
+    }
+
+    const player = isMaximizing ? 2 : 1; // AI is player 2
+    const possibleMoves = getAllValidMoves(boardState, player);
+
+    // Terminal state: no moves available
+    if (possibleMoves.length === 0) {
+        const score = evaluateBoard(boardState);
+        // Penalize losing positions, reward winning positions
+        return {
+            score: isMaximizing ? score - 10000 : score + 10000,
+            move: null
+        };
+    }
+
+    if (isMaximizing) {
+        // AI's turn: maximize score
+        let maxScore = -Infinity;
+        let bestMove = possibleMoves[0];
+
+        for (const move of possibleMoves) {
+            // Try this move
+            const newBoard = applyMove(boardState, move.row, move.col, player);
+
+            // Recursively evaluate this position
+            const result = minimax(newBoard, depth - 1, alpha, beta, false);
+
+            // Track best move
+            if (result.score > maxScore) {
+                maxScore = result.score;
+                bestMove = move;
+            }
+
+            // Alpha-beta pruning
+            alpha = Math.max(alpha, result.score);
+            if (beta <= alpha) {
+                break; // Beta cutoff - opponent won't allow this branch
+            }
+        }
+
+        return { score: maxScore, move: bestMove };
+
+    } else {
+        // Opponent's turn: minimize score
+        let minScore = Infinity;
+        let bestMove = possibleMoves[0];
+
+        for (const move of possibleMoves) {
+            // Try this move
+            const newBoard = applyMove(boardState, move.row, move.col, player);
+
+            // Recursively evaluate this position
+            const result = minimax(newBoard, depth - 1, alpha, beta, true);
+
+            // Track best move
+            if (result.score < minScore) {
+                minScore = result.score;
+                bestMove = move;
+            }
+
+            // Alpha-beta pruning
+            beta = Math.min(beta, result.score);
+            if (beta <= alpha) {
+                break; // Alpha cutoff - AI won't allow this branch
+            }
+        }
+
+        return { score: minScore, move: bestMove };
+    }
+}
+
+// ============================================================================
+// BOARD EVALUATION FUNCTION
+// ============================================================================
+
+/**
+ * Evaluates the board position from AI's perspective (player 2)
+ * Positive scores favor AI, negative scores favor opponent
+ *
+ * Evaluation criteria:
+ * 1. Material: number of cells controlled
+ * 2. Territory: connected territory size
+ * 3. Mobility: number of available moves
+ * 4. Position: strategic cell placement
+ * 5. Threats: attack and defense opportunities
+ */
+function evaluateBoard(boardState) {
+    let score = 0;
+
+    // 1. MATERIAL ADVANTAGE
+    // Count cells controlled by each player
+    let aiCells = 0;
+    let opponentCells = 0;
+    let aiFortified = 0;
+    let opponentFortified = 0;
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = boardState[r][c];
+            if (cell === 2 || String(cell).startsWith('2')) {
+                aiCells++;
+                if (String(cell).includes('fortified')) aiFortified++;
+            } else if (cell === 1 || String(cell).startsWith('1')) {
+                opponentCells++;
+                if (String(cell).includes('fortified')) opponentFortified++;
+            }
         }
     }
 
-    // 3. Avoid moves that can be easily surrounded
-    const surroundingDanger = evaluateSurroundingDanger(row, col, player);
-    score -= surroundingDanger;
+    // Material score: regular cells = 10 points, fortified = 25 points
+    score += (aiCells * 10 + aiFortified * 15) - (opponentCells * 10 + opponentFortified * 15);
 
-    // 4. Prefer moves closer to opponent's base (aggressive)
-    const opponentBase = player === 1 ? player2Base : player1Base;
-    const distToOpponentBase = Math.abs(row - opponentBase.row) + Math.abs(col - opponentBase.col);
-    score += (rows + cols - distToOpponentBase) * 2;
+    // 2. MOBILITY ADVANTAGE
+    // Count available moves for each player
+    const aiMoves = getAllValidMoves(boardState, 2).length;
+    const opponentMoves = getAllValidMoves(boardState, 1).length;
 
-    // 5. Bonus for creating parallel branches (multiple paths)
-    if (cellValue === null && hasMultipleConnectionPaths(row, col, player)) {
-        score += 25;
+    // Mobility score: each available move = 5 points
+    score += (aiMoves - opponentMoves) * 5;
+
+    // 3. POSITIONAL ADVANTAGE
+    // Reward cells closer to opponent's base, penalize isolated cells
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = boardState[r][c];
+
+            if (cell === 2 || String(cell).startsWith('2')) {
+                // Reward aggressive positioning (closer to opponent base)
+                const distToOpponent = Math.abs(r - player1Base.row) + Math.abs(c - player1Base.col);
+                score += (rows + cols - distToOpponent);
+
+                // Reward cells with multiple connections (less vulnerable)
+                const connections = countAdjacentCellsOnBoard(boardState, r, c, 2);
+                score += connections * 3;
+
+            } else if (cell === 1 || String(cell).startsWith('1')) {
+                // Penalize opponent's aggressive positioning
+                const distToAI = Math.abs(r - player2Base.row) + Math.abs(c - player2Base.col);
+                score -= (rows + cols - distToAI);
+
+                // Penalize opponent's well-connected cells
+                const connections = countAdjacentCellsOnBoard(boardState, r, c, 1);
+                score -= connections * 3;
+            }
+        }
     }
+
+    // 4. ATTACK OPPORTUNITIES
+    // Reward positions where we can attack opponent cells
+    let aiAttackOpportunities = 0;
+    let opponentAttackOpportunities = 0;
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = boardState[r][c];
+
+            // Count opponent cells adjacent to our territory (attack opportunities)
+            if (cell === 1 || String(cell).startsWith('1')) {
+                if (countAdjacentCellsOnBoard(boardState, r, c, 2) > 0) {
+                    aiAttackOpportunities++;
+                }
+            }
+
+            // Count our cells adjacent to opponent territory (vulnerable positions)
+            if (cell === 2 || String(cell).startsWith('2')) {
+                if (countAdjacentCellsOnBoard(boardState, r, c, 1) > 0) {
+                    opponentAttackOpportunities++;
+                }
+            }
+        }
+    }
+
+    // Attack opportunities = 8 points each
+    score += (aiAttackOpportunities - opponentAttackOpportunities) * 8;
 
     return score;
 }
 
-function countAdjacentCells(row, col, player) {
-    let count = 0;
-    for (let i = -1; i <= 1; i++) {
-        for (let j = -1; j <= 1; j++) {
-            if (i === 0 && j === 0) continue;
-            const newRow = row + i;
-            const newCol = col + j;
-            if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
-                const cell = board[newRow][newCol];
-                if (cell && String(cell).startsWith(player)) {
-                    count++;
-                }
-            }
-        }
-    }
-    return count;
-}
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
 
-function countAdjacentEmpty(row, col) {
-    let count = 0;
-    for (let i = -1; i <= 1; i++) {
-        for (let j = -1; j <= 1; j++) {
-            if (i === 0 && j === 0) continue;
-            const newRow = row + i;
-            const newCol = col + j;
-            if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
-                if (board[newRow][newCol] === null) {
-                    count++;
-                }
-            }
-        }
-    }
-    return count;
-}
+/**
+ * Get all valid moves for a player on a given board state
+ */
+function getAllValidMoves(boardState, player) {
+    const moves = [];
 
-function getDistanceFromBase(row, col, player) {
-    const base = player === 1 ? player1Base : player2Base;
-    return Math.abs(row - base.row) + Math.abs(col - base.col);
-}
-
-function evaluateSurroundingDanger(row, col, player) {
-    const opponent = player === 1 ? 2 : 1;
-    let danger = 0;
-
-    // Count how many opponent cells surround this position
-    const opponentAdjacent = countAdjacentCells(row, col, opponent);
-
-    // If surrounded by enemies, this is dangerous
-    if (opponentAdjacent >= 5) {
-        danger += 50; // High danger
-    } else if (opponentAdjacent >= 3) {
-        danger += 20; // Medium danger
-    }
-
-    return danger;
-}
-
-function hasMultipleConnectionPaths(row, col, player) {
-    // Check if placing here creates multiple independent paths to base
-    let connectionPoints = 0;
-
-    for (let i = -1; i <= 1; i++) {
-        for (let j = -1; j <= 1; j++) {
-            if (i === 0 && j === 0) continue;
-            const adjRow = row + i;
-            const adjCol = col + j;
-
-            if (adjRow >= 0 && adjRow < rows && adjCol >= 0 && adjCol < cols) {
-                const cell = board[adjRow][adjCol];
-                if (cell && String(cell).startsWith(player)) {
-                    connectionPoints++;
-                }
-            }
-        }
-    }
-
-    // If we can connect from multiple directions, it's a strong position
-    return connectionPoints >= 2;
-}
-
-function getAIMove() {
-    const possibleMoves = [];
-
-    // Get all valid moves with their scores
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-            if (isValidMove(r, c, 2)) {
-                const score = evaluateMove(r, c, 2);
-                possibleMoves.push({ row: r, col: c, score: score });
+            if (isValidMoveOnBoard(boardState, r, c, player)) {
+                moves.push({ row: r, col: c });
             }
         }
     }
 
-    if (possibleMoves.length === 0) {
-        return null;
+    return moves;
+}
+
+/**
+ * Check if a move is valid on a specific board state
+ */
+function isValidMoveOnBoard(boardState, row, col, player) {
+    const cell = boardState[row][col];
+    const opponent = player === 1 ? 2 : 1;
+
+    // Can attack opponent's non-fortified cell
+    if (cell === opponent) {
+        return true;
     }
 
-    // Sort moves by score (best first)
-    possibleMoves.sort((a, b) => b.score - a.score);
+    // Can expand to empty cell if adjacent to own territory
+    if (cell === null) {
+        return isAdjacentToPlayerOnBoard(boardState, row, col, player);
+    }
 
-    // Take top 3 moves and pick randomly among them (adds some variety)
-    const topMoves = possibleMoves.slice(0, Math.min(3, possibleMoves.length));
-    const selectedMove = topMoves[Math.floor(Math.random() * topMoves.length)];
-
-    return selectedMove;
+    return false;
 }
+
+/**
+ * Check if a cell is adjacent to player's territory on a specific board
+ */
+function isAdjacentToPlayerOnBoard(boardState, row, col, player) {
+    for (let i = -1; i <= 1; i++) {
+        for (let j = -1; j <= 1; j++) {
+            if (i === 0 && j === 0) continue;
+            const newRow = row + i;
+            const newCol = col + j;
+
+            if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
+                const adjCell = boardState[newRow][newCol];
+                if (adjCell && String(adjCell).startsWith(player.toString())) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+/**
+ * Count adjacent cells belonging to a player on a specific board
+ */
+function countAdjacentCellsOnBoard(boardState, row, col, player) {
+    let count = 0;
+
+    for (let i = -1; i <= 1; i++) {
+        for (let j = -1; j <= 1; j++) {
+            if (i === 0 && j === 0) continue;
+            const newRow = row + i;
+            const newCol = col + j;
+
+            if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
+                const cell = boardState[newRow][newCol];
+                if (cell && String(cell).startsWith(player.toString())) {
+                    count++;
+                }
+            }
+        }
+    }
+
+    return count;
+}
+
+/**
+ * Apply a move to a board state (returns new board, doesn't modify original)
+ */
+function applyMove(boardState, row, col, player) {
+    // Deep copy the board
+    const newBoard = boardState.map(rowArr => rowArr.slice());
+
+    const cell = newBoard[row][col];
+    const opponent = player === 1 ? 2 : 1;
+
+    if (cell === null) {
+        // Expand to empty cell
+        newBoard[row][col] = player;
+    } else if (cell === opponent) {
+        // Attack opponent's cell (fortify it)
+        newBoard[row][col] = `${player}-fortified`;
+    }
+
+    return newBoard;
+}
+
+// ============================================================================
+// AI TURN EXECUTION
+// ============================================================================
 
 function playAITurn() {
     if (gameOver || currentPlayer !== 2) {
@@ -168,13 +337,16 @@ function playAITurn() {
 
     if (movesLeft > 0) {
         const move = getAIMove();
+
         if (move) {
             const cellValue = board[move.row][move.col];
+
             if (cellValue === null) {
                 board[move.row][move.col] = 2;
             } else if (cellValue === 1 || String(cellValue).startsWith('1')) {
                 board[move.row][move.col] = '2-fortified';
             }
+
             movesLeft--;
             renderBoard();
             updateStatus();
@@ -187,7 +359,7 @@ function playAITurn() {
         }
 
         if (movesLeft > 0) {
-             setTimeout(playAITurn, 500); // Make the next move after a short delay
+            setTimeout(playAITurn, 500); // Make the next move after a short delay
         } else {
             endTurn();
         }

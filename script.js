@@ -1,5 +1,5 @@
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
-let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton;
+let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting;
 let player1NeutralsUsed = false;
 let player2NeutralsUsed = false;
 let neutralMode = false;
@@ -305,12 +305,33 @@ document.addEventListener('DOMContentLoaded', () => {
     rowsInput = document.getElementById('rows-input');
     colsInput = document.getElementById('cols-input');
     aiEnabledCheckbox = document.getElementById('ai-enabled');
+    aiDepthInput = document.getElementById('ai-depth-input');
+    aiDepthSetting = document.getElementById('ai-depth-setting');
     putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
+
+    // Show/hide AI depth setting based on AI checkbox
+    aiEnabledCheckbox.addEventListener('change', () => {
+        if (aiEnabledCheckbox.checked) {
+            aiDepthSetting.style.display = 'block';
+        } else {
+            aiDepthSetting.style.display = 'none';
+        }
+    });
+
+    // Update aiDepth variable when user changes the input
+    aiDepthInput.addEventListener('change', () => {
+        aiDepth = parseInt(aiDepthInput.value);
+    });
 
     function initGame() {
         rows = parseInt(rowsInput.value);
         cols = parseInt(colsInput.value);
         aiEnabled = aiEnabledCheckbox.checked;
+
+        // Update AI depth from input
+        if (aiDepthInput) {
+            aiDepth = parseInt(aiDepthInput.value);
+        }
 
         board = Array(rows).fill(null).map(() => Array(cols).fill(null));
 
