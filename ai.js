@@ -40,6 +40,9 @@ function updateAIProgress() {
     if (progressDiv && progressText) {
         progressDiv.style.display = 'block';
         progressText.textContent = `${aiProgressCurrent}/${aiProgressTotal}`;
+        console.log('AI Progress:', aiProgressCurrent, '/', aiProgressTotal);
+    } else {
+        console.warn('AI progress elements not found:', progressDiv, progressText);
     }
 }
 
@@ -91,8 +94,15 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
         // AI's turn: maximize score
         let maxScore = -Infinity;
         let bestMove = possibleMoves[0];
+        let moveIndex = 0;
 
         for (const move of possibleMoves) {
+            // Update progress at top level BEFORE evaluating
+            if (isTopLevel) {
+                aiProgressCurrent = moveIndex + 1;
+                updateAIProgress();
+            }
+
             // Try this move
             const newBoard = applyMove(boardState, move.row, move.col, player);
 
@@ -105,17 +115,13 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
                 bestMove = move;
             }
 
-            // Update progress at top level
-            if (isTopLevel) {
-                aiProgressCurrent++;
-                updateAIProgress();
-            }
-
             // Alpha-beta pruning
             alpha = Math.max(alpha, result.score);
             if (beta <= alpha) {
                 break; // Beta cutoff - opponent won't allow this branch
             }
+
+            moveIndex++;
         }
 
         return { score: maxScore, move: bestMove };
@@ -435,32 +441,35 @@ function playAITurn() {
     }
 
     if (movesLeft > 0) {
-        const move = getAIMove();
+        // Show progress indicator before starting calculation
+        setTimeout(() => {
+            const move = getAIMove();
 
-        if (move) {
-            const cellValue = board[move.row][move.col];
+            if (move) {
+                const cellValue = board[move.row][move.col];
 
-            if (cellValue === null) {
-                board[move.row][move.col] = 2;
-            } else if (cellValue === 1 || String(cellValue).startsWith('1')) {
-                board[move.row][move.col] = '2-fortified';
+                if (cellValue === null) {
+                    board[move.row][move.col] = 2;
+                } else if (cellValue === 1 || String(cellValue).startsWith('1')) {
+                    board[move.row][move.col] = '2-fortified';
+                }
+
+                movesLeft--;
+                renderBoard();
+                updateStatus();
+
+                if (!canMakeMove(2)) {
+                    statusDisplay.textContent = 'Player 1 wins! Player 2 has no more moves.';
+                    gameOver = true;
+                    return;
+                }
             }
 
-            movesLeft--;
-            renderBoard();
-            updateStatus();
-
-            if (!canMakeMove(2)) {
-                statusDisplay.textContent = 'Player 1 wins! Player 2 has no more moves.';
-                gameOver = true;
-                return;
+            if (movesLeft > 0) {
+                setTimeout(playAITurn, 500); // Make the next move after a short delay
+            } else {
+                endTurn();
             }
-        }
-
-        if (movesLeft > 0) {
-            setTimeout(playAITurn, 500); // Make the next move after a short delay
-        } else {
-            endTurn();
-        }
+        }, 50); // Small delay to ensure UI updates
     }
 }
