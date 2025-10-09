@@ -16,7 +16,8 @@ let aiCoeffs = {
     mobilityValue: 5,        // Points per available move
     aggressionValue: 1,      // Points per step closer to opponent (rows+cols-distance)
     connectionValue: 3,      // Points per adjacent friendly cell
-    attackValue: 8           // Points per attack opportunity
+    attackValue: 8,          // Points per attack opportunity
+    redundancyValue: 5       // Points per redundant connection (cells that can be lost while maintaining base connectivity)
 };
 
 // ============================================================================
@@ -270,12 +271,79 @@ function evaluateBoard(boardState) {
     // Attack opportunities: configurable points each
     score += (aiAttackOpportunities - opponentAttackOpportunities) * aiCoeffs.attackValue;
 
+    // 5. NETWORK REDUNDANCY
+    // Reward resilient networks with multiple paths to base
+    const aiRedundancy = calculateRedundancy(boardState, 2);
+    const opponentRedundancy = calculateRedundancy(boardState, 1);
+    score += (aiRedundancy - opponentRedundancy) * aiCoeffs.redundancyValue;
+
     return score;
 }
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Calculate network redundancy - how many cells can be removed while maintaining base connectivity
+ * Higher redundancy = more resilient network with multiple paths to base
+ */
+function calculateRedundancy(boardState, player) {
+    let redundantCells = 0;
+    const base = player === 1 ? player1Base : player2Base;
+
+    // Find all non-base, non-fortified cells belonging to the player
+    const playerCells = [];
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = boardState[r][c];
+            const cellStr = String(cell);
+
+            // Skip if not player's cell, or if it's the base
+            if (!cellStr.startsWith(player.toString())) continue;
+            if (r === base.row && c === base.col) continue;
+
+            // Non-fortified cells are candidates for redundancy check
+            if (!cellStr.includes('fortified')) {
+                playerCells.push({ row: r, col: c });
+            }
+        }
+    }
+
+    // For each cell, check if removing it still keeps the network connected
+    for (const testCell of playerCells) {
+        // Create a temporary board with this cell removed
+        const tempBoard = boardState.map(row => row.slice());
+        tempBoard[testCell.row][testCell.col] = null;
+
+        // Check if all remaining cells are still connected to base
+        let allConnected = true;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const cell = tempBoard[r][c];
+                const cellStr = String(cell);
+
+                // Skip non-player cells and the base itself
+                if (!cellStr.startsWith(player.toString())) continue;
+                if (r === base.row && c === base.col) continue;
+
+                // Check if this cell is still connected to base
+                if (!isConnectedToBaseOnBoard(tempBoard, r, c, player)) {
+                    allConnected = false;
+                    break;
+                }
+            }
+            if (!allConnected) break;
+        }
+
+        // If removing this cell keeps network connected, it's redundant
+        if (allConnected) {
+            redundantCells++;
+        }
+    }
+
+    return redundantCells;
+}
 
 /**
  * Get all valid moves for a player on a given board state

@@ -357,6 +357,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('coeff-attack').addEventListener('input', (e) => {
         aiCoeffs.attackValue = parseFloat(e.target.value);
     });
+    document.getElementById('coeff-redundancy').addEventListener('input', (e) => {
+        aiCoeffs.redundancyValue = parseFloat(e.target.value);
+    });
 
     // Reset coefficients to defaults
     document.getElementById('reset-coeffs-button').addEventListener('click', () => {
@@ -366,6 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
         aiCoeffs.aggressionValue = 1;
         aiCoeffs.connectionValue = 3;
         aiCoeffs.attackValue = 8;
+        aiCoeffs.redundancyValue = 5;
 
         document.getElementById('coeff-cell').value = 10;
         document.getElementById('coeff-fortified').value = 15;
@@ -373,6 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('coeff-aggression').value = 1;
         document.getElementById('coeff-connection').value = 3;
         document.getElementById('coeff-attack').value = 8;
+        document.getElementById('coeff-redundancy').value = 5;
     });
 
     function initGame() {
