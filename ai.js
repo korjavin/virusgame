@@ -70,10 +70,14 @@ function getAIMove() {
             const timeElapsed = performance.now() - searchStartTime;
             const timeRemaining = searchTimeLimit - timeElapsed;
 
-            // Estimate time for next depth (exponential growth, roughly 3-5x previous depth)
-            const estimatedNextDepthTime = lastDepthTime * 4;
+            // Conservative time estimate for next depth
+            // Use 30% of remaining time as threshold
+            if (depth > 1 && timeRemaining < searchTimeLimit * 0.3) {
+                break;
+            }
 
-            // Stop if we likely won't complete next depth in time
+            // Also check if estimated next depth time exceeds remaining (with 5x multiplier for safety)
+            const estimatedNextDepthTime = lastDepthTime * 5;
             if (depth > 1 && estimatedNextDepthTime > timeRemaining) {
                 break;
             }
