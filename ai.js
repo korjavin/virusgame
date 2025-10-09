@@ -9,6 +9,11 @@ let aiDepth = 3;
 let aiProgressCurrent = 0;
 let aiProgressTotal = 0;
 
+// Transposition table for memoization (cache board evaluations)
+let transpositionTable = new Map();
+let ttHits = 0;
+let ttMisses = 0;
+
 // AI Evaluation Coefficients (tunable in UI)
 let aiCoeffs = {
     cellValue: 10,           // Points per regular cell
@@ -36,8 +41,18 @@ function getAIMove() {
     aiProgressTotal = possibleMoves.length;
     updateAIProgress();
 
+    // Clear transposition table for new search
+    transpositionTable.clear();
+    ttHits = 0;
+    ttMisses = 0;
+
+    const startTime = performance.now();
+
     // Use minimax to find the best move
     const result = minimax(board, aiDepth, -Infinity, Infinity, true, true);
+
+    const duration = performance.now() - startTime;
+    console.log(`AI search: ${duration.toFixed(1)}ms | TT hits: ${ttHits} | TT misses: ${ttMisses} | Hit rate: ${(ttHits/(ttHits+ttMisses)*100).toFixed(1)}%`);
 
     // Hide progress indicator
     hideAIProgress();
@@ -70,7 +85,29 @@ function hideAIProgress() {
 // ============================================================================
 
 /**
- * Minimax algorithm with alpha-beta pruning
+ * Create a hash key for a board state
+ */
+function hashBoard(boardState) {
+    // Simple hash: concatenate all cell values
+    let hash = '';
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = boardState[r][c];
+            if (cell === null) {
+                hash += '0';
+            } else if (typeof cell === 'number') {
+                hash += cell.toString();
+            } else {
+                hash += cell; // string like "1-base"
+            }
+            hash += ',';
+        }
+    }
+    return hash;
+}
+
+/**
+ * Minimax algorithm with alpha-beta pruning and transposition table
  * Explores the game tree to find optimal move by assuming both players play optimally
  *
  * @param {Array} boardState - Current board state
@@ -81,12 +118,24 @@ function hideAIProgress() {
  * @returns {Object} {score: number, move: {row, col, score}}
  */
 function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = false) {
+    // Check transposition table
+    const boardHash = hashBoard(boardState);
+    const ttKey = `${boardHash}|${depth}|${isMaximizing}`;
+
+    if (transpositionTable.has(ttKey)) {
+        ttHits++;
+        return transpositionTable.get(ttKey);
+    }
+    ttMisses++;
+
     // Base case: reached max depth or game over
     if (depth === 0) {
-        return {
+        const result = {
             score: evaluateBoard(boardState),
             move: null
         };
+        transpositionTable.set(ttKey, result);
+        return result;
     }
 
     const player = isMaximizing ? 2 : 1; // AI is player 2
@@ -136,7 +185,9 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
             moveIndex++;
         }
 
-        return { score: maxScore, move: bestMove };
+        const result = { score: maxScore, move: bestMove };
+        transpositionTable.set(ttKey, result);
+        return result;
 
     } else {
         // Opponent's turn: minimize score
@@ -163,7 +214,9 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
             }
         }
 
-        return { score: minScore, move: bestMove };
+        const result = { score: minScore, move: bestMove };
+        transpositionTable.set(ttKey, result);
+        return result;
     }
 }
 
