@@ -5,6 +5,9 @@
 // Higher = smarter but slower. Recommended: 2-4
 let aiDepth = 3;
 
+// Time limit for AI search (milliseconds) - 0 means use fixed depth
+let aiTimeLimit = 5000; // 5 seconds default
+
 // Progress tracking
 let aiProgressCurrent = 0;
 let aiProgressTotal = 0;
@@ -14,6 +17,10 @@ let transpositionTable = new Map();
 let ttHits = 0;
 let ttMisses = 0;
 let alphaBetaCutoffs = 0;
+
+// Time management for iterative deepening
+let searchStartTime = 0;
+let searchTimeLimit = 0;
 
 // AI Evaluation Coefficients (tunable in UI)
 let aiCoeffs = {
@@ -48,19 +55,58 @@ function getAIMove() {
     ttMisses = 0;
     alphaBetaCutoffs = 0;
 
-    const startTime = performance.now();
+    searchStartTime = performance.now();
+    searchTimeLimit = aiTimeLimit > 0 ? aiTimeLimit : Infinity;
 
-    // Use minimax to find the best move
-    const result = minimax(board, aiDepth, -Infinity, Infinity, true, true);
+    let bestMove = null;
+    let bestScore = -Infinity;
+    let depthReached = 0;
 
-    const duration = performance.now() - startTime;
+    if (aiTimeLimit > 0) {
+        // Iterative deepening: search progressively deeper until time runs out
+        for (let depth = 1; depth <= 20; depth++) { // Max depth 20 as safety limit
+            const timeElapsed = performance.now() - searchStartTime;
+
+            // Stop if we're running out of time (leave 10% buffer)
+            if (timeElapsed > searchTimeLimit * 0.9) {
+                break;
+            }
+
+            try {
+                const result = minimax(board, depth, -Infinity, Infinity, true, true);
+
+                // Only update best move if we completed this depth
+                if (result && result.move) {
+                    bestMove = result.move;
+                    bestScore = result.score;
+                    depthReached = depth;
+                }
+
+                // Check if time's up after completing this depth
+                if (performance.now() - searchStartTime > searchTimeLimit * 0.9) {
+                    break;
+                }
+            } catch (e) {
+                // Time cutoff exception - use best move from previous depth
+                break;
+            }
+        }
+    } else {
+        // Fixed depth search (original behavior)
+        const result = minimax(board, aiDepth, -Infinity, Infinity, true, true);
+        bestMove = result.move;
+        bestScore = result.score;
+        depthReached = aiDepth;
+    }
+
+    const duration = performance.now() - searchStartTime;
     const totalNodes = ttHits + ttMisses;
-    console.log(`AI search: ${duration.toFixed(1)}ms | Nodes: ${totalNodes} | TT hits: ${ttHits} (${(ttHits/totalNodes*100).toFixed(1)}%) | AB cutoffs: ${alphaBetaCutoffs}`);
+    console.log(`AI search: ${duration.toFixed(1)}ms | Depth: ${depthReached} | Nodes: ${totalNodes} | TT hits: ${ttHits} (${(ttHits/totalNodes*100).toFixed(1)}%) | AB cutoffs: ${alphaBetaCutoffs}`);
 
     // Hide progress indicator
     hideAIProgress();
 
-    return result.move;
+    return bestMove;
 }
 
 function updateAIProgress() {

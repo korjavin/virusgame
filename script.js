@@ -1,5 +1,5 @@
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
-let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting;
+let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting;
 let player1NeutralsUsed = false;
 let player2NeutralsUsed = false;
 let neutralMode = false;
@@ -307,15 +307,19 @@ document.addEventListener('DOMContentLoaded', () => {
     aiEnabledCheckbox = document.getElementById('ai-enabled');
     aiDepthInput = document.getElementById('ai-depth-input');
     aiDepthSetting = document.getElementById('ai-depth-setting');
+    aiTimeInput = document.getElementById('ai-time-input');
+    aiTimeSetting = document.getElementById('ai-time-setting');
     putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
 
     // Show/hide AI depth setting and tuning based on AI checkbox
     aiEnabledCheckbox.addEventListener('change', () => {
         if (aiEnabledCheckbox.checked) {
             aiDepthSetting.style.display = 'block';
+            aiTimeSetting.style.display = 'block';
             document.getElementById('ai-tuning-section').style.display = 'block';
         } else {
             aiDepthSetting.style.display = 'none';
+            aiTimeSetting.style.display = 'none';
             document.getElementById('ai-tuning-section').style.display = 'none';
         }
     });
@@ -323,6 +327,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update aiDepth variable when user changes the input
     aiDepthInput.addEventListener('change', () => {
         aiDepth = parseInt(aiDepthInput.value);
+    });
+
+    // Update aiTimeLimit variable when user changes the input
+    aiTimeInput.addEventListener('change', () => {
+        aiTimeLimit = parseInt(aiTimeInput.value);
     });
 
     // AI Tuning collapsible header
