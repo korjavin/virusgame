@@ -46,6 +46,21 @@ The AI evaluation function now has tunable coefficients that you can adjust in t
 - **Lower values**: AI avoids enemy contact
 - **Try**: 0-20 range
 
+### Redundancy Value (default: 5)
+- **What it does**: Points for cells that can be lost without breaking the network
+- **Higher values**: AI builds web-like structures with parallel paths
+- **Lower values**: AI builds linear chains (faster expansion, risky)
+- **Try**: 0-15 range
+- **Note**: Computationally expensive - may slow AI at high values
+
+### Defensibility Value (default: 3)
+- **What it does**: Points for distance between critical cells and opponent's territory
+- **How it works**: Finds vulnerable "choke points" and rewards keeping them far from enemy
+- **Higher values**: AI spreads out, keeps weak points away from opponent
+- **Lower values**: AI clusters tightly, accepts vulnerability for aggression
+- **Try**: 0-15 range
+- **Synergy**: Works well with high Redundancy for ultra-defensive AI
+
 ## Experiment Ideas
 
 ### Aggressive AI

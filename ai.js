@@ -17,7 +17,8 @@ let aiCoeffs = {
     aggressionValue: 1,      // Points per step closer to opponent (rows+cols-distance)
     connectionValue: 3,      // Points per adjacent friendly cell
     attackValue: 8,          // Points per attack opportunity
-    redundancyValue: 5       // Points per redundant connection (cells that can be lost while maintaining base connectivity)
+    redundancyValue: 5,      // Points per redundant connection (cells that can be lost while maintaining base connectivity)
+    defensibilityValue: 3    // Points per move opponent needs to reach and break our critical cells
 };
 
 // ============================================================================
@@ -277,12 +278,109 @@ function evaluateBoard(boardState) {
     const opponentRedundancy = calculateRedundancy(boardState, 1);
     score += (aiRedundancy - opponentRedundancy) * aiCoeffs.redundancyValue;
 
+    // 6. DEFENSIBILITY
+    // Reward structures where critical points are far from opponent
+    // Encourages spread-out, harder-to-cut networks
+    const aiDefensibility = calculateDefensibility(boardState, 2);
+    const opponentDefensibility = calculateDefensibility(boardState, 1);
+    score += (aiDefensibility - opponentDefensibility) * aiCoeffs.defensibilityValue;
+
     return score;
 }
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Calculate defensibility - minimum moves opponent needs to break our network
+ * Finds critical cells (single points of failure) and measures distance from opponent's territory
+ * Higher defensibility = harder for opponent to cut off our cells (more spread out, safer structure)
+ */
+function calculateDefensibility(boardState, player) {
+    const opponent = player === 1 ? 2 : 1;
+    const base = player === 1 ? player1Base : player2Base;
+    let totalDefensibility = 0;
+
+    // Find all non-base cells belonging to the player
+    const playerCells = [];
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = boardState[r][c];
+            const cellStr = String(cell);
+
+            if (!cellStr.startsWith(player.toString())) continue;
+            if (r === base.row && c === base.col) continue;
+
+            playerCells.push({ row: r, col: c });
+        }
+    }
+
+    // For each cell, check if it's critical (removing it disconnects some cells from base)
+    for (const testCell of playerCells) {
+        // Skip fortified cells - opponent can't easily capture them
+        const cellValue = boardState[testCell.row][testCell.col];
+        if (String(cellValue).includes('fortified')) continue;
+
+        // Create a temporary board with this cell removed
+        const tempBoard = boardState.map(row => row.slice());
+        tempBoard[testCell.row][testCell.col] = null;
+
+        // Check if any cells got disconnected
+        let isCritical = false;
+        for (const otherCell of playerCells) {
+            if (otherCell.row === testCell.row && otherCell.col === testCell.col) continue;
+
+            const cell = tempBoard[otherCell.row][otherCell.col];
+            if (!cell) continue; // Skip if already removed
+
+            // If this cell is now disconnected, the test cell is critical
+            if (!isConnectedToBaseOnBoard(tempBoard, otherCell.row, otherCell.col, player)) {
+                isCritical = true;
+                break;
+            }
+        }
+
+        // If critical, measure minimum distance from opponent's connected territory
+        if (isCritical) {
+            const distanceFromOpponent = minDistanceFromOpponentTerritory(
+                boardState,
+                testCell.row,
+                testCell.col,
+                opponent
+            );
+
+            // More distance = better defensibility
+            totalDefensibility += distanceFromOpponent;
+        }
+    }
+
+    return totalDefensibility;
+}
+
+/**
+ * Find minimum Manhattan distance from a cell to opponent's connected territory
+ */
+function minDistanceFromOpponentTerritory(boardState, targetRow, targetCol, opponent) {
+    let minDistance = rows + cols; // Max possible distance
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = boardState[r][c];
+            const cellStr = String(cell);
+
+            // Check if this is opponent's cell connected to their base
+            if (cellStr.startsWith(opponent.toString())) {
+                if (isConnectedToBaseOnBoard(boardState, r, c, opponent)) {
+                    const distance = Math.abs(targetRow - r) + Math.abs(targetCol - c);
+                    minDistance = Math.min(minDistance, distance);
+                }
+            }
+        }
+    }
+
+    return minDistance;
+}
 
 /**
  * Calculate network redundancy - how many cells can be removed while maintaining base connectivity
