@@ -309,18 +309,70 @@ document.addEventListener('DOMContentLoaded', () => {
     aiDepthSetting = document.getElementById('ai-depth-setting');
     putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
 
-    // Show/hide AI depth setting based on AI checkbox
+    // Show/hide AI depth setting and tuning based on AI checkbox
     aiEnabledCheckbox.addEventListener('change', () => {
         if (aiEnabledCheckbox.checked) {
             aiDepthSetting.style.display = 'block';
+            document.getElementById('ai-tuning-section').style.display = 'block';
         } else {
             aiDepthSetting.style.display = 'none';
+            document.getElementById('ai-tuning-section').style.display = 'none';
         }
     });
 
     // Update aiDepth variable when user changes the input
     aiDepthInput.addEventListener('change', () => {
         aiDepth = parseInt(aiDepthInput.value);
+    });
+
+    // AI Tuning collapsible header
+    document.getElementById('ai-tuning-header').addEventListener('click', () => {
+        const controls = document.getElementById('ai-tuning-controls');
+        const header = document.getElementById('ai-tuning-header');
+        if (controls.style.display === 'none') {
+            controls.style.display = 'block';
+            header.innerHTML = '⚙️ AI Coefficients <span style="float: right;">▲</span>';
+        } else {
+            controls.style.display = 'none';
+            header.innerHTML = '⚙️ AI Coefficients <span style="float: right;">▼</span>';
+        }
+    });
+
+    // Wire up coefficient inputs
+    document.getElementById('coeff-cell').addEventListener('input', (e) => {
+        aiCoeffs.cellValue = parseFloat(e.target.value);
+    });
+    document.getElementById('coeff-fortified').addEventListener('input', (e) => {
+        aiCoeffs.fortifiedValue = parseFloat(e.target.value);
+    });
+    document.getElementById('coeff-mobility').addEventListener('input', (e) => {
+        aiCoeffs.mobilityValue = parseFloat(e.target.value);
+    });
+    document.getElementById('coeff-aggression').addEventListener('input', (e) => {
+        aiCoeffs.aggressionValue = parseFloat(e.target.value);
+    });
+    document.getElementById('coeff-connection').addEventListener('input', (e) => {
+        aiCoeffs.connectionValue = parseFloat(e.target.value);
+    });
+    document.getElementById('coeff-attack').addEventListener('input', (e) => {
+        aiCoeffs.attackValue = parseFloat(e.target.value);
+    });
+
+    // Reset coefficients to defaults
+    document.getElementById('reset-coeffs-button').addEventListener('click', () => {
+        aiCoeffs.cellValue = 10;
+        aiCoeffs.fortifiedValue = 15;
+        aiCoeffs.mobilityValue = 5;
+        aiCoeffs.aggressionValue = 1;
+        aiCoeffs.connectionValue = 3;
+        aiCoeffs.attackValue = 8;
+
+        document.getElementById('coeff-cell').value = 10;
+        document.getElementById('coeff-fortified').value = 15;
+        document.getElementById('coeff-mobility').value = 5;
+        document.getElementById('coeff-aggression').value = 1;
+        document.getElementById('coeff-connection').value = 3;
+        document.getElementById('coeff-attack').value = 8;
     });
 
     function initGame() {

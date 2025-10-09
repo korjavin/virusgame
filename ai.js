@@ -9,6 +9,16 @@ let aiDepth = 3;
 let aiProgressCurrent = 0;
 let aiProgressTotal = 0;
 
+// AI Evaluation Coefficients (tunable in UI)
+let aiCoeffs = {
+    cellValue: 10,           // Points per regular cell
+    fortifiedValue: 15,      // Extra points per fortified cell
+    mobilityValue: 5,        // Points per available move
+    aggressionValue: 1,      // Points per step closer to opponent (rows+cols-distance)
+    connectionValue: 3,      // Points per adjacent friendly cell
+    attackValue: 8           // Points per attack opportunity
+};
+
 // ============================================================================
 // MAIN AI ENTRY POINT
 // ============================================================================
@@ -193,16 +203,17 @@ function evaluateBoard(boardState) {
         }
     }
 
-    // Material score: regular cells = 10 points, fortified = 25 points
-    score += (aiCells * 10 + aiFortified * 15) - (opponentCells * 10 + opponentFortified * 15);
+    // Material score: configurable points per cell type
+    score += (aiCells * aiCoeffs.cellValue + aiFortified * aiCoeffs.fortifiedValue) -
+             (opponentCells * aiCoeffs.cellValue + opponentFortified * aiCoeffs.fortifiedValue);
 
     // 2. MOBILITY ADVANTAGE
     // Count available moves for each player
     const aiMoves = getAllValidMoves(boardState, 2).length;
     const opponentMoves = getAllValidMoves(boardState, 1).length;
 
-    // Mobility score: each available move = 5 points
-    score += (aiMoves - opponentMoves) * 5;
+    // Mobility score: configurable points per available move
+    score += (aiMoves - opponentMoves) * aiCoeffs.mobilityValue;
 
     // 3. POSITIONAL ADVANTAGE
     // Reward cells closer to opponent's base, penalize isolated cells
@@ -213,20 +224,20 @@ function evaluateBoard(boardState) {
             if (cell === 2 || String(cell).startsWith('2')) {
                 // Reward aggressive positioning (closer to opponent base)
                 const distToOpponent = Math.abs(r - player1Base.row) + Math.abs(c - player1Base.col);
-                score += (rows + cols - distToOpponent);
+                score += (rows + cols - distToOpponent) * aiCoeffs.aggressionValue;
 
                 // Reward cells with multiple connections (less vulnerable)
                 const connections = countAdjacentCellsOnBoard(boardState, r, c, 2);
-                score += connections * 3;
+                score += connections * aiCoeffs.connectionValue;
 
             } else if (cell === 1 || String(cell).startsWith('1')) {
                 // Penalize opponent's aggressive positioning
                 const distToAI = Math.abs(r - player2Base.row) + Math.abs(c - player2Base.col);
-                score -= (rows + cols - distToAI);
+                score -= (rows + cols - distToAI) * aiCoeffs.aggressionValue;
 
                 // Penalize opponent's well-connected cells
                 const connections = countAdjacentCellsOnBoard(boardState, r, c, 1);
-                score -= connections * 3;
+                score -= connections * aiCoeffs.connectionValue;
             }
         }
     }
@@ -256,8 +267,8 @@ function evaluateBoard(boardState) {
         }
     }
 
-    // Attack opportunities = 8 points each
-    score += (aiAttackOpportunities - opponentAttackOpportunities) * 8;
+    // Attack opportunities: configurable points each
+    score += (aiAttackOpportunities - opponentAttackOpportunities) * aiCoeffs.attackValue;
 
     return score;
 }

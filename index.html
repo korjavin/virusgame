@@ -43,6 +43,38 @@
                 <button id="new-game-button" class="sidebar-button">New Local Game</button>
             </div>
 
+            <!-- AI Tuning (collapsible) -->
+            <div class="sidebar-section" id="ai-tuning-section" style="display: none;">
+                <h3 style="cursor: pointer;" id="ai-tuning-header">⚙️ AI Coefficients <span style="float: right;">▼</span></h3>
+                <div id="ai-tuning-controls" style="display: none;">
+                    <div class="settings-group">
+                        <label for="coeff-cell">Cell Value:</label>
+                        <input type="number" id="coeff-cell" value="10" min="0" max="100" step="1">
+                    </div>
+                    <div class="settings-group">
+                        <label for="coeff-fortified">Fortified:</label>
+                        <input type="number" id="coeff-fortified" value="15" min="0" max="100" step="1">
+                    </div>
+                    <div class="settings-group">
+                        <label for="coeff-mobility">Mobility:</label>
+                        <input type="number" id="coeff-mobility" value="5" min="0" max="50" step="1">
+                    </div>
+                    <div class="settings-group">
+                        <label for="coeff-aggression">Aggression:</label>
+                        <input type="number" id="coeff-aggression" value="1" min="0" max="10" step="0.1">
+                    </div>
+                    <div class="settings-group">
+                        <label for="coeff-connection">Connection:</label>
+                        <input type="number" id="coeff-connection" value="3" min="0" max="20" step="1">
+                    </div>
+                    <div class="settings-group">
+                        <label for="coeff-attack">Attack:</label>
+                        <input type="number" id="coeff-attack" value="8" min="0" max="50" step="1">
+                    </div>
+                    <button id="reset-coeffs-button" class="sidebar-button" style="font-size: 11px;">Reset to Defaults</button>
+                </div>
+            </div>
+
             <!-- Online users -->
             <div class="sidebar-section users-section">
                 <h3>Online Players</h3>
@@ -79,10 +111,10 @@
     <!-- WebAssembly support -->
     <script src="wasm_exec.js"></script>
 
-    <script src="script.js?v=1.7"></script>
-    <script src="ai.js?v=1.7"></script>
-    <script src="ai-wasm.js?v=1.7"></script>
-    <script src="multiplayer.js?v=1.7"></script>
+    <script src="script.js?v=1.8"></script>
+    <script src="ai.js?v=1.8"></script>
+    <script src="ai-wasm.js?v=1.8"></script>
+    <script src="multiplayer.js?v=1.8"></script>
     <script>
         // Theme toggle
         document.getElementById('theme-toggle').addEventListener('click', function() {
