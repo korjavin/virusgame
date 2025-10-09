@@ -64,13 +64,21 @@ function getAIMove() {
 
     if (aiTimeLimit > 0) {
         // Iterative deepening: search progressively deeper until time runs out
+        let lastDepthTime = 0;
+
         for (let depth = 1; depth <= 20; depth++) { // Max depth 20 as safety limit
             const timeElapsed = performance.now() - searchStartTime;
+            const timeRemaining = searchTimeLimit - timeElapsed;
 
-            // Stop if we're running out of time (leave 10% buffer)
-            if (timeElapsed > searchTimeLimit * 0.9) {
+            // Estimate time for next depth (exponential growth, roughly 3-5x previous depth)
+            const estimatedNextDepthTime = lastDepthTime * 4;
+
+            // Stop if we likely won't complete next depth in time
+            if (depth > 1 && estimatedNextDepthTime > timeRemaining) {
                 break;
             }
+
+            const depthStartTime = performance.now();
 
             try {
                 const result = minimax(board, depth, -Infinity, Infinity, true, true);
@@ -80,10 +88,11 @@ function getAIMove() {
                     bestMove = result.move;
                     bestScore = result.score;
                     depthReached = depth;
+                    lastDepthTime = performance.now() - depthStartTime;
                 }
 
-                // Check if time's up after completing this depth
-                if (performance.now() - searchStartTime > searchTimeLimit * 0.9) {
+                // Hard stop if we exceeded time limit
+                if (performance.now() - searchStartTime >= searchTimeLimit) {
                     break;
                 }
             } catch (e) {
