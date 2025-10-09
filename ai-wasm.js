@@ -127,6 +127,7 @@ function getAIMoveJS() {
     transpositionTable.clear();
     ttHits = 0;
     ttMisses = 0;
+    alphaBetaCutoffs = 0;
 
     const startTime = performance.now();
 
@@ -134,8 +135,9 @@ function getAIMoveJS() {
     const result = minimax(board, aiDepth, -Infinity, Infinity, true, true);
 
     const duration = performance.now() - startTime;
+    const totalNodes = ttHits + ttMisses;
     console.log('JS AI: Selected move:', result.move, 'Score:', result.score);
-    console.log(`AI search: ${duration.toFixed(1)}ms | TT hits: ${ttHits} | TT misses: ${ttMisses} | Hit rate: ${(ttHits/(ttHits+ttMisses)*100).toFixed(1)}%`);
+    console.log(`AI search: ${duration.toFixed(1)}ms | Nodes: ${totalNodes} | TT hits: ${ttHits} (${(ttHits/totalNodes*100).toFixed(1)}%) | AB cutoffs: ${alphaBetaCutoffs}`);
 
     // Hide progress indicator
     hideAIProgress();
