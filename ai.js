@@ -13,6 +13,7 @@ let aiProgressTotal = 0;
 let transpositionTable = new Map();
 let ttHits = 0;
 let ttMisses = 0;
+let alphaBetaCutoffs = 0;
 
 // AI Evaluation Coefficients (tunable in UI)
 let aiCoeffs = {
@@ -45,6 +46,7 @@ function getAIMove() {
     transpositionTable.clear();
     ttHits = 0;
     ttMisses = 0;
+    alphaBetaCutoffs = 0;
 
     const startTime = performance.now();
 
@@ -52,7 +54,8 @@ function getAIMove() {
     const result = minimax(board, aiDepth, -Infinity, Infinity, true, true);
 
     const duration = performance.now() - startTime;
-    console.log(`AI search: ${duration.toFixed(1)}ms | TT hits: ${ttHits} | TT misses: ${ttMisses} | Hit rate: ${(ttHits/(ttHits+ttMisses)*100).toFixed(1)}%`);
+    const totalNodes = ttHits + ttMisses;
+    console.log(`AI search: ${duration.toFixed(1)}ms | Nodes: ${totalNodes} | TT hits: ${ttHits} (${(ttHits/totalNodes*100).toFixed(1)}%) | AB cutoffs: ${alphaBetaCutoffs}`);
 
     // Hide progress indicator
     hideAIProgress();
@@ -117,6 +120,37 @@ function hashBoard(boardState) {
  * @param {boolean} isMaximizing - True if AI's turn (maximizing), false if opponent's turn (minimizing)
  * @returns {Object} {score: number, move: {row, col, score}}
  */
+// Quick move scoring for move ordering (no deep evaluation)
+function scoreMove(boardState, move, player) {
+    const cellValue = boardState[move.row][move.col];
+    let score = 0;
+
+    // Prioritize capturing opponent cells (fortifying)
+    if (cellValue === (player === 1 ? 2 : 1) || String(cellValue).startsWith((player === 1 ? '2' : '1'))) {
+        score += 100;
+    }
+
+    // Prioritize moves near opponent base
+    const opponentBase = player === 1 ? player2Base : player1Base;
+    const distToOpponentBase = Math.abs(move.row - opponentBase.row) + Math.abs(move.col - opponentBase.col);
+    score -= distToOpponentBase * 2;
+
+    // Prioritize moves with many adjacent friendly cells
+    const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+    for (const [dr, dc] of directions) {
+        const nr = move.row + dr;
+        const nc = move.col + dc;
+        if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+            const neighbor = boardState[nr][nc];
+            if (neighbor && String(neighbor).startsWith(player.toString())) {
+                score += 10;
+            }
+        }
+    }
+
+    return score;
+}
+
 function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = false) {
     // Check transposition table
     const boardHash = hashBoard(boardState);
@@ -140,6 +174,13 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
 
     const player = isMaximizing ? 2 : 1; // AI is player 2
     const possibleMoves = getAllValidMoves(boardState, player);
+
+    // Move ordering: sort moves by heuristic score to try best moves first
+    possibleMoves.sort((a, b) => {
+        const scoreA = scoreMove(boardState, a, player);
+        const scoreB = scoreMove(boardState, b, player);
+        return isMaximizing ? (scoreB - scoreA) : (scoreA - scoreB);
+    });
 
     // Terminal state: no moves available
     if (possibleMoves.length === 0) {
@@ -179,6 +220,7 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
             // Alpha-beta pruning
             alpha = Math.max(alpha, result.score);
             if (beta <= alpha) {
+                alphaBetaCutoffs++;
                 break; // Beta cutoff - opponent won't allow this branch
             }
 
@@ -210,6 +252,7 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
             // Alpha-beta pruning
             beta = Math.min(beta, result.score);
             if (beta <= alpha) {
+                alphaBetaCutoffs++;
                 break; // Alpha cutoff - AI won't allow this branch
             }
         }
