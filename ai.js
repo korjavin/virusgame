@@ -123,29 +123,59 @@ function hashBoard(boardState) {
 // Quick move scoring for move ordering (no deep evaluation)
 function scoreMove(boardState, move, player) {
     const cellValue = boardState[move.row][move.col];
+    const opponent = player === 1 ? 2 : 1;
     let score = 0;
 
-    // Prioritize capturing opponent cells (fortifying)
-    if (cellValue === (player === 1 ? 2 : 1) || String(cellValue).startsWith((player === 1 ? '2' : '1'))) {
-        score += 100;
+    // 1. HIGHEST PRIORITY: Capturing opponent cells (fortifying)
+    if (cellValue === opponent || String(cellValue).startsWith(opponent.toString())) {
+        score += 1000;
+
+        // Extra bonus if opponent cell is fortified (breaks their structure)
+        if (String(cellValue).includes('fortified')) {
+            score += 500;
+        }
     }
 
-    // Prioritize moves near opponent base
-    const opponentBase = player === 1 ? player2Base : player1Base;
-    const distToOpponentBase = Math.abs(move.row - opponentBase.row) + Math.abs(move.col - opponentBase.col);
-    score -= distToOpponentBase * 2;
-
-    // Prioritize moves with many adjacent friendly cells
+    // 2. Count friendly and opponent neighbors for positional evaluation
     const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+    let friendlyNeighbors = 0;
+    let opponentNeighbors = 0;
+    let emptyNeighbors = 0;
+
     for (const [dr, dc] of directions) {
         const nr = move.row + dr;
         const nc = move.col + dc;
         if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
             const neighbor = boardState[nr][nc];
             if (neighbor && String(neighbor).startsWith(player.toString())) {
-                score += 10;
+                friendlyNeighbors++;
+            } else if (neighbor && String(neighbor).startsWith(opponent.toString())) {
+                opponentNeighbors++;
+            } else if (!neighbor) {
+                emptyNeighbors++;
             }
         }
+    }
+
+    // 3. Reward moves with multiple friendly connections (stable expansion)
+    score += friendlyNeighbors * 50;
+
+    // 4. Reward moves that threaten opponent cells (attack opportunities)
+    score += opponentNeighbors * 30;
+
+    // 5. Reward expansion opportunities (empty neighbors for future growth)
+    score += emptyNeighbors * 10;
+
+    // 6. Distance to opponent base (aggression)
+    const opponentBase = player === 1 ? player2Base : player1Base;
+    const distToOpponentBase = Math.abs(move.row - opponentBase.row) + Math.abs(move.col - opponentBase.col);
+    score -= distToOpponentBase * 3;
+
+    // 7. Distance to own base (don't overextend)
+    const ownBase = player === 1 ? player1Base : player2Base;
+    const distToOwnBase = Math.abs(move.row - ownBase.row) + Math.abs(move.col - ownBase.col);
+    if (distToOwnBase > 8) {
+        score -= (distToOwnBase - 8) * 5; // Penalize overextension
     }
 
     return score;
