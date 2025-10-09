@@ -138,7 +138,7 @@ function getAIMoveJS() {
 const originalGetAIMove = getAIMove;
 getAIMove = function() {
     // Enable WASM for comparison testing
-    const useWASM = true; // Set to false to disable WASM
+    const useWASM = false; // Set to false to disable WASM
 
     if (wasmAIReady && useWASM) {
         console.log('Using WASM AI (depth:', aiDepth, ')');
