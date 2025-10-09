@@ -123,10 +123,19 @@ function getAIMoveJS() {
     aiProgressTotal = possibleMoves.length;
     updateAIProgress();
 
+    // Clear transposition table for new search
+    transpositionTable.clear();
+    ttHits = 0;
+    ttMisses = 0;
+
+    const startTime = performance.now();
+
     // Use minimax to find the best move
     const result = minimax(board, aiDepth, -Infinity, Infinity, true, true);
 
+    const duration = performance.now() - startTime;
     console.log('JS AI: Selected move:', result.move, 'Score:', result.score);
+    console.log(`AI search: ${duration.toFixed(1)}ms | TT hits: ${ttHits} | TT misses: ${ttMisses} | Hit rate: ${(ttHits/(ttHits+ttMisses)*100).toFixed(1)}%`);
 
     // Hide progress indicator
     hideAIProgress();
