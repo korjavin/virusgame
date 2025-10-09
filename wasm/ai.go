@@ -326,6 +326,12 @@ func getAllValidMoves(board BoardState, player int) []Move {
 
 // isValidMove checks if a move is valid
 func isValidMove(board BoardState, row, col, player int) bool {
+	// DEBUG for [8,9]
+	debug := row == 8 && col == 9 && player == 2
+	if debug {
+		fmt.Printf(">>> isValidMove [8,9] player 2\n")
+	}
+
 	cell := board[row][col]
 	cellStr := cellToString(cell)
 	opponent := 1
@@ -335,17 +341,30 @@ func isValidMove(board BoardState, row, col, player int) bool {
 
 	// Cannot move on fortified or base cells
 	if containsString(cellStr, "fortified") || containsString(cellStr, "base") {
+		if debug {
+			fmt.Printf(">>> FAILED: cell contains fortified or base\n")
+		}
 		return false
 	}
 
 	// Can only attack opponent or expand to empty
 	if cell != nil && !startsWithPlayer(cellStr, opponent) {
+		if debug {
+			fmt.Printf(">>> FAILED: cell not nil and doesn't start with opponent\n")
+		}
 		return false
 	}
 
 	// Must be adjacent to own territory
 	if !isAdjacentToPlayer(board, row, col, player) {
+		if debug {
+			fmt.Printf(">>> FAILED: not adjacent to player\n")
+		}
 		return false
+	}
+
+	if debug {
+		fmt.Printf(">>> Checking adjacent cells for base connectivity...\n")
 	}
 
 	// Check if adjacent cell is connected to base
@@ -361,7 +380,14 @@ func isValidMove(board BoardState, row, col, player int) bool {
 				adjCell := board[adjRow][adjCol]
 				adjStr := cellToString(adjCell)
 				if startsWithPlayer(adjStr, player) {
-					if isConnectedToBase(board, adjRow, adjCol, player) {
+					connected := isConnectedToBase(board, adjRow, adjCol, player)
+					if debug {
+						fmt.Printf(">>> Adjacent [%d,%d]=%v starts with player, connected=%v\n", adjRow, adjCol, adjCell, connected)
+					}
+					if connected {
+						if debug {
+							fmt.Printf(">>> SUCCESS: Found connected adjacent cell!\n")
+						}
 						return true
 					}
 				}
@@ -369,6 +395,9 @@ func isValidMove(board BoardState, row, col, player int) bool {
 		}
 	}
 
+	if debug {
+		fmt.Printf(">>> FAILED: No connected adjacent cells found\n")
+	}
 	return false
 }
 
