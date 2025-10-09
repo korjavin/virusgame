@@ -67,6 +67,13 @@ func wasmGetAIMove(this js.Value, args []js.Value) interface{} {
 	// DEBUG: Log board state
 	fmt.Printf("WASM DEBUG: Board size: %dx%d\n", rows, cols)
 	fmt.Printf("WASM DEBUG: Found %d valid moves for player 2\n", len(possibleMoves))
+	fmt.Printf("Valid moves: ")
+	for i, m := range possibleMoves {
+		if i < 10 {
+			fmt.Printf("[%d,%d] ", m.Row, m.Col)
+		}
+	}
+	fmt.Printf("\n")
 
 	// Check what cells player 2 has
 	player2Cells := 0
@@ -283,6 +290,33 @@ func getAllValidMoves(board BoardState, player int) []Move {
 		for c := 0; c < cols; c++ {
 			if isValidMove(board, r, c, player) {
 				moves = append(moves, Move{Row: r, Col: c})
+			}
+		}
+	}
+
+	// DEBUG: For first turn, check why [8,9] isn't valid
+	if len(moves) == 3 && player == 2 {
+		fmt.Printf("DEBUG: Why is [8,9] not valid? Checking...\n")
+		testRow, testCol := 8, 9
+		cell := board[testRow][testCol]
+		fmt.Printf("  Cell at [8,9]: %v\n", cell)
+		fmt.Printf("  Is adjacent to player? %v\n", isAdjacentToPlayer(board, testRow, testCol, player))
+		// Check if any adjacent cell is connected
+		for i := -1; i <= 1; i++ {
+			for j := -1; j <= 1; j++ {
+				if i == 0 && j == 0 {
+					continue
+				}
+				adjRow := testRow + i
+				adjCol := testCol + j
+				if adjRow >= 0 && adjRow < rows && adjCol >= 0 && adjCol < cols {
+					adjCell := board[adjRow][adjCol]
+					adjStr := cellToString(adjCell)
+					if startsWithPlayer(adjStr, player) {
+						connected := isConnectedToBase(board, adjRow, adjCol, player)
+						fmt.Printf("  Adjacent [%d,%d]=%v connected=%v\n", adjRow, adjCol, adjCell, connected)
+					}
+				}
 			}
 		}
 	}
