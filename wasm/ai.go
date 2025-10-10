@@ -16,6 +16,24 @@ var (
 	player2BaseCol int
 	progressCurrent int
 	progressTotal   int
+
+	// Transposition table for memoization
+	transpositionTable map[string]MinimaxResult
+	ttHits             int
+	ttMisses           int
+	alphaBetaCutoffs   int
+
+	// AI coefficients (tunable)
+	aiCoeffs struct {
+		cellValue          float64
+		fortifiedValue     float64
+		mobilityValue      float64
+		aggressionValue    float64
+		connectionValue    float64
+		attackValue        float64
+		redundancyValue    float64
+		defensibilityValue float64
+	}
 )
 
 // BoardState represents the game board
@@ -38,12 +56,39 @@ type MinimaxResult struct {
 func main() {
 	c := make(chan struct{})
 
+	// Initialize defaults
+	aiCoeffs.cellValue = 10
+	aiCoeffs.fortifiedValue = 15
+	aiCoeffs.mobilityValue = 5
+	aiCoeffs.aggressionValue = 1
+	aiCoeffs.connectionValue = 3
+	aiCoeffs.attackValue = 8
+	aiCoeffs.redundancyValue = 5
+	aiCoeffs.defensibilityValue = 3
+
+	transpositionTable = make(map[string]MinimaxResult)
+
 	// Export functions to JavaScript
 	js.Global().Set("wasmGetAIMove", js.FuncOf(wasmGetAIMove))
+	js.Global().Set("wasmSetCoeffs", js.FuncOf(wasmSetCoeffs))
 	js.Global().Set("wasmReady", js.ValueOf(true))
 
 	fmt.Println("Go WASM AI initialized")
 	<-c
+}
+
+// wasmSetCoeffs allows JS to set coefficients
+func wasmSetCoeffs(this js.Value, args []js.Value) interface{} {
+	coeffs := args[0]
+	aiCoeffs.cellValue = coeffs.Get("cellValue").Float()
+	aiCoeffs.fortifiedValue = coeffs.Get("fortifiedValue").Float()
+	aiCoeffs.mobilityValue = coeffs.Get("mobilityValue").Float()
+	aiCoeffs.aggressionValue = coeffs.Get("aggressionValue").Float()
+	aiCoeffs.connectionValue = coeffs.Get("connectionValue").Float()
+	aiCoeffs.attackValue = coeffs.Get("attackValue").Float()
+	aiCoeffs.redundancyValue = coeffs.Get("redundancyValue").Float()
+	aiCoeffs.defensibilityValue = coeffs.Get("defensibilityValue").Float()
+	return nil
 }
 
 // wasmGetAIMove is the exported function called from JavaScript
@@ -98,8 +143,16 @@ func wasmGetAIMove(this js.Value, args []js.Value) interface{} {
 	progressTotal = len(possibleMoves)
 	updateProgress()
 
+	// Clear transposition table
+	transpositionTable = make(map[string]MinimaxResult)
+	ttHits = 0
+	ttMisses = 0
+	alphaBetaCutoffs = 0
+
 	// Run minimax
 	result := minimax(board, depth, math.Inf(-1), math.Inf(1), true, true)
+
+	fmt.Printf("TT hits: %d, misses: %d, AB cutoffs: %d\n", ttHits, ttMisses, alphaBetaCutoffs)
 
 	if result.Move == nil {
 		return js.Null()
@@ -114,14 +167,140 @@ func wasmGetAIMove(this js.Value, args []js.Value) interface{} {
 	return moveObj
 }
 
+// hashBoard creates a string hash of the board state
+func hashBoard(board BoardState) string {
+	hash := ""
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			cell := board[r][c]
+			if cell == nil {
+				hash += "0,"
+			} else if num, ok := cell.(int); ok {
+				hash += fmt.Sprintf("%d,", num)
+			} else if str, ok := cell.(string); ok {
+				hash += str + ","
+			}
+		}
+	}
+	return hash
+}
+
+// scoreMove provides a heuristic score for move ordering
+func scoreMove(board BoardState, move Move, player int) float64 {
+	cellValue := board[move.Row][move.Col]
+	cellStr := cellToString(cellValue)
+	opponent := 1
+	if player == 1 {
+		opponent = 2
+	}
+
+	score := 0.0
+
+	// 1. Capturing opponent cells (fortifying)
+	if startsWithPlayer(cellStr, opponent) {
+		score += 1000
+		if containsString(cellStr, "fortified") {
+			score += 500
+		}
+	}
+
+	// 2. Count friendly and opponent neighbors
+	friendlyNeighbors := 0
+	opponentNeighbors := 0
+	emptyNeighbors := 0
+
+	for i := -1; i <= 1; i++ {
+		for j := -1; j <= 1; j++ {
+			if i == 0 && j == 0 {
+				continue
+			}
+			nr := move.Row + i
+			nc := move.Col + j
+			if nr >= 0 && nr < rows && nc >= 0 && nc < cols {
+				neighbor := board[nr][nc]
+				neighborStr := cellToString(neighbor)
+				if startsWithPlayer(neighborStr, player) {
+					friendlyNeighbors++
+				} else if startsWithPlayer(neighborStr, opponent) {
+					opponentNeighbors++
+				} else if neighbor == nil {
+					emptyNeighbors++
+				}
+			}
+		}
+	}
+
+	score += float64(friendlyNeighbors * 50)
+	score += float64(opponentNeighbors * 30)
+	score += float64(emptyNeighbors * 10)
+
+	// 3. Distance to opponent base
+	opponentBaseRow := player1BaseRow
+	opponentBaseCol := player1BaseCol
+	if player == 2 {
+		opponentBaseRow = player2BaseRow
+		opponentBaseCol = player2BaseCol
+	}
+	distToOpponentBase := abs(move.Row-opponentBaseRow) + abs(move.Col-opponentBaseCol)
+	score -= float64(distToOpponentBase * 3)
+
+	// 4. Distance to own base (penalize overextension)
+	ownBaseRow := player2BaseRow
+	ownBaseCol := player2BaseCol
+	if player == 1 {
+		ownBaseRow = player1BaseRow
+		ownBaseCol = player1BaseCol
+	}
+	distToOwnBase := abs(move.Row-ownBaseRow) + abs(move.Col-ownBaseCol)
+	if distToOwnBase > 8 {
+		score -= float64((distToOwnBase - 8) * 5)
+	}
+
+	return score
+}
+
+// sortMovesByScore sorts moves by their heuristic score
+func sortMovesByScore(board BoardState, moves []Move, player int, descending bool) {
+	// Simple bubble sort (good enough for small move lists)
+	for i := 0; i < len(moves)-1; i++ {
+		for j := 0; j < len(moves)-i-1; j++ {
+			scoreA := scoreMove(board, moves[j], player)
+			scoreB := scoreMove(board, moves[j+1], player)
+
+			shouldSwap := false
+			if descending {
+				shouldSwap = scoreB > scoreA
+			} else {
+				shouldSwap = scoreA > scoreB
+			}
+
+			if shouldSwap {
+				moves[j], moves[j+1] = moves[j+1], moves[j]
+			}
+		}
+	}
+}
+
 // minimax implements the minimax algorithm with alpha-beta pruning
 func minimax(board BoardState, depth int, alpha, beta float64, isMaximizing, isTopLevel bool) MinimaxResult {
+	// Check transposition table
+	boardHash := hashBoard(board)
+	ttKey := fmt.Sprintf("%s|%d|%t", boardHash, depth, isMaximizing)
+
+	if cached, ok := transpositionTable[ttKey]; ok {
+		ttHits++
+		return cached
+	}
+	ttMisses++
+
 	// Base case: reached max depth
 	if depth == 0 {
-		return MinimaxResult{
+		result := MinimaxResult{
 			Score: evaluateBoard(board),
 			Move:  nil,
 		}
+		transpositionTable[ttKey] = result
+		return result
 	}
 
 	player := 2
@@ -130,6 +309,9 @@ func minimax(board BoardState, depth int, alpha, beta float64, isMaximizing, isT
 	}
 
 	possibleMoves := getAllValidMoves(board, player)
+
+	// Move ordering: sort to try best moves first
+	sortMovesByScore(board, possibleMoves, player, isMaximizing)
 
 	// Terminal state: no moves available
 	if len(possibleMoves) == 0 {
@@ -167,11 +349,14 @@ func minimax(board BoardState, depth int, alpha, beta float64, isMaximizing, isT
 			// Alpha-beta pruning
 			alpha = math.Max(alpha, result.Score)
 			if beta <= alpha {
+				alphaBetaCutoffs++
 				break
 			}
 		}
 
-		return MinimaxResult{Score: maxScore, Move: bestMove}
+		result := MinimaxResult{Score: maxScore, Move: bestMove}
+		transpositionTable[ttKey] = result
+		return result
 	} else {
 		minScore := math.Inf(1)
 		var bestMove *Move
@@ -187,11 +372,14 @@ func minimax(board BoardState, depth int, alpha, beta float64, isMaximizing, isT
 
 			beta = math.Min(beta, result.Score)
 			if beta <= alpha {
+				alphaBetaCutoffs++
 				break
 			}
 		}
 
-		return MinimaxResult{Score: minScore, Move: bestMove}
+		result := MinimaxResult{Score: minScore, Move: bestMove}
+		transpositionTable[ttKey] = result
+		return result
 	}
 }
 
