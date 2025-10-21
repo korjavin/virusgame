@@ -178,6 +178,11 @@ function hideAIProgress() {
  * Create a Zobrist hash key for a board state
  */
 function hashBoard(boardState) {
+    // Ensure Zobrist table is initialized
+    if (!zobristTableInitialized || zobristTable.length === 0) {
+        initializeZobristTable();
+    }
+
     let hash = [0, 0]; // 64-bit hash as two 32-bit integers
 
     for (let r = 0; r < rows; r++) {
@@ -185,7 +190,7 @@ function hashBoard(boardState) {
             const cell = boardState[r][c];
             if (cell !== null) {
                 const pieceType = PIECE_TYPES[cell];
-                if (pieceType !== undefined) {
+                if (pieceType !== undefined && zobristTable[r] && zobristTable[r][c] && zobristTable[r][c][pieceType]) {
                     hash[0] ^= zobristTable[r][c][pieceType][0];
                     hash[1] ^= zobristTable[r][c][pieceType][1];
                 }
@@ -268,18 +273,27 @@ function scoreMove(boardState, move, player) {
 }
 
 function updateHash(oldHash, r, c, oldPiece, newPiece) {
-    let [h1, h2] = oldHash.split('-').map(h => parseInt(h, 16));
-
-    if (oldPiece !== null) {
-        const oldPieceType = PIECE_TYPES[oldPiece];
-        h1 ^= zobristTable[r][c][oldPieceType][0];
-        h2 ^= zobristTable[r][c][oldPieceType][1];
+    // Ensure Zobrist table is initialized
+    if (!zobristTableInitialized || zobristTable.length === 0) {
+        initializeZobristTable();
     }
 
-    if (newPiece !== null) {
+    let [h1, h2] = oldHash.split('-').map(h => parseInt(h, 16));
+
+    if (oldPiece !== null && zobristTable[r] && zobristTable[r][c]) {
+        const oldPieceType = PIECE_TYPES[oldPiece];
+        if (oldPieceType !== undefined && zobristTable[r][c][oldPieceType]) {
+            h1 ^= zobristTable[r][c][oldPieceType][0];
+            h2 ^= zobristTable[r][c][oldPieceType][1];
+        }
+    }
+
+    if (newPiece !== null && zobristTable[r] && zobristTable[r][c]) {
         const newPieceType = PIECE_TYPES[newPiece];
-        h1 ^= zobristTable[r][c][newPieceType][0];
-        h2 ^= zobristTable[r][c][newPieceType][1];
+        if (newPieceType !== undefined && zobristTable[r][c][newPieceType]) {
+            h1 ^= zobristTable[r][c][newPieceType][0];
+            h2 ^= zobristTable[r][c][newPieceType][1];
+        }
     }
 
     return `${h1.toString(16)}-${h2.toString(16)}`;
