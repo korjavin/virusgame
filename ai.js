@@ -32,6 +32,11 @@ let zobristTable = [];
 let zobristTableInitialized = false;
 
 function initializeZobristTable() {
+    // Only initialize if rows and cols are defined
+    if (typeof rows === 'undefined' || typeof cols === 'undefined') {
+        return;
+    }
+
     if (zobristTableInitialized && zobristTable.length === rows) return;
 
     zobristTable = Array(rows).fill(null).map(() =>
@@ -183,6 +188,26 @@ function hashBoard(boardState) {
         initializeZobristTable();
     }
 
+    // Fallback to simple hash if Zobrist table isn't ready
+    if (!zobristTableInitialized || zobristTable.length === 0) {
+        // Simple hash: concatenate all cell values
+        let hash = '';
+        for (let r = 0; r < boardState.length; r++) {
+            for (let c = 0; c < boardState[r].length; c++) {
+                const cell = boardState[r][c];
+                if (cell === null) {
+                    hash += '0';
+                } else if (typeof cell === 'number') {
+                    hash += cell.toString();
+                } else {
+                    hash += cell; // string like "1-base"
+                }
+                hash += ',';
+            }
+        }
+        return hash;
+    }
+
     let hash = [0, 0]; // 64-bit hash as two 32-bit integers
 
     for (let r = 0; r < rows; r++) {
@@ -276,6 +301,12 @@ function updateHash(oldHash, r, c, oldPiece, newPiece) {
     // Ensure Zobrist table is initialized
     if (!zobristTableInitialized || zobristTable.length === 0) {
         initializeZobristTable();
+    }
+
+    // If Zobrist table still isn't ready, fall back to regenerating the hash
+    if (!zobristTableInitialized || zobristTable.length === 0) {
+        // Return the old hash - incremental update not possible without Zobrist table
+        return oldHash;
     }
 
     let [h1, h2] = oldHash.split('-').map(h => parseInt(h, 16));
