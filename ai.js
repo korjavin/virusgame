@@ -22,16 +22,41 @@ let alphaBetaCutoffs = 0;
 let searchStartTime = 0;
 let searchTimeLimit = 0;
 
+// Zobrist hashing for board states
+const PIECE_TYPES = {
+    '1': 0, '2': 1, '1-fortified': 2, '2-fortified': 3,
+    '1-base': 4, '2-base': 5, 'killed': 6
+};
+const NUM_PIECE_TYPES = 7;
+let zobristTable = [];
+let zobristTableInitialized = false;
+
+function initializeZobristTable() {
+    if (zobristTableInitialized && zobristTable.length === rows) return;
+
+    zobristTable = Array(rows).fill(null).map(() =>
+        Array(cols).fill(null).map(() =>
+            Array(NUM_PIECE_TYPES).fill(null).map(() =>
+                // Use 2 32-bit numbers to simulate a 64-bit hash
+                [Math.floor(Math.random() * 0xFFFFFFFF), Math.floor(Math.random() * 0xFFFFFFFF)]
+            )
+        )
+    );
+    zobristTableInitialized = true;
+}
+
 // AI Evaluation Coefficients (tunable in UI)
 let aiCoeffs = {
-    cellValue: 10,           // Points per regular cell
-    fortifiedValue: 15,      // Extra points per fortified cell
-    mobilityValue: 5,        // Points per available move
-    aggressionValue: 1,      // Points per step closer to opponent (rows+cols-distance)
-    connectionValue: 3,      // Points per adjacent friendly cell
-    attackValue: 8,          // Points per attack opportunity
-    redundancyValue: 5,      // Points per redundant connection (cells that can be lost while maintaining base connectivity)
-    defensibilityValue: 3    // Points per move opponent needs to reach and break our critical cells
+    cellValue: 8,            // Base value for a cell
+    fortifiedValue: 25,      // Greatly incentivize capturing enemy cells
+    mobilityValue: 3,        // Mobility is useful, but not critical
+    aggressionValue: 2.5,    // Push towards the opponent's base
+    connectionValue: 2,      // Encourage building connected structures, but allow for some spreading
+    attackValue: 15,         // Highly reward opportunities to attack
+    redundancyValue: 4,      // Build resilient networks, but not at the cost of aggression
+    defensibilityValue: 2,   // A small bonus for defensive positions
+    centerControlValue: 6,   // Prioritize controlling the center
+    territoryCohesionValue: 3 // Penalize gaps more to create solid fronts
 };
 
 // ============================================================================
@@ -42,6 +67,9 @@ function getAIMove() {
     if (gameOver || currentPlayer !== 2) {
         return null;
     }
+
+    // Initialize Zobrist table on first run or if board size changes
+    initializeZobristTable();
 
     // Reset progress tracking
     const possibleMoves = getAllValidMoves(board, 2);
@@ -147,25 +175,24 @@ function hideAIProgress() {
 // ============================================================================
 
 /**
- * Create a hash key for a board state
+ * Create a Zobrist hash key for a board state
  */
 function hashBoard(boardState) {
-    // Simple hash: concatenate all cell values
-    let hash = '';
+    let hash = [0, 0]; // 64-bit hash as two 32-bit integers
+
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const cell = boardState[r][c];
-            if (cell === null) {
-                hash += '0';
-            } else if (typeof cell === 'number') {
-                hash += cell.toString();
-            } else {
-                hash += cell; // string like "1-base"
+            if (cell !== null) {
+                const pieceType = PIECE_TYPES[cell];
+                if (pieceType !== undefined) {
+                    hash[0] ^= zobristTable[r][c][pieceType][0];
+                    hash[1] ^= zobristTable[r][c][pieceType][1];
+                }
             }
-            hash += ',';
         }
     }
-    return hash;
+    return `${hash[0].toString(16)}-${hash[1].toString(16)}`;
 }
 
 /**
@@ -240,9 +267,29 @@ function scoreMove(boardState, move, player) {
     return score;
 }
 
-function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = false) {
-    // Check transposition table
-    const boardHash = hashBoard(boardState);
+function updateHash(oldHash, r, c, oldPiece, newPiece) {
+    let [h1, h2] = oldHash.split('-').map(h => parseInt(h, 16));
+
+    if (oldPiece !== null) {
+        const oldPieceType = PIECE_TYPES[oldPiece];
+        h1 ^= zobristTable[r][c][oldPieceType][0];
+        h2 ^= zobristTable[r][c][oldPieceType][1];
+    }
+
+    if (newPiece !== null) {
+        const newPieceType = PIECE_TYPES[newPiece];
+        h1 ^= zobristTable[r][c][newPieceType][0];
+        h2 ^= zobristTable[r][c][newPieceType][1];
+    }
+
+    return `${h1.toString(16)}-${h2.toString(16)}`;
+}
+
+function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = false, boardHash = null) {
+    // Calculate hash at the top level
+    if (isTopLevel) {
+        boardHash = hashBoard(boardState);
+    }
     const ttKey = `${boardHash}|${depth}|${isMaximizing}`;
 
     if (transpositionTable.has(ttKey)) {
@@ -295,10 +342,13 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
             }
 
             // Try this move
+            const oldPiece = boardState[move.row][move.col];
+            const newPiece = (oldPiece === null) ? player : `${player}-fortified`;
             const newBoard = applyMove(boardState, move.row, move.col, player);
+            const newHash = updateHash(boardHash, move.row, move.col, oldPiece, newPiece);
 
             // Recursively evaluate this position
-            const result = minimax(newBoard, depth - 1, alpha, beta, false, false);
+            const result = minimax(newBoard, depth - 1, alpha, beta, false, false, newHash);
 
             // Track best move
             if (result.score > maxScore) {
@@ -327,10 +377,13 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
 
         for (const move of possibleMoves) {
             // Try this move
+            const oldPiece = boardState[move.row][move.col];
+            const newPiece = (oldPiece === null) ? player : `${player}-fortified`;
             const newBoard = applyMove(boardState, move.row, move.col, player);
+            const newHash = updateHash(boardHash, move.row, move.col, oldPiece, newPiece);
 
             // Recursively evaluate this position
-            const result = minimax(newBoard, depth - 1, alpha, beta, true);
+            const result = minimax(newBoard, depth - 1, alpha, beta, true, false, newHash);
 
             // Track best move
             if (result.score < minScore) {
@@ -470,12 +523,60 @@ function evaluateBoard(boardState) {
     const opponentDefensibility = calculateDefensibility(boardState, 1);
     score += (aiDefensibility - opponentDefensibility) * aiCoeffs.defensibilityValue;
 
+    // 7. CENTER CONTROL
+    // Reward controlling the center of the board
+    const centerR = Math.floor(rows / 2);
+    const centerC = Math.floor(cols / 2);
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = boardState[r][c];
+            const distFromCenter = Math.abs(r - centerR) + Math.abs(c - centerC);
+            const maxDist = centerR + centerC;
+            const centerBonus = (maxDist - distFromCenter) * aiCoeffs.centerControlValue;
+
+            if (String(cell).startsWith('2')) {
+                score += centerBonus;
+            } else if (String(cell).startsWith('1')) {
+                score -= centerBonus;
+            }
+        }
+    }
+
+    // 8. TERRITORY COHESION
+    // Penalize gaps and holes in territory
+    const aiCohesion = calculateTerritoryCohesion(boardState, 2);
+    const opponentCohesion = calculateTerritoryCohesion(boardState, 1);
+    score += (aiCohesion - opponentCohesion) * aiCoeffs.territoryCohesionValue;
+
+
     return score;
 }
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/**
+ * Calculate territory cohesion - penalizes gaps and holes
+ * It works by counting empty or opponent cells adjacent to multiple friendly cells
+ */
+function calculateTerritoryCohesion(boardState, player) {
+    let cohesionPenalty = 0;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const cell = boardState[r][c];
+            if (cell === null || !String(cell).startsWith(player.toString())) {
+                const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, player);
+                if (friendlyNeighbors > 1) {
+                    // This is a gap or hole, penalize it
+                    cohesionPenalty -= friendlyNeighbors * friendlyNeighbors;
+                }
+            }
+        }
+    }
+    return cohesionPenalty;
+}
+
 
 /**
  * Calculate defensibility - minimum moves opponent needs to break our network

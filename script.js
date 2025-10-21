@@ -372,26 +372,36 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('coeff-defensibility').addEventListener('input', (e) => {
         aiCoeffs.defensibilityValue = parseFloat(e.target.value);
     });
+    document.getElementById('coeff-center-control').addEventListener('input', (e) => {
+        aiCoeffs.centerControlValue = parseFloat(e.target.value);
+    });
+    document.getElementById('coeff-cohesion').addEventListener('input', (e) => {
+        aiCoeffs.territoryCohesionValue = parseFloat(e.target.value);
+    });
 
     // Reset coefficients to defaults
     document.getElementById('reset-coeffs-button').addEventListener('click', () => {
-        aiCoeffs.cellValue = 10;
-        aiCoeffs.fortifiedValue = 15;
-        aiCoeffs.mobilityValue = 5;
-        aiCoeffs.aggressionValue = 1;
-        aiCoeffs.connectionValue = 3;
-        aiCoeffs.attackValue = 8;
-        aiCoeffs.redundancyValue = 5;
-        aiCoeffs.defensibilityValue = 3;
+        aiCoeffs.cellValue = 8;
+        aiCoeffs.fortifiedValue = 25;
+        aiCoeffs.mobilityValue = 3;
+        aiCoeffs.aggressionValue = 2.5;
+        aiCoeffs.connectionValue = 2;
+        aiCoeffs.attackValue = 15;
+        aiCoeffs.redundancyValue = 4;
+        aiCoeffs.defensibilityValue = 2;
+        aiCoeffs.centerControlValue = 6;
+        aiCoeffs.territoryCohesionValue = 3;
 
-        document.getElementById('coeff-cell').value = 10;
-        document.getElementById('coeff-fortified').value = 15;
-        document.getElementById('coeff-mobility').value = 5;
-        document.getElementById('coeff-aggression').value = 1;
-        document.getElementById('coeff-connection').value = 3;
-        document.getElementById('coeff-attack').value = 8;
-        document.getElementById('coeff-redundancy').value = 5;
-        document.getElementById('coeff-defensibility').value = 3;
+        document.getElementById('coeff-cell').value = 8;
+        document.getElementById('coeff-fortified').value = 25;
+        document.getElementById('coeff-mobility').value = 3;
+        document.getElementById('coeff-aggression').value = 2.5;
+        document.getElementById('coeff-connection').value = 2;
+        document.getElementById('coeff-attack').value = 15;
+        document.getElementById('coeff-redundancy').value = 4;
+        document.getElementById('coeff-defensibility').value = 2;
+        document.getElementById('coeff-center-control').value = 6;
+        document.getElementById('coeff-cohesion').value = 3;
     });
 
     function initGame() {
