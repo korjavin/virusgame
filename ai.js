@@ -51,17 +51,11 @@ function initializeZobristTable() {
 }
 
 // AI Evaluation Coefficients (tunable in UI)
+// Simplified to 3 main parameters for faster evaluation
 let aiCoeffs = {
-    cellValue: 8,            // Base value for a cell
-    fortifiedValue: 25,      // Greatly incentivize capturing enemy cells
-    mobilityValue: 3,        // Mobility is useful, but not critical
-    aggressionValue: 2.5,    // Push towards the opponent's base
-    connectionValue: 2,      // Encourage building connected structures, but allow for some spreading
-    attackValue: 15,         // Highly reward opportunities to attack
-    redundancyValue: 4,      // Build resilient networks, but not at the cost of aggression
-    defensibilityValue: 2,   // A small bonus for defensive positions
-    centerControlValue: 6,   // Prioritize controlling the center
-    territoryCohesionValue: 3 // Penalize gaps more to create solid fronts
+    materialWeight: 100,     // Weight for material advantage (cells and fortifications)
+    mobilityWeight: 50,      // Weight for having more available moves
+    positionWeight: 30       // Weight for strategic positioning (aggression + attacks)
 };
 
 // ============================================================================
@@ -458,321 +452,79 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
  * Evaluates the board position from AI's perspective (player 2)
  * Positive scores favor AI, negative scores favor opponent
  *
- * Evaluation criteria:
- * 1. Material: number of cells controlled
- * 2. Territory: connected territory size
- * 3. Mobility: number of available moves
- * 4. Position: strategic cell placement
- * 5. Threats: attack and defense opportunities
+ * Simplified evaluation with only 3 components for speed:
+ * 1. Material: cells and fortifications
+ * 2. Mobility: available moves
+ * 3. Strategic Position: aggression + attack opportunities
  */
 function evaluateBoard(boardState) {
-    let score = 0;
-
-    // 1. MATERIAL ADVANTAGE
-    // Count cells controlled by each player
+    // === 1. MATERIAL SCORE ===
     let aiCells = 0;
     let opponentCells = 0;
     let aiFortified = 0;
     let opponentFortified = 0;
-
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const cell = boardState[r][c];
-            if (cell === 2 || String(cell).startsWith('2')) {
-                aiCells++;
-                if (String(cell).includes('fortified')) aiFortified++;
-            } else if (cell === 1 || String(cell).startsWith('1')) {
-                opponentCells++;
-                if (String(cell).includes('fortified')) opponentFortified++;
-            }
-        }
-    }
-
-    // Material score: configurable points per cell type
-    score += (aiCells * aiCoeffs.cellValue + aiFortified * aiCoeffs.fortifiedValue) -
-             (opponentCells * aiCoeffs.cellValue + opponentFortified * aiCoeffs.fortifiedValue);
-
-    // 2. MOBILITY ADVANTAGE
-    // Count available moves for each player
-    const aiMoves = getAllValidMoves(boardState, 2).length;
-    const opponentMoves = getAllValidMoves(boardState, 1).length;
-
-    // Mobility score: configurable points per available move
-    score += (aiMoves - opponentMoves) * aiCoeffs.mobilityValue;
-
-    // 3. POSITIONAL ADVANTAGE
-    // Reward cells closer to opponent's base, penalize isolated cells
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const cell = boardState[r][c];
-
-            if (cell === 2 || String(cell).startsWith('2')) {
-                // Reward aggressive positioning (closer to opponent base)
-                const distToOpponent = Math.abs(r - player1Base.row) + Math.abs(c - player1Base.col);
-                score += (rows + cols - distToOpponent) * aiCoeffs.aggressionValue;
-
-                // Reward cells with multiple connections (less vulnerable)
-                const connections = countAdjacentCellsOnBoard(boardState, r, c, 2);
-                score += connections * aiCoeffs.connectionValue;
-
-            } else if (cell === 1 || String(cell).startsWith('1')) {
-                // Penalize opponent's aggressive positioning
-                const distToAI = Math.abs(r - player2Base.row) + Math.abs(c - player2Base.col);
-                score -= (rows + cols - distToAI) * aiCoeffs.aggressionValue;
-
-                // Penalize opponent's well-connected cells
-                const connections = countAdjacentCellsOnBoard(boardState, r, c, 1);
-                score -= connections * aiCoeffs.connectionValue;
-            }
-        }
-    }
-
-    // 4. ATTACK OPPORTUNITIES
-    // Reward positions where we can attack opponent cells
     let aiAttackOpportunities = 0;
     let opponentAttackOpportunities = 0;
+    let aiAggression = 0;
+    let opponentAggression = 0;
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const cell = boardState[r][c];
+            const cellStr = String(cell);
 
-            // Count opponent cells adjacent to our territory (attack opportunities)
-            if (cell === 1 || String(cell).startsWith('1')) {
-                if (countAdjacentCellsOnBoard(boardState, r, c, 2) > 0) {
-                    aiAttackOpportunities++;
-                }
-            }
+            if (cellStr.startsWith('2')) {
+                aiCells++;
+                if (cellStr.includes('fortified')) aiFortified++;
 
-            // Count our cells adjacent to opponent territory (vulnerable positions)
-            if (cell === 2 || String(cell).startsWith('2')) {
+                // Strategic position: distance to opponent base
+                const distToOpponent = Math.abs(r - player1Base.row) + Math.abs(c - player1Base.col);
+                aiAggression += (rows + cols - distToOpponent);
+
+                // Our cells that opponent can attack
                 if (countAdjacentCellsOnBoard(boardState, r, c, 1) > 0) {
                     opponentAttackOpportunities++;
                 }
+
+            } else if (cellStr.startsWith('1')) {
+                opponentCells++;
+                if (cellStr.includes('fortified')) opponentFortified++;
+
+                // Count attack opportunities (opponent cells we can attack)
+                if (countAdjacentCellsOnBoard(boardState, r, c, 2) > 0) {
+                    aiAttackOpportunities++;
+                }
+
+                const distToAI = Math.abs(r - player2Base.row) + Math.abs(c - player2Base.col);
+                opponentAggression += (rows + cols - distToAI);
             }
         }
     }
 
-    // Attack opportunities: configurable points each
-    score += (aiAttackOpportunities - opponentAttackOpportunities) * aiCoeffs.attackValue;
+    // Material: cells worth 10, fortifications worth 20
+    const materialScore = (aiCells * 10 + aiFortified * 20) -
+                          (opponentCells * 10 + opponentFortified * 20);
 
-    // 5. NETWORK REDUNDANCY
-    // Reward resilient networks with multiple paths to base
-    const aiRedundancy = calculateRedundancy(boardState, 2);
-    const opponentRedundancy = calculateRedundancy(boardState, 1);
-    score += (aiRedundancy - opponentRedundancy) * aiCoeffs.redundancyValue;
+    // === 2. MOBILITY SCORE ===
+    const aiMoves = getAllValidMoves(boardState, 2).length;
+    const opponentMoves = getAllValidMoves(boardState, 1).length;
+    const mobilityScore = aiMoves - opponentMoves;
 
-    // 6. DEFENSIBILITY
-    // Reward structures where critical points are far from opponent
-    // Encourages spread-out, harder-to-cut networks
-    const aiDefensibility = calculateDefensibility(boardState, 2);
-    const opponentDefensibility = calculateDefensibility(boardState, 1);
-    score += (aiDefensibility - opponentDefensibility) * aiCoeffs.defensibilityValue;
+    // === 3. STRATEGIC POSITION SCORE ===
+    const positionScore = (aiAggression - opponentAggression) +
+                          (aiAttackOpportunities - opponentAttackOpportunities) * 5;
 
-    // 7. CENTER CONTROL
-    // Reward controlling the center of the board
-    const centerR = Math.floor(rows / 2);
-    const centerC = Math.floor(cols / 2);
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const cell = boardState[r][c];
-            const distFromCenter = Math.abs(r - centerR) + Math.abs(c - centerC);
-            const maxDist = centerR + centerC;
-            const centerBonus = (maxDist - distFromCenter) * aiCoeffs.centerControlValue;
+    // Combine scores with weights
+    const totalScore = materialScore * aiCoeffs.materialWeight +
+                       mobilityScore * aiCoeffs.mobilityWeight +
+                       positionScore * aiCoeffs.positionWeight;
 
-            if (String(cell).startsWith('2')) {
-                score += centerBonus;
-            } else if (String(cell).startsWith('1')) {
-                score -= centerBonus;
-            }
-        }
-    }
-
-    // 8. TERRITORY COHESION
-    // Penalize gaps and holes in territory
-    const aiCohesion = calculateTerritoryCohesion(boardState, 2);
-    const opponentCohesion = calculateTerritoryCohesion(boardState, 1);
-    score += (aiCohesion - opponentCohesion) * aiCoeffs.territoryCohesionValue;
-
-
-    return score;
+    return totalScore;
 }
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
-
-/**
- * Calculate territory cohesion - penalizes gaps and holes
- * It works by counting empty or opponent cells adjacent to multiple friendly cells
- */
-function calculateTerritoryCohesion(boardState, player) {
-    let cohesionPenalty = 0;
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const cell = boardState[r][c];
-            if (cell === null || !String(cell).startsWith(player.toString())) {
-                const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, player);
-                if (friendlyNeighbors > 1) {
-                    // This is a gap or hole, penalize it
-                    cohesionPenalty -= friendlyNeighbors * friendlyNeighbors;
-                }
-            }
-        }
-    }
-    return cohesionPenalty;
-}
-
-
-/**
- * Calculate defensibility - minimum moves opponent needs to break our network
- * Finds critical cells (single points of failure) and measures distance from opponent's territory
- * Higher defensibility = harder for opponent to cut off our cells (more spread out, safer structure)
- */
-function calculateDefensibility(boardState, player) {
-    const opponent = player === 1 ? 2 : 1;
-    const base = player === 1 ? player1Base : player2Base;
-    let totalDefensibility = 0;
-
-    // Find all non-base cells belonging to the player
-    const playerCells = [];
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const cell = boardState[r][c];
-            const cellStr = String(cell);
-
-            if (!cellStr.startsWith(player.toString())) continue;
-            if (r === base.row && c === base.col) continue;
-
-            playerCells.push({ row: r, col: c });
-        }
-    }
-
-    // For each cell, check if it's critical (removing it disconnects some cells from base)
-    for (const testCell of playerCells) {
-        // Skip fortified cells - opponent can't easily capture them
-        const cellValue = boardState[testCell.row][testCell.col];
-        if (String(cellValue).includes('fortified')) continue;
-
-        // Create a temporary board with this cell removed
-        const tempBoard = boardState.map(row => row.slice());
-        tempBoard[testCell.row][testCell.col] = null;
-
-        // Check if any cells got disconnected
-        let isCritical = false;
-        for (const otherCell of playerCells) {
-            if (otherCell.row === testCell.row && otherCell.col === testCell.col) continue;
-
-            const cell = tempBoard[otherCell.row][otherCell.col];
-            if (!cell) continue; // Skip if already removed
-
-            // If this cell is now disconnected, the test cell is critical
-            if (!isConnectedToBaseOnBoard(tempBoard, otherCell.row, otherCell.col, player)) {
-                isCritical = true;
-                break;
-            }
-        }
-
-        // If critical, measure minimum distance from opponent's connected territory
-        if (isCritical) {
-            const distanceFromOpponent = minDistanceFromOpponentTerritory(
-                boardState,
-                testCell.row,
-                testCell.col,
-                opponent
-            );
-
-            // More distance = better defensibility
-            totalDefensibility += distanceFromOpponent;
-        }
-    }
-
-    return totalDefensibility;
-}
-
-/**
- * Find minimum Manhattan distance from a cell to opponent's connected territory
- */
-function minDistanceFromOpponentTerritory(boardState, targetRow, targetCol, opponent) {
-    let minDistance = rows + cols; // Max possible distance
-
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const cell = boardState[r][c];
-            const cellStr = String(cell);
-
-            // Check if this is opponent's cell connected to their base
-            if (cellStr.startsWith(opponent.toString())) {
-                if (isConnectedToBaseOnBoard(boardState, r, c, opponent)) {
-                    const distance = Math.abs(targetRow - r) + Math.abs(targetCol - c);
-                    minDistance = Math.min(minDistance, distance);
-                }
-            }
-        }
-    }
-
-    return minDistance;
-}
-
-/**
- * Calculate network redundancy - how many cells can be removed while maintaining base connectivity
- * Higher redundancy = more resilient network with multiple paths to base
- */
-function calculateRedundancy(boardState, player) {
-    let redundantCells = 0;
-    const base = player === 1 ? player1Base : player2Base;
-
-    // Find all non-base, non-fortified cells belonging to the player
-    const playerCells = [];
-    for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-            const cell = boardState[r][c];
-            const cellStr = String(cell);
-
-            // Skip if not player's cell, or if it's the base
-            if (!cellStr.startsWith(player.toString())) continue;
-            if (r === base.row && c === base.col) continue;
-
-            // Non-fortified cells are candidates for redundancy check
-            if (!cellStr.includes('fortified')) {
-                playerCells.push({ row: r, col: c });
-            }
-        }
-    }
-
-    // For each cell, check if removing it still keeps the network connected
-    for (const testCell of playerCells) {
-        // Create a temporary board with this cell removed
-        const tempBoard = boardState.map(row => row.slice());
-        tempBoard[testCell.row][testCell.col] = null;
-
-        // Check if all remaining cells are still connected to base
-        let allConnected = true;
-        for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-                const cell = tempBoard[r][c];
-                const cellStr = String(cell);
-
-                // Skip non-player cells and the base itself
-                if (!cellStr.startsWith(player.toString())) continue;
-                if (r === base.row && c === base.col) continue;
-
-                // Check if this cell is still connected to base
-                if (!isConnectedToBaseOnBoard(tempBoard, r, c, player)) {
-                    allConnected = false;
-                    break;
-                }
-            }
-            if (!allConnected) break;
-        }
-
-        // If removing this cell keeps network connected, it's redundant
-        if (allConnected) {
-            redundantCells++;
-        }
-    }
-
-    return redundantCells;
-}
 
 /**
  * Get all valid moves for a player on a given board state

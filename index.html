@@ -49,47 +49,20 @@
 
             <!-- AI Tuning (collapsible) -->
             <div class="sidebar-section" id="ai-tuning-section" style="display: none;">
-                <h3 style="cursor: pointer;" id="ai-tuning-header">⚙️ AI Coefficients <span style="float: right;">▼</span></h3>
+                <h3 style="cursor: pointer;" id="ai-tuning-header">⚙️ AI Strategy Weights <span style="float: right;">▼</span></h3>
                 <div id="ai-tuning-controls" style="display: none;">
+                    <p style="font-size: 11px; color: #666; margin: 5px 0;">Simplified AI with 3 core parameters for deeper search:</p>
                     <div class="settings-group">
-                        <label for="coeff-cell">Cell Value:</label>
-                        <input type="number" id="coeff-cell" value="8" min="0" max="100" step="1">
+                        <label for="coeff-material" title="Cells and fortifications">Material:</label>
+                        <input type="number" id="coeff-material" value="100" min="0" max="200" step="10">
                     </div>
                     <div class="settings-group">
-                        <label for="coeff-fortified">Fortified:</label>
-                        <input type="number" id="coeff-fortified" value="25" min="0" max="100" step="1">
+                        <label for="coeff-mobility" title="Number of available moves">Mobility:</label>
+                        <input type="number" id="coeff-mobility" value="50" min="0" max="200" step="10">
                     </div>
                     <div class="settings-group">
-                        <label for="coeff-mobility">Mobility:</label>
-                        <input type="number" id="coeff-mobility" value="3" min="0" max="50" step="1">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-aggression">Aggression:</label>
-                        <input type="number" id="coeff-aggression" value="2.5" min="0" max="10" step="0.1">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-connection">Connection:</label>
-                        <input type="number" id="coeff-connection" value="2" min="0" max="20" step="1">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-attack">Attack:</label>
-                        <input type="number" id="coeff-attack" value="15" min="0" max="50" step="1">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-redundancy">Redundancy:</label>
-                        <input type="number" id="coeff-redundancy" value="4" min="0" max="20" step="1" title="Resilient network with multiple paths to base">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-defensibility">Defensibility:</label>
-                        <input type="number" id="coeff-defensibility" value="2" min="0" max="20" step="1" title="Distance of critical cells from opponent (harder to cut)">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-center-control">Center Control:</label>
-                        <input type="number" id="coeff-center-control" value="6" min="0" max="20" step="1" title="Bonus for controlling central board cells">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-cohesion">Cohesion:</label>
-                        <input type="number" id="coeff-cohesion" value="3" min="0" max="20" step="1" title="Penalty for gaps in territory">
+                        <label for="coeff-position" title="Aggression + attack opportunities">Position:</label>
+                        <input type="number" id="coeff-position" value="30" min="0" max="200" step="10">
                     </div>
                     <button id="reset-coeffs-button" class="sidebar-button" style="font-size: 11px;">Reset to Defaults</button>
                 </div>
@@ -128,13 +101,9 @@
         <div id="commit-sha">Commit: __COMMIT_SHA__ | Multiplayer v1.6</div>
     </div>
 
-    <!-- WebAssembly support -->
-    <script src="wasm_exec.js"></script>
-
-    <script src="script.js?v=2.6"></script>
-    <script src="ai.js?v=2.6"></script>
-    <script src="ai-wasm.js?v=2.6"></script>
-    <script src="multiplayer.js?v=2.6"></script>
+    <script src="script.js?v=2.7"></script>
+    <script src="ai.js?v=2.7"></script>
+    <script src="multiplayer.js?v=2.7"></script>
     <script>
         // Theme toggle
         document.getElementById('theme-toggle').addEventListener('click', function() {
