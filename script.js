@@ -340,68 +340,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const header = document.getElementById('ai-tuning-header');
         if (controls.style.display === 'none') {
             controls.style.display = 'block';
-            header.innerHTML = '⚙️ AI Coefficients <span style="float: right;">▲</span>';
+            header.innerHTML = '⚙️ AI Strategy Weights <span style="float: right;">▲</span>';
         } else {
             controls.style.display = 'none';
-            header.innerHTML = '⚙️ AI Coefficients <span style="float: right;">▼</span>';
+            header.innerHTML = '⚙️ AI Strategy Weights <span style="float: right;">▼</span>';
         }
     });
 
-    // Wire up coefficient inputs
-    document.getElementById('coeff-cell').addEventListener('input', (e) => {
-        aiCoeffs.cellValue = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-fortified').addEventListener('input', (e) => {
-        aiCoeffs.fortifiedValue = parseFloat(e.target.value);
+    // Wire up coefficient inputs (simplified to 3 parameters)
+    document.getElementById('coeff-material').addEventListener('input', (e) => {
+        aiCoeffs.materialWeight = parseFloat(e.target.value);
     });
     document.getElementById('coeff-mobility').addEventListener('input', (e) => {
-        aiCoeffs.mobilityValue = parseFloat(e.target.value);
+        aiCoeffs.mobilityWeight = parseFloat(e.target.value);
     });
-    document.getElementById('coeff-aggression').addEventListener('input', (e) => {
-        aiCoeffs.aggressionValue = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-connection').addEventListener('input', (e) => {
-        aiCoeffs.connectionValue = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-attack').addEventListener('input', (e) => {
-        aiCoeffs.attackValue = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-redundancy').addEventListener('input', (e) => {
-        aiCoeffs.redundancyValue = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-defensibility').addEventListener('input', (e) => {
-        aiCoeffs.defensibilityValue = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-center-control').addEventListener('input', (e) => {
-        aiCoeffs.centerControlValue = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-cohesion').addEventListener('input', (e) => {
-        aiCoeffs.territoryCohesionValue = parseFloat(e.target.value);
+    document.getElementById('coeff-position').addEventListener('input', (e) => {
+        aiCoeffs.positionWeight = parseFloat(e.target.value);
     });
 
     // Reset coefficients to defaults
     document.getElementById('reset-coeffs-button').addEventListener('click', () => {
-        aiCoeffs.cellValue = 8;
-        aiCoeffs.fortifiedValue = 25;
-        aiCoeffs.mobilityValue = 3;
-        aiCoeffs.aggressionValue = 2.5;
-        aiCoeffs.connectionValue = 2;
-        aiCoeffs.attackValue = 15;
-        aiCoeffs.redundancyValue = 4;
-        aiCoeffs.defensibilityValue = 2;
-        aiCoeffs.centerControlValue = 6;
-        aiCoeffs.territoryCohesionValue = 3;
+        aiCoeffs.materialWeight = 100;
+        aiCoeffs.mobilityWeight = 50;
+        aiCoeffs.positionWeight = 30;
 
-        document.getElementById('coeff-cell').value = 8;
-        document.getElementById('coeff-fortified').value = 25;
-        document.getElementById('coeff-mobility').value = 3;
-        document.getElementById('coeff-aggression').value = 2.5;
-        document.getElementById('coeff-connection').value = 2;
-        document.getElementById('coeff-attack').value = 15;
-        document.getElementById('coeff-redundancy').value = 4;
-        document.getElementById('coeff-defensibility').value = 2;
-        document.getElementById('coeff-center-control').value = 6;
-        document.getElementById('coeff-cohesion').value = 3;
+        document.getElementById('coeff-material').value = 100;
+        document.getElementById('coeff-mobility').value = 50;
+        document.getElementById('coeff-position').value = 30;
     });
 
     function initGame() {
