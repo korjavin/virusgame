@@ -586,3 +586,360 @@ body.dark-theme #status.your-turn {
         transform: scale(1.05);
     }
 }
+
+/* Help button */
+.help-button {
+    position: absolute;
+    top: 10px;
+    right: 50px;
+    cursor: pointer;
+    font-size: 22px;
+    user-select: none;
+    transition: transform 0.2s;
+    background-color: #3498db;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.help-button:hover {
+    transform: scale(1.15);
+    background-color: #217dbb;
+}
+
+body.dark-theme .help-button {
+    background-color: #444;
+}
+
+body.dark-theme .help-button:hover {
+    background-color: #555;
+}
+
+.help-icon {
+    display: block;
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.6);
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background-color: white;
+    margin: 5% auto;
+    padding: 30px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 700px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    animation: slideDown 0.4s;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+body.dark-theme .modal-content {
+    background-color: #2a2a2a;
+    color: #f0f0f0;
+}
+
+.modal-close {
+    color: #888;
+    float: right;
+    font-size: 32px;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.modal-close:hover,
+.modal-close:focus {
+    color: #333;
+}
+
+body.dark-theme .modal-close:hover,
+body.dark-theme .modal-close:focus {
+    color: #fff;
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 25px;
+    color: #2c3e50;
+    font-size: 28px;
+    border-bottom: 3px solid #3498db;
+    padding-bottom: 10px;
+}
+
+body.dark-theme .modal-content h2 {
+    color: #f0f0f0;
+    border-bottom-color: #5dade2;
+}
+
+.modal-section {
+    margin-bottom: 25px;
+}
+
+.modal-section h3 {
+    color: #34495e;
+    font-size: 20px;
+    margin-bottom: 12px;
+    margin-top: 0;
+}
+
+body.dark-theme .modal-section h3 {
+    color: #ddd;
+}
+
+.modal-section p {
+    line-height: 1.6;
+    color: #555;
+    margin: 0 0 10px 0;
+}
+
+body.dark-theme .modal-section p {
+    color: #ccc;
+}
+
+.modal-section ul {
+    line-height: 1.8;
+    color: #555;
+    margin: 10px 0;
+    padding-left: 25px;
+}
+
+body.dark-theme .modal-section ul {
+    color: #ccc;
+}
+
+.modal-section li {
+    margin-bottom: 8px;
+}
+
+.modal-actions {
+    margin-top: 30px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.primary-btn {
+    background-color: #27ae60;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.primary-btn:hover {
+    background-color: #229954;
+}
+
+body.dark-theme .primary-btn {
+    background-color: #229954;
+}
+
+body.dark-theme .primary-btn:hover {
+    background-color: #1e8449;
+}
+
+.secondary-btn {
+    background-color: #95a5a6;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.secondary-btn:hover {
+    background-color: #7f8c8d;
+}
+
+.secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+body.dark-theme .secondary-btn {
+    background-color: #555;
+}
+
+body.dark-theme .secondary-btn:hover {
+    background-color: #666;
+}
+
+/* Tutorial specific styles */
+.tutorial-content {
+    max-width: 600px;
+}
+
+#tutorial-step-content {
+    min-height: 150px;
+    margin-bottom: 25px;
+}
+
+#tutorial-step-content h3 {
+    color: #2c3e50;
+    font-size: 22px;
+    margin-bottom: 15px;
+}
+
+body.dark-theme #tutorial-step-content h3 {
+    color: #f0f0f0;
+}
+
+#tutorial-step-content p {
+    line-height: 1.7;
+    color: #555;
+    font-size: 16px;
+}
+
+body.dark-theme #tutorial-step-content p {
+    color: #ccc;
+}
+
+.tutorial-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-top: 20px;
+    border-top: 2px solid #ddd;
+}
+
+body.dark-theme .tutorial-controls {
+    border-top-color: #444;
+}
+
+#tutorial-progress {
+    font-weight: bold;
+    color: #3498db;
+    font-size: 14px;
+}
+
+body.dark-theme #tutorial-progress {
+    color: #5dade2;
+}
+
+/* Tutorial overlay and highlight */
+.tutorial-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 1500;
+    pointer-events: none;
+}
+
+.tutorial-highlight {
+    display: none;
+    position: absolute;
+    border: 4px solid #f39c12;
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
+    z-index: 1600;
+    pointer-events: none;
+    transition: all 0.3s ease;
+    animation: highlightPulse 2s infinite;
+}
+
+@keyframes highlightPulse {
+    0%, 100% {
+        border-color: #f39c12;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 20px #f39c12;
+    }
+    50% {
+        border-color: #f1c40f;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 30px #f1c40f;
+    }
+}
+
+/* Mobile responsiveness for modals */
+@media (max-width: 768px) {
+    .modal-content {
+        margin: 10px;
+        padding: 20px;
+        width: calc(100% - 20px);
+        max-height: 90vh;
+    }
+
+    .modal-content h2 {
+        font-size: 22px;
+    }
+
+    .modal-section h3 {
+        font-size: 18px;
+    }
+
+    .modal-section p,
+    .modal-section ul {
+        font-size: 14px;
+    }
+
+    .modal-actions {
+        flex-direction: column;
+    }
+
+    .primary-btn,
+    .secondary-btn {
+        width: 100%;
+        padding: 10px;
+    }
+
+    .tutorial-controls {
+        flex-direction: column;
+    }
+
+    .tutorial-controls button {
+        width: 100%;
+    }
+
+    .help-button {
+        right: 45px;
+        width: 28px;
+        height: 28px;
+        font-size: 18px;
+    }
+}

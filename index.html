@@ -16,6 +16,11 @@
                 <span class="theme-icon">🌙</span>
             </div>
 
+            <!-- Help button -->
+            <div id="help-button" class="help-button" title="Game Rules & Tutorial">
+                <span class="help-icon">❓</span>
+            </div>
+
             <div id="connection-status" class="disconnected">Connecting...</div>
             <div id="welcome-message">Connecting...</div>
 
@@ -101,6 +106,81 @@
         </div>
     </div>
 
+    <!-- Rules Modal -->
+    <div id="rules-modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" id="rules-close">&times;</span>
+            <h2>🎮 Game Rules & How to Play</h2>
+
+            <div class="modal-section">
+                <h3>🎯 Goal</h3>
+                <p>Eliminate all of your opponent's cells by spreading your virus across the board while protecting your base!</p>
+            </div>
+
+            <div class="modal-section">
+                <h3>📜 Basic Rules</h3>
+                <ul>
+                    <li><strong>Each turn:</strong> You get 3 moves</li>
+                    <li><strong>Valid moves:</strong> Place your cell on an empty space or attack opponent's cell (must be adjacent to your territory and connected to your base)</li>
+                    <li><strong>Attacking:</strong> When you attack an opponent's cell, it becomes <strong>fortified</strong> (protected) and cannot be attacked again</li>
+                    <li><strong>Winning:</strong> The first player to eliminate all opponent's cells wins!</li>
+                </ul>
+            </div>
+
+            <div class="modal-section">
+                <h3>🏰 Cell Types</h3>
+                <ul>
+                    <li><strong>Base (green background):</strong> Your starting cell - cannot be attacked and must always stay connected to your territory</li>
+                    <li><strong>Regular cells (X or O):</strong> Your normal territory cells</li>
+                    <li><strong>Fortified cells (solid color):</strong> Protected cells that cannot be attacked (created when you attack opponent's cell)</li>
+                    <li><strong>Killed cells (gray):</strong> Neutral/dead cells that can be claimed by either player</li>
+                </ul>
+            </div>
+
+            <div class="modal-section">
+                <h3>🤖 Playing with AI</h3>
+                <ul>
+                    <li>Check "vs AI" in Game Settings to play against the computer</li>
+                    <li>Adjust AI Depth (1-6) to control difficulty</li>
+                    <li>Higher depth = smarter AI but slower moves</li>
+                    <li>Fine-tune AI strategy with AI Strategy Weights (for advanced players)</li>
+                </ul>
+            </div>
+
+            <div class="modal-section">
+                <h3>👥 Multiplayer</h3>
+                <ul>
+                    <li><strong>Challenge:</strong> Click "Challenge" next to an online player's name</li>
+                    <li><strong>Accept:</strong> When challenged, a notification will appear - click "Accept" to start</li>
+                    <li><strong>Your turn:</strong> The status will glow green when it's your turn</li>
+                    <li><strong>Rematch:</strong> After the game ends, click "Request Rematch" to play again</li>
+                </ul>
+            </div>
+
+            <div class="modal-actions">
+                <button id="start-tutorial-btn" class="primary-btn">📚 Start Interactive Tutorial</button>
+                <button id="close-rules-btn" class="secondary-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tutorial Modal -->
+    <div id="tutorial-modal" class="modal">
+        <div class="modal-content tutorial-content">
+            <div id="tutorial-step-content"></div>
+            <div class="tutorial-controls">
+                <button id="tutorial-prev-btn" class="secondary-btn">← Previous</button>
+                <div id="tutorial-progress"></div>
+                <button id="tutorial-next-btn" class="primary-btn">Next →</button>
+                <button id="tutorial-skip-btn" class="secondary-btn">Skip Tutorial</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tutorial Overlay (for highlighting elements) -->
+    <div id="tutorial-overlay" class="tutorial-overlay"></div>
+    <div id="tutorial-highlight" class="tutorial-highlight"></div>
+
     <!-- Notifications container -->
     <div id="notifications"></div>
 
@@ -112,12 +192,46 @@
     <script src="script.js?v=2.7"></script>
     <script src="ai.js?v=2.7"></script>
     <script src="multiplayer.js?v=2.7"></script>
+    <script src="tutorial.js?v=2.7"></script>
     <script>
         // Theme toggle
         document.getElementById('theme-toggle').addEventListener('click', function() {
             document.body.classList.toggle('dark-theme');
             const icon = this.querySelector('.theme-icon');
             icon.textContent = document.body.classList.contains('dark-theme') ? '☀️' : '🌙';
+        });
+
+        // Help button - open rules modal
+        document.getElementById('help-button').addEventListener('click', function() {
+            document.getElementById('rules-modal').style.display = 'block';
+        });
+
+        // Close rules modal
+        document.getElementById('rules-close').addEventListener('click', function() {
+            document.getElementById('rules-modal').style.display = 'none';
+        });
+
+        document.getElementById('close-rules-btn').addEventListener('click', function() {
+            document.getElementById('rules-modal').style.display = 'none';
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            const rulesModal = document.getElementById('rules-modal');
+            const tutorialModal = document.getElementById('tutorial-modal');
+            if (event.target === rulesModal) {
+                rulesModal.style.display = 'none';
+            }
+            if (event.target === tutorialModal) {
+                tutorialModal.style.display = 'none';
+                if (typeof Tutorial !== 'undefined') Tutorial.end();
+            }
+        });
+
+        // Start tutorial button
+        document.getElementById('start-tutorial-btn').addEventListener('click', function() {
+            document.getElementById('rules-modal').style.display = 'none';
+            if (typeof Tutorial !== 'undefined') Tutorial.start();
         });
 
         // Initialize multiplayer on page load
