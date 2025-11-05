@@ -51,12 +51,13 @@ function initializeZobristTable() {
 }
 
 // AI Evaluation Coefficients (tunable in UI)
-// Optimized to 4 key parameters for balanced evaluation
+// Optimized to 5 key parameters for balanced evaluation
 let aiCoeffs = {
     materialWeight: 100,     // Weight for material advantage (cells and fortifications)
     mobilityWeight: 50,      // Weight for having more available moves
     positionWeight: 30,      // Weight for strategic positioning (aggression + attacks)
-    redundancyWeight: 40     // Weight for network resilience (cells with multiple connections)
+    redundancyWeight: 40,    // Weight for network resilience (cells with multiple connections)
+    cohesionWeight: 25       // Weight for territory cohesion (penalize gaps/holes)
 };
 
 // ============================================================================
@@ -453,11 +454,12 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
  * Evaluates the board position from AI's perspective (player 2)
  * Positive scores favor AI, negative scores favor opponent
  *
- * Optimized evaluation with 4 components:
+ * Optimized evaluation with 5 components (all computed in single board pass):
  * 1. Material: cells and fortifications
  * 2. Mobility: available moves
  * 3. Strategic Position: aggression + attack opportunities
- * 4. Network Redundancy: resilient structure (fast heuristic)
+ * 4. Network Redundancy: resilient structure (cells with 2+ connections)
+ * 5. Territory Cohesion: penalize gaps/holes in territory
  */
 function evaluateBoard(boardState) {
     // === SINGLE PASS THROUGH BOARD ===
@@ -471,6 +473,8 @@ function evaluateBoard(boardState) {
     let opponentAggression = 0;
     let aiRedundantCells = 0;  // Cells with 2+ friendly neighbors (resilient)
     let opponentRedundantCells = 0;
+    let aiCohesionPenalty = 0;  // Gaps/holes in territory
+    let opponentCohesionPenalty = 0;
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -486,7 +490,8 @@ function evaluateBoard(boardState) {
                 aiAggression += (rows + cols - distToOpponent);
 
                 // Our cells that opponent can attack
-                if (countAdjacentCellsOnBoard(boardState, r, c, 1) > 0) {
+                const opponentNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
+                if (opponentNeighbors > 0) {
                     opponentAttackOpportunities++;
                 }
 
@@ -501,7 +506,8 @@ function evaluateBoard(boardState) {
                 if (cellStr.includes('fortified')) opponentFortified++;
 
                 // Count attack opportunities (opponent cells we can attack)
-                if (countAdjacentCellsOnBoard(boardState, r, c, 2) > 0) {
+                const aiNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
+                if (aiNeighbors > 0) {
                     aiAttackOpportunities++;
                 }
 
@@ -512,6 +518,21 @@ function evaluateBoard(boardState) {
                 const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
                 if (friendlyNeighbors >= 2) {
                     opponentRedundantCells++;
+                }
+
+            } else {
+                // Empty or neutral cell - check for gaps/holes
+                const aiFriendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
+                const opponentFriendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
+
+                // Gap in AI territory (empty cell surrounded by AI cells)
+                if (aiFriendlyNeighbors >= 2) {
+                    aiCohesionPenalty += aiFriendlyNeighbors;
+                }
+
+                // Gap in opponent territory
+                if (opponentFriendlyNeighbors >= 2) {
+                    opponentCohesionPenalty += opponentFriendlyNeighbors;
                 }
             }
         }
@@ -530,15 +551,20 @@ function evaluateBoard(boardState) {
     const positionScore = (aiAggression - opponentAggression) +
                           (aiAttackOpportunities - opponentAttackOpportunities) * 5;
 
-    // === 4. REDUNDANCY SCORE (FAST) ===
+    // === 4. REDUNDANCY SCORE ===
     // Cells with 2+ neighbors are harder to cut off
     const redundancyScore = aiRedundantCells - opponentRedundantCells;
+
+    // === 5. COHESION SCORE ===
+    // Penalize gaps/holes in territory (fewer gaps = better)
+    const cohesionScore = opponentCohesionPenalty - aiCohesionPenalty;
 
     // Combine scores with weights
     const totalScore = materialScore * aiCoeffs.materialWeight +
                        mobilityScore * aiCoeffs.mobilityWeight +
                        positionScore * aiCoeffs.positionWeight +
-                       redundancyScore * aiCoeffs.redundancyWeight;
+                       redundancyScore * aiCoeffs.redundancyWeight +
+                       cohesionScore * aiCoeffs.cohesionWeight;
 
     return totalScore;
 }
