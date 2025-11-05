@@ -51,7 +51,7 @@
             <div class="sidebar-section" id="ai-tuning-section" style="display: none;">
                 <h3 style="cursor: pointer;" id="ai-tuning-header">⚙️ AI Strategy Weights <span style="float: right;">▼</span></h3>
                 <div id="ai-tuning-controls" style="display: none;">
-                    <p style="font-size: 11px; color: #666; margin: 5px 0;">Optimized AI with 4 balanced parameters:</p>
+                    <p style="font-size: 11px; color: #666; margin: 5px 0;">Optimized AI with 6 balanced parameters:</p>
                     <div class="settings-group">
                         <label for="coeff-material" title="Cells and fortifications">Material:</label>
                         <input type="number" id="coeff-material" value="100" min="0" max="200" step="10">
@@ -67,6 +67,14 @@
                     <div class="settings-group">
                         <label for="coeff-redundancy" title="Network resilience (cells with 2+ connections)">Redundancy:</label>
                         <input type="number" id="coeff-redundancy" value="40" min="0" max="200" step="10">
+                    </div>
+                    <div class="settings-group">
+                        <label for="coeff-cohesion" title="Territory cohesion (penalize gaps/holes)">Cohesion:</label>
+                        <input type="number" id="coeff-cohesion" value="25" min="0" max="200" step="10">
+                    </div>
+                    <div class="settings-group">
+                        <label for="coeff-defensibility" title="Vulnerable cells (1 connection) far from enemy">Defensibility:</label>
+                        <input type="number" id="coeff-defensibility" value="20" min="0" max="200" step="10">
                     </div>
                     <button id="reset-coeffs-button" class="sidebar-button" style="font-size: 11px;">Reset to Defaults</button>
                 </div>

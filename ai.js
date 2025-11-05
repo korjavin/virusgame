@@ -51,12 +51,14 @@ function initializeZobristTable() {
 }
 
 // AI Evaluation Coefficients (tunable in UI)
-// Optimized to 4 key parameters for balanced evaluation
+// Optimized to 6 key parameters for balanced evaluation
 let aiCoeffs = {
-    materialWeight: 100,     // Weight for material advantage (cells and fortifications)
-    mobilityWeight: 50,      // Weight for having more available moves
-    positionWeight: 30,      // Weight for strategic positioning (aggression + attacks)
-    redundancyWeight: 40     // Weight for network resilience (cells with multiple connections)
+    materialWeight: 100,        // Weight for material advantage (cells and fortifications)
+    mobilityWeight: 50,         // Weight for having more available moves
+    positionWeight: 30,         // Weight for strategic positioning (aggression + attacks)
+    redundancyWeight: 40,       // Weight for network resilience (cells with multiple connections)
+    cohesionWeight: 25,         // Weight for territory cohesion (penalize gaps/holes)
+    defensibilityWeight: 20     // Weight for defensibility (vulnerable cells far from enemy)
 };
 
 // ============================================================================
@@ -453,14 +455,16 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
  * Evaluates the board position from AI's perspective (player 2)
  * Positive scores favor AI, negative scores favor opponent
  *
- * Optimized evaluation with 4 components:
+ * Optimized evaluation with 6 components (all computed efficiently):
  * 1. Material: cells and fortifications
  * 2. Mobility: available moves
  * 3. Strategic Position: aggression + attack opportunities
- * 4. Network Redundancy: resilient structure (fast heuristic)
+ * 4. Network Redundancy: resilient structure (cells with 2+ connections)
+ * 5. Territory Cohesion: penalize gaps/holes in territory
+ * 6. Defensibility: vulnerable cells (1 connection) far from enemy
  */
 function evaluateBoard(boardState) {
-    // === SINGLE PASS THROUGH BOARD ===
+    // === FIRST PASS: Count cells and analyze structure ===
     let aiCells = 0;
     let opponentCells = 0;
     let aiFortified = 0;
@@ -471,6 +475,12 @@ function evaluateBoard(boardState) {
     let opponentAggression = 0;
     let aiRedundantCells = 0;  // Cells with 2+ friendly neighbors (resilient)
     let opponentRedundantCells = 0;
+    let aiCohesionPenalty = 0;  // Gaps/holes in territory
+    let opponentCohesionPenalty = 0;
+
+    // Store vulnerable cells for defensibility calculation
+    const aiVulnerableCells = [];
+    const opponentVulnerableCells = [];
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -486,14 +496,18 @@ function evaluateBoard(boardState) {
                 aiAggression += (rows + cols - distToOpponent);
 
                 // Our cells that opponent can attack
-                if (countAdjacentCellsOnBoard(boardState, r, c, 1) > 0) {
+                const opponentNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
+                if (opponentNeighbors > 0) {
                     opponentAttackOpportunities++;
                 }
 
-                // Fast redundancy: count cells with 2+ friendly neighbors
+                // Count friendly neighbors for redundancy and defensibility
                 const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
                 if (friendlyNeighbors >= 2) {
                     aiRedundantCells++;
+                } else if (friendlyNeighbors === 1 && !cellStr.includes('fortified') && !(r === player2Base.row && c === player2Base.col)) {
+                    // Vulnerable cell: only 1 connection (critical point)
+                    aiVulnerableCells.push({r, c});
                 }
 
             } else if (cellStr.startsWith('1')) {
@@ -501,20 +515,72 @@ function evaluateBoard(boardState) {
                 if (cellStr.includes('fortified')) opponentFortified++;
 
                 // Count attack opportunities (opponent cells we can attack)
-                if (countAdjacentCellsOnBoard(boardState, r, c, 2) > 0) {
+                const aiNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
+                if (aiNeighbors > 0) {
                     aiAttackOpportunities++;
                 }
 
                 const distToAI = Math.abs(r - player2Base.row) + Math.abs(c - player2Base.col);
                 opponentAggression += (rows + cols - distToAI);
 
-                // Opponent redundancy
+                // Opponent redundancy and vulnerability
                 const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
                 if (friendlyNeighbors >= 2) {
                     opponentRedundantCells++;
+                } else if (friendlyNeighbors === 1 && !cellStr.includes('fortified') && !(r === player1Base.row && c === player1Base.col)) {
+                    opponentVulnerableCells.push({r, c});
+                }
+
+            } else {
+                // Empty or neutral cell - check for gaps/holes
+                const aiFriendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
+                const opponentFriendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
+
+                // Gap in AI territory (empty cell surrounded by AI cells)
+                if (aiFriendlyNeighbors >= 2) {
+                    aiCohesionPenalty += aiFriendlyNeighbors;
+                }
+
+                // Gap in opponent territory
+                if (opponentFriendlyNeighbors >= 2) {
+                    opponentCohesionPenalty += opponentFriendlyNeighbors;
                 }
             }
         }
+    }
+
+    // === SECOND PASS: Calculate defensibility (distance of vulnerable cells from enemy) ===
+    let aiDefensibility = 0;
+    let opponentDefensibility = 0;
+
+    // For each vulnerable AI cell, find minimum distance to opponent cells
+    for (const {r, c} of aiVulnerableCells) {
+        let minDist = rows + cols; // Max possible distance
+        for (let er = 0; er < rows; er++) {
+            for (let ec = 0; ec < cols; ec++) {
+                const enemyCell = boardState[er][ec];
+                if (enemyCell && String(enemyCell).startsWith('1')) {
+                    const dist = Math.abs(r - er) + Math.abs(c - ec);
+                    minDist = Math.min(minDist, dist);
+                }
+            }
+        }
+        aiDefensibility += minDist;
+    }
+
+    // For each vulnerable opponent cell, find minimum distance to AI cells
+    for (const {r, c} of opponentVulnerableCells) {
+        let minDist = rows + cols;
+        for (let er = 0; er < rows; er++) {
+            for (let ec = 0; ec < cols; ec++) {
+                const enemyCell = boardState[er][ec];
+                if (enemyCell && String(enemyCell).startsWith('2')) {
+                    const dist = Math.abs(r - er) + Math.abs(c - ec);
+                    minDist = Math.min(minDist, dist);
+                }
+            }
+        }
+        opponentDefensibility += minDist;
     }
 
     // === 1. MATERIAL SCORE ===
@@ -530,15 +596,25 @@ function evaluateBoard(boardState) {
     const positionScore = (aiAggression - opponentAggression) +
                           (aiAttackOpportunities - opponentAttackOpportunities) * 5;
 
-    // === 4. REDUNDANCY SCORE (FAST) ===
+    // === 4. REDUNDANCY SCORE ===
     // Cells with 2+ neighbors are harder to cut off
     const redundancyScore = aiRedundantCells - opponentRedundantCells;
+
+    // === 5. COHESION SCORE ===
+    // Penalize gaps/holes in territory (fewer gaps = better)
+    const cohesionScore = opponentCohesionPenalty - aiCohesionPenalty;
+
+    // === 6. DEFENSIBILITY SCORE ===
+    // Vulnerable cells far from enemy = harder to attack critical points
+    const defensibilityScore = aiDefensibility - opponentDefensibility;
 
     // Combine scores with weights
     const totalScore = materialScore * aiCoeffs.materialWeight +
                        mobilityScore * aiCoeffs.mobilityWeight +
                        positionScore * aiCoeffs.positionWeight +
-                       redundancyScore * aiCoeffs.redundancyWeight;
+                       redundancyScore * aiCoeffs.redundancyWeight +
+                       cohesionScore * aiCoeffs.cohesionWeight +
+                       defensibilityScore * aiCoeffs.defensibilityWeight;
 
     return totalScore;
 }
