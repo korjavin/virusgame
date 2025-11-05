@@ -51,11 +51,12 @@ function initializeZobristTable() {
 }
 
 // AI Evaluation Coefficients (tunable in UI)
-// Simplified to 3 main parameters for faster evaluation
+// Optimized to 4 key parameters for balanced evaluation
 let aiCoeffs = {
     materialWeight: 100,     // Weight for material advantage (cells and fortifications)
     mobilityWeight: 50,      // Weight for having more available moves
-    positionWeight: 30       // Weight for strategic positioning (aggression + attacks)
+    positionWeight: 30,      // Weight for strategic positioning (aggression + attacks)
+    redundancyWeight: 40     // Weight for network resilience (cells with multiple connections)
 };
 
 // ============================================================================
@@ -452,13 +453,14 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
  * Evaluates the board position from AI's perspective (player 2)
  * Positive scores favor AI, negative scores favor opponent
  *
- * Simplified evaluation with only 3 components for speed:
+ * Optimized evaluation with 4 components:
  * 1. Material: cells and fortifications
  * 2. Mobility: available moves
  * 3. Strategic Position: aggression + attack opportunities
+ * 4. Network Redundancy: resilient structure (fast heuristic)
  */
 function evaluateBoard(boardState) {
-    // === 1. MATERIAL SCORE ===
+    // === SINGLE PASS THROUGH BOARD ===
     let aiCells = 0;
     let opponentCells = 0;
     let aiFortified = 0;
@@ -467,6 +469,8 @@ function evaluateBoard(boardState) {
     let opponentAttackOpportunities = 0;
     let aiAggression = 0;
     let opponentAggression = 0;
+    let aiRedundantCells = 0;  // Cells with 2+ friendly neighbors (resilient)
+    let opponentRedundantCells = 0;
 
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -486,6 +490,12 @@ function evaluateBoard(boardState) {
                     opponentAttackOpportunities++;
                 }
 
+                // Fast redundancy: count cells with 2+ friendly neighbors
+                const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
+                if (friendlyNeighbors >= 2) {
+                    aiRedundantCells++;
+                }
+
             } else if (cellStr.startsWith('1')) {
                 opponentCells++;
                 if (cellStr.includes('fortified')) opponentFortified++;
@@ -497,11 +507,17 @@ function evaluateBoard(boardState) {
 
                 const distToAI = Math.abs(r - player2Base.row) + Math.abs(c - player2Base.col);
                 opponentAggression += (rows + cols - distToAI);
+
+                // Opponent redundancy
+                const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
+                if (friendlyNeighbors >= 2) {
+                    opponentRedundantCells++;
+                }
             }
         }
     }
 
-    // Material: cells worth 10, fortifications worth 20
+    // === 1. MATERIAL SCORE ===
     const materialScore = (aiCells * 10 + aiFortified * 20) -
                           (opponentCells * 10 + opponentFortified * 20);
 
@@ -514,10 +530,15 @@ function evaluateBoard(boardState) {
     const positionScore = (aiAggression - opponentAggression) +
                           (aiAttackOpportunities - opponentAttackOpportunities) * 5;
 
+    // === 4. REDUNDANCY SCORE (FAST) ===
+    // Cells with 2+ neighbors are harder to cut off
+    const redundancyScore = aiRedundantCells - opponentRedundantCells;
+
     // Combine scores with weights
     const totalScore = materialScore * aiCoeffs.materialWeight +
                        mobilityScore * aiCoeffs.mobilityWeight +
-                       positionScore * aiCoeffs.positionWeight;
+                       positionScore * aiCoeffs.positionWeight +
+                       redundancyScore * aiCoeffs.redundancyWeight;
 
     return totalScore;
 }

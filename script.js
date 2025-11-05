@@ -347,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Wire up coefficient inputs (simplified to 3 parameters)
+    // Wire up coefficient inputs (optimized to 4 parameters)
     document.getElementById('coeff-material').addEventListener('input', (e) => {
         aiCoeffs.materialWeight = parseFloat(e.target.value);
     });
@@ -357,16 +357,21 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('coeff-position').addEventListener('input', (e) => {
         aiCoeffs.positionWeight = parseFloat(e.target.value);
     });
+    document.getElementById('coeff-redundancy').addEventListener('input', (e) => {
+        aiCoeffs.redundancyWeight = parseFloat(e.target.value);
+    });
 
     // Reset coefficients to defaults
     document.getElementById('reset-coeffs-button').addEventListener('click', () => {
         aiCoeffs.materialWeight = 100;
         aiCoeffs.mobilityWeight = 50;
         aiCoeffs.positionWeight = 30;
+        aiCoeffs.redundancyWeight = 40;
 
         document.getElementById('coeff-material').value = 100;
         document.getElementById('coeff-mobility').value = 50;
         document.getElementById('coeff-position').value = 30;
+        document.getElementById('coeff-redundancy').value = 40;
     });
 
     function initGame() {
