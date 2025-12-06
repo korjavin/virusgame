@@ -72,58 +72,116 @@ func (h *Hub) pickBestMove(game *Game, moves []BotMove, player int) BotMove {
 	return best
 }
 
-// scoreBotMove scores a move based on simple heuristics
+// scoreBotMove scores a move based on heuristics matching ai.js scoreMove function
 func (h *Hub) scoreBotMove(game *Game, move BotMove, player int) float64 {
 	cellValue := game.Board[move.Row][move.Col]
 	cellStr := fmt.Sprintf("%v", cellValue)
-	
-	opponent := h.getOpponent(player, game)
 	score := 0.0
 
-	// 1. Attacking opponent cells is highly valued
-	if cellValue != nil && len(cellStr) > 0 && cellStr[0] == byte('0'+opponent) {
-		score += 100.0
-	}
-
-	// 2. Count neighbors
-	friendlyNeighbors := 0
-	opponentNeighbors := 0
-	emptyNeighbors := 0
-
-	for i := -1; i <= 1; i++ {
-		for j := -1; j <= 1; j++ {
-			if i == 0 && j == 0 {
-				continue
+	// 1. HIGHEST PRIORITY: Capturing opponent cells (fortifying)
+	// Match ai.js lines 242-249: 1000 points for attacking, +500 if fortified
+	if cellValue != nil && len(cellStr) > 0 {
+		// Check if this is an opponent cell
+		isOpponentCell := false
+		for p := 1; p <= 4; p++ {
+			if p != player && game.Players[p-1] != nil && cellStr[0] == byte('0'+p) {
+				isOpponentCell = true
+				break
 			}
-			nr := move.Row + i
-			nc := move.Col + j
-			if nr >= 0 && nr < game.Rows && nc >= 0 && nc < game.Cols {
-				neighbor := game.Board[nr][nc]
-				neighborStr := fmt.Sprintf("%v", neighbor)
-				if neighbor != nil && len(neighborStr) > 0 {
-					if neighborStr[0] == byte('0'+player) {
-						friendlyNeighbors++
-					} else if neighborStr[0] == byte('0'+opponent) {
-						opponentNeighbors++
-					}
-				} else {
-					emptyNeighbors++
-				}
+		}
+
+		if isOpponentCell {
+			score += 1000.0
+			// Extra bonus if opponent cell is fortified (breaks their structure)
+			if len(cellStr) > 2 && cellStr[len(cellStr)-9:] == "fortified" {
+				score += 500.0
 			}
 		}
 	}
 
-	// Prefer moves with many friendly neighbors (cohesion)
-	score += float64(friendlyNeighbors * 5)
-	// Prefer moves adjacent to opponents (attack opportunities)
-	score += float64(opponentNeighbors * 3)
-	// Prefer moves with expansion potential
-	score += float64(emptyNeighbors * 2)
+	// 2. Count friendly and opponent neighbors for positional evaluation
+	// Match ai.js lines 252-270
+	friendlyNeighbors := 0
+	opponentNeighbors := 0
+	emptyNeighbors := 0
 
-	// 3. Add some randomness to make bot less predictable
-	score += rand.Float64() * 10
+	// Only check 4 cardinal directions (not diagonals) to match ai.js
+	directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+	for _, dir := range directions {
+		nr := move.Row + dir[0]
+		nc := move.Col + dir[1]
+		if nr >= 0 && nr < game.Rows && nc >= 0 && nc < game.Cols {
+			neighbor := game.Board[nr][nc]
+			neighborStr := fmt.Sprintf("%v", neighbor)
+			if neighbor != nil && len(neighborStr) > 0 {
+				if neighborStr[0] == byte('0'+player) {
+					friendlyNeighbors++
+				} else {
+					// Any non-friendly piece is an opponent
+					opponentNeighbors++
+				}
+			} else {
+				emptyNeighbors++
+			}
+		}
+	}
+
+	// 3. Reward moves with multiple friendly connections (stable expansion)
+	// Match ai.js line 273: friendlyNeighbors * 50
+	score += float64(friendlyNeighbors * 50)
+
+	// 4. Reward moves that threaten opponent cells (attack opportunities)
+	// Match ai.js line 276: opponentNeighbors * 30
+	score += float64(opponentNeighbors * 30)
+
+	// 5. Reward expansion opportunities (empty neighbors for future growth)
+	// Match ai.js line 279: emptyNeighbors * 10
+	score += float64(emptyNeighbors * 10)
+
+	// 6. Distance to opponent base (aggression)
+	// Match ai.js lines 281-284: closer to opponent base is better
+	opponentBase := h.getClosestOpponentBase(game, player, move.Row, move.Col)
+	if opponentBase != nil {
+		distToOpponentBase := abs(move.Row-opponentBase.Row) + abs(move.Col-opponentBase.Col)
+		score -= float64(distToOpponentBase * 3)
+	}
+
+	// 7. Distance to own base (don't overextend)
+	// Match ai.js lines 286-291: penalize if too far from own base
+	ownBase := game.PlayerBases[player-1]
+	distToOwnBase := abs(move.Row-ownBase.Row) + abs(move.Col-ownBase.Col)
+	if distToOwnBase > 8 {
+		score -= float64((distToOwnBase - 8) * 5) // Penalize overextension
+	}
 
 	return score
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// getClosestOpponentBase finds the closest active opponent's base
+func (h *Hub) getClosestOpponentBase(game *Game, player int, fromRow, fromCol int) *CellPos {
+	var closestBase *CellPos
+	minDist := 999999
+
+	for i := 1; i <= 4; i++ {
+		if i != player && game.Players[i-1] != nil {
+			if h.countPlayerPieces(game, i) > 0 {
+				base := game.PlayerBases[i-1]
+				dist := abs(fromRow-base.Row) + abs(fromCol-base.Col)
+				if dist < minDist {
+					minDist = dist
+					closestBase = &base
+				}
+			}
+		}
+	}
+	return closestBase
 }
 
 // getOpponent returns an opponent player number for the given player

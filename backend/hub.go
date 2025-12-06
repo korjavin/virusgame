@@ -1519,6 +1519,7 @@ func (h *Hub) checkMultiplayerStatus(game *Game) {
 	// Count active players (those with pieces)
 	activePlayers := 0
 	lastActivePlayer := 0
+	previousActivePlayers := game.ActivePlayers
 
 	for i := 1; i <= 4; i++ {
 		if game.Players[i-1] != nil {
@@ -1527,9 +1528,19 @@ func (h *Hub) checkMultiplayerStatus(game *Game) {
 				activePlayers++
 				lastActivePlayer = i
 			} else if pieceCount == 0 {
-				// Player eliminated - notify if not already eliminated
-				// (We track this by checking if we sent notification before)
-				log.Printf("Player %d eliminated in game %s", i, game.ID)
+				// Check if player was just eliminated (had pieces before)
+				// We detect this by checking if active count decreased
+				if previousActivePlayers > 0 {
+					log.Printf("Player %d eliminated in game %s", i, game.ID)
+
+					// Send player_eliminated message
+					elimMsg := Message{
+						Type:             "player_eliminated",
+						GameID:           game.ID,
+						EliminatedPlayer: i,
+					}
+					h.broadcastToGame(game, &elimMsg)
+				}
 			}
 		}
 	}
