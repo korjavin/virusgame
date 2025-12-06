@@ -117,13 +117,13 @@ function updateStatus() {
         const playerSymbol = mpClient.yourPlayer === 1 ? 'X' : 'O';
 
         if (neutralMode) {
-            statusDisplay.textContent = `Place ${2 - neutralsPlaced} neutral field(s).`;
+            statusDisplay.textContent = i18n.t('placeNeutral', { count: 2 - neutralsPlaced });
             if (statusDisplay) statusDisplay.classList.add('your-turn');
         } else if (isYourTurn) {
-            statusDisplay.textContent = `Your turn (${playerSymbol}) vs ${mpClient.opponentUsername}. Moves left: ${movesLeft}.`;
+            statusDisplay.textContent = i18n.t('yourTurn', { symbol: playerSymbol, opponent: mpClient.opponentUsername, moves: movesLeft });
             if (statusDisplay) statusDisplay.classList.add('your-turn');
         } else {
-            statusDisplay.textContent = `${mpClient.opponentUsername}'s turn. Waiting...`;
+            statusDisplay.textContent = i18n.t('opponentTurn', { opponent: mpClient.opponentUsername });
             if (statusDisplay) statusDisplay.classList.remove('your-turn');
         }
         return;
@@ -133,9 +133,9 @@ function updateStatus() {
     if (statusDisplay) statusDisplay.classList.remove('your-turn');
 
     if (neutralMode) {
-        statusDisplay.textContent = `Player ${currentPlayer}: Place ${2 - neutralsPlaced} neutral field(s).`;
+        statusDisplay.textContent = i18n.t('placeNeutralPlayer', { player: currentPlayer, count: 2 - neutralsPlaced });
     } else {
-        statusDisplay.textContent = `Player ${currentPlayer}'s turn. Moves left: ${movesLeft}.`;
+        statusDisplay.textContent = i18n.t('playerTurn', { player: currentPlayer, moves: movesLeft });
     }
 }
 
@@ -165,7 +165,7 @@ function endTurn() {
     if (typeof mpClient === 'undefined' || !mpClient.multiplayerMode) {
         if (!gameOver && !canMakeMove(currentPlayer)) {
             const winner = currentPlayer === 1 ? 2 : 1;
-            statusDisplay.textContent = `Player ${winner} wins! Player ${currentPlayer} has no more moves.`;
+            statusDisplay.textContent = i18n.t('noMoreMoves', { winner: winner, player: currentPlayer });
             gameOver = true;
         }
     }
@@ -193,13 +193,13 @@ function checkWinCondition() {
         // Multiplayer mode
         if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
             const youWon = winner === mpClient.yourPlayer;
-            statusDisplay.textContent = youWon ? 'You win!' : 'You lose!';
+            statusDisplay.textContent = youWon ? i18n.t('youWin') : i18n.t('youLose');
             // Show rematch button
             const rematchBtn = document.getElementById('rematch-button');
             if (rematchBtn) rematchBtn.style.display = 'block';
         } else {
             // Local mode
-            statusDisplay.textContent = `Player ${winner} wins!`;
+            statusDisplay.textContent = i18n.t('playerWins', { player: winner });
         }
     }
 }
@@ -285,7 +285,7 @@ function handleCellClick(event) {
 
         if (!canMakeMove(currentPlayer)) {
             const winner = currentPlayer === 1 ? 2 : 1;
-            statusDisplay.textContent = `Player ${winner} wins! Player ${currentPlayer} has no more moves.`;
+            statusDisplay.textContent = i18n.t('noMoreMoves', { winner: winner, player: currentPlayer });
             gameOver = true;
             return;
         }

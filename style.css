@@ -587,6 +587,44 @@ body.dark-theme #status.your-turn {
     }
 }
 
+/* Language toggle */
+.lang-toggle {
+    position: absolute;
+    top: 10px;
+    right: 90px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+    user-select: none;
+    transition: transform 0.2s, background-color 0.2s;
+    background-color: #3498db;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    color: white;
+}
+
+.lang-toggle:hover {
+    transform: scale(1.15);
+    background-color: #217dbb;
+}
+
+body.dark-theme .lang-toggle {
+    background-color: #444;
+}
+
+body.dark-theme .lang-toggle:hover {
+    background-color: #555;
+}
+
+.lang-icon {
+    display: block;
+}
+
 /* Help button */
 .help-button {
     position: absolute;
@@ -934,6 +972,13 @@ body.dark-theme #tutorial-progress {
 
     .tutorial-controls button {
         width: 100%;
+    }
+
+    .lang-toggle {
+        right: 80px;
+        width: 28px;
+        height: 28px;
+        font-size: 10px;
     }
 
     .help-button {
