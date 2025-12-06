@@ -65,6 +65,8 @@ function isValidMove(row, col, player) {
     return false;
 }
 
+const playerSymbols = ['X', 'O', '△', '□'];
+
 function renderBoard() {
     gameBoard.innerHTML = '';
     gameBoard.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
@@ -77,25 +79,22 @@ function renderBoard() {
             cell.dataset.col = j;
 
             const cellValue = board[i][j];
-            if (cellValue === 1) {
-                cell.classList.add('player1');
-                cell.textContent = 'X';
-            } else if (cellValue === 2) {
-                cell.classList.add('player2');
-                cell.textContent = 'O';
-            } else if (cellValue === '1-fortified') {
-                cell.classList.add('player1-fortified');
-                cell.textContent = 'X';
-            } else if (cellValue === '2-fortified') {
-                cell.classList.add('player2-fortified');
-                cell.textContent = 'O';
-            } else if (cellValue === '1-base') {
-                cell.classList.add('player1-base');
-                cell.textContent = 'X';
-            } else if (cellValue === '2-base') {
-                cell.classList.add('player2-base');
-                cell.textContent = 'O';
-            } else if (cellValue === 'killed') {
+
+            // Handle player cells (1, 2, 3, 4)
+            for (let p = 1; p <= 4; p++) {
+                if (cellValue === p) {
+                    cell.classList.add(`player${p}`);
+                    cell.textContent = playerSymbols[p - 1];
+                } else if (cellValue === `${p}-fortified`) {
+                    cell.classList.add(`player${p}-fortified`);
+                    cell.textContent = playerSymbols[p - 1];
+                } else if (cellValue === `${p}-base`) {
+                    cell.classList.add(`player${p}-base`);
+                    cell.textContent = playerSymbols[p - 1];
+                }
+            }
+
+            if (cellValue === 'killed') {
                 cell.classList.add('killed');
             }
 

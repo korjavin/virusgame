@@ -14,6 +14,10 @@ class MultiplayerClient {
         this.pendingChallenges = new Map();
         this.connected = false;
         this.multiplayerMode = false;
+        // Multiplayer game mode
+        this.isMultiplayerGame = false;
+        this.gamePlayers = [];
+        this.playerSymbol = null;
     }
 
     connect() {
@@ -107,6 +111,25 @@ class MultiplayerClient {
                 break;
             case 'error':
                 this.handleError(msg);
+                break;
+            // Lobby messages
+            case 'lobby_created':
+                if (lobbyManager) lobbyManager.handleLobbyCreated(msg);
+                break;
+            case 'lobby_update':
+                if (lobbyManager) lobbyManager.handleLobbyUpdate(msg);
+                break;
+            case 'lobbies_list':
+                if (lobbyManager) lobbyManager.handleLobbiesList(msg);
+                break;
+            case 'lobby_closed':
+                if (lobbyManager) lobbyManager.handleLobbyClosed(msg);
+                break;
+            case 'multiplayer_game_start':
+                this.handleMultiplayerGameStart(msg);
+                break;
+            case 'player_eliminated':
+                this.handlePlayerEliminated(msg);
                 break;
         }
     }
@@ -281,15 +304,99 @@ class MultiplayerClient {
 
     endMultiplayerGame() {
         this.multiplayerMode = false;
+        this.isMultiplayerGame = false;
         this.gameId = null;
         this.yourPlayer = null;
         this.opponentId = null;
         this.opponentUsername = null;
+        this.gamePlayers = [];
+        this.playerSymbol = null;
 
         // Reset status
         if (statusDisplay) {
             statusDisplay.textContent = 'Multiplayer game ended. Start a new local game or challenge another player.';
         }
+    }
+
+    handleMultiplayerGameStart(msg) {
+        this.gameId = msg.gameId;
+        this.yourPlayer = msg.yourPlayer;
+        this.playerSymbol = msg.playerSymbol;
+        this.gamePlayers = msg.gamePlayers || [];
+        this.isMultiplayerGame = true;
+        this.multiplayerMode = true;
+
+        // Start multiplayer game with more than 2 players
+        this.startMultiplayerGameMode(msg.rows, msg.cols, msg.gamePlayers);
+    }
+
+    handlePlayerEliminated(msg) {
+        // Update player status when eliminated
+        const player = this.gamePlayers.find(p => p.playerIndex === msg.eliminatedPlayer);
+        if (player) {
+            player.isActive = false;
+        }
+        this.updatePlayersDisplay();
+        this.showNotification('Player Eliminated', `${player ? player.username : 'Player'} has been eliminated!`);
+    }
+
+    startMultiplayerGameMode(rows, cols, gamePlayers) {
+        // Initialize game with multiplayer settings
+        if (rowsInput) rowsInput.value = rows;
+        if (colsInput) colsInput.value = cols;
+        if (aiEnabledCheckbox) aiEnabledCheckbox.checked = false;
+
+        // Reset game state for multiplayer
+        initGameMultiplayerMode(rows, cols, gamePlayers, this.yourPlayer);
+
+        // Update status
+        if (statusDisplay) {
+            const turnText = currentPlayer === this.yourPlayer ? 'Your turn!' : `${this.getPlayerName(currentPlayer)}'s turn...`;
+            statusDisplay.textContent = `Playing as ${this.playerSymbol}. ${turnText}`;
+        }
+
+        // Show players display
+        this.updatePlayersDisplay();
+    }
+
+    updatePlayersDisplay() {
+        let playersInfoContainer = document.getElementById('players-info');
+        if (!playersInfoContainer) {
+            playersInfoContainer = document.createElement('div');
+            playersInfoContainer.id = 'players-info';
+            playersInfoContainer.className = 'players-info';
+            const gameContainer = document.getElementById('game-container');
+            gameContainer.insertBefore(playersInfoContainer, document.getElementById('game-board'));
+        }
+
+        playersInfoContainer.innerHTML = '';
+
+        this.gamePlayers.forEach(player => {
+            const card = document.createElement('div');
+            card.className = 'player-info-card';
+            if (!player.isActive) {
+                card.classList.add('eliminated');
+            }
+            if (player.playerIndex === currentPlayer) {
+                card.classList.add('current-turn');
+            }
+
+            const badge = document.createElement('div');
+            badge.className = `player-symbol-badge symbol-${player.symbol}`;
+            badge.textContent = player.symbol;
+
+            const name = document.createElement('span');
+            name.textContent = player.username + (player.playerIndex === this.yourPlayer ? ' (You)' : '');
+
+            card.appendChild(badge);
+            card.appendChild(name);
+            playersInfoContainer.appendChild(card);
+        });
+    }
+
+    getPlayerName(playerIndex) {
+        const player = this.gamePlayers.find(p => p.playerIndex === playerIndex);
+        return player ? player.username : `Player ${playerIndex}`;
     }
 
     updateConnectionStatus(connected) {
@@ -428,6 +535,36 @@ function initGameMultiplayer(rowsVal, colsVal) {
 
     board[player1Base.row][player1Base.col] = '1-base';
     board[player2Base.row][player2Base.col] = '2-base';
+
+    renderBoard();
+    updateStatus();
+}
+
+// Initialize multiplayer game for 3-4 players
+function initGameMultiplayerMode(rowsVal, colsVal, gamePlayers, yourPlayerIndex) {
+    rows = rowsVal;
+    cols = colsVal;
+    board = Array(rows).fill(null).map(() => Array(cols).fill(null));
+    currentPlayer = 1;
+    movesLeft = 3;
+    gameOver = false;
+    neutralMode = false;
+    neutralsPlaced = 0;
+
+    // Base positions for 4 players
+    const basePositions = [
+        { row: 0, col: 0 },                // Player 1: top-left
+        { row: rows - 1, col: cols - 1 },  // Player 2: bottom-right
+        { row: 0, col: cols - 1 },         // Player 3: top-right
+        { row: rows - 1, col: 0 }          // Player 4: bottom-left
+    ];
+
+    // Set bases for active players
+    gamePlayers.forEach(player => {
+        const playerIndex = player.playerIndex;
+        const basePos = basePositions[playerIndex - 1];
+        board[basePos.row][basePos.col] = `${playerIndex}-base`;
+    });
 
     renderBoard();
     updateStatus();
