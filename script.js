@@ -298,16 +298,20 @@ function handleCellClick(event) {
         const cellValue = board[row][col];
 
         if (cellValue === null) {
-            // Place on empty cell
+            // Place on empty cell - just the number, not fortified
             board[row][col] = currentPlayer;
         } else {
-            // Attack opponent's cell - convert and fortify it
+            // Attacking opponent's cell - it becomes ours and fortified
+            // This should only happen if it's a non-fortified, non-base opponent cell
             const cellStr = String(cellValue);
-            // Check if it's opponent's cell (not our own)
-            if (!cellStr.startsWith(currentPlayer.toString())) {
+
+            // Check it's opponent's non-fortified cell
+            if (!cellStr.includes('fortified') && !cellStr.includes('base') &&
+                !cellStr.startsWith(currentPlayer.toString())) {
+                // Capture it and make it fortified
                 board[row][col] = `${currentPlayer}-fortified`;
             } else {
-                return; // Can't attack own cell
+                return; // Invalid attack
             }
         }
 
