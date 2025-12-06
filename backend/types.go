@@ -25,17 +25,53 @@ type Message struct {
 	Winner       int         `json:"winner,omitempty"`
 	Users        []UserInfo  `json:"users,omitempty"`
 	Cells        []CellPos   `json:"cells,omitempty"`
+	// Lobby fields
+	LobbyID      string      `json:"lobbyId,omitempty"`
+	MaxPlayers   int         `json:"maxPlayers,omitempty"`
+	SlotIndex    int         `json:"slotIndex,omitempty"`
+	Lobby        *LobbyInfo  `json:"lobby,omitempty"`
+	Lobbies      []LobbyInfo `json:"lobbies,omitempty"`
+	// Multiplayer game fields
+	IsMultiplayer bool             `json:"isMultiplayer,omitempty"`
+	PlayerSymbol  string           `json:"playerSymbol,omitempty"`
+	GamePlayers   []GamePlayerInfo `json:"gamePlayers,omitempty"`
+	EliminatedPlayer int           `json:"eliminatedPlayer,omitempty"`
 }
 
 type UserInfo struct {
 	UserID   string `json:"userId"`
 	Username string `json:"username"`
 	InGame   bool   `json:"inGame"`
+	InLobby  bool   `json:"inLobby"`
 }
 
 type CellPos struct {
 	Row int `json:"row"`
 	Col int `json:"col"`
+}
+
+type LobbyInfo struct {
+	LobbyID    string             `json:"lobbyId"`
+	HostName   string             `json:"hostName"`
+	Players    []LobbyPlayerInfo  `json:"players"`
+	MaxPlayers int                `json:"maxPlayers"`
+	Status     string             `json:"status"`
+}
+
+type LobbyPlayerInfo struct {
+	Username string `json:"username,omitempty"`
+	IsBot    bool   `json:"isBot"`
+	Symbol   string `json:"symbol"`
+	Ready    bool   `json:"ready"`
+	IsEmpty  bool   `json:"isEmpty"`
+}
+
+type GamePlayerInfo struct {
+	PlayerIndex int    `json:"playerIndex"`
+	Username    string `json:"username"`
+	Symbol      string `json:"symbol"`
+	IsBot       bool   `json:"isBot"`
+	IsActive    bool   `json:"isActive"` // false if eliminated
 }
 
 // User represents a connected client
@@ -44,6 +80,8 @@ type User struct {
 	Username string
 	Client   *Client
 	InGame   bool
+	InLobby  bool
+	LobbyID  string // ID of lobby user is in
 }
 
 // Challenge represents a game challenge between two users
@@ -72,4 +110,31 @@ type Game struct {
 	Player2NeutralsUsed bool
 	Rows          int
 	Cols          int
+	// Multiplayer mode fields
+	IsMultiplayer bool
+	Players       [4]*LobbyPlayer  // For 3-4 player games
+	PlayerBases   [4]CellPos       // Bases for each player
+	NeutralsUsed  [4]bool          // Track neutrals usage
+	ActivePlayers int              // Number of active players
+}
+
+// Lobby represents a multiplayer game lobby
+type Lobby struct {
+	ID         string
+	Host       *User
+	Players    [4]*LobbyPlayer
+	MaxPlayers int    // 3 or 4
+	Status     string // "waiting", "ready", "starting"
+	Rows       int
+	Cols       int
+	CreatedAt  time.Time
+}
+
+// LobbyPlayer represents a player slot in a lobby
+type LobbyPlayer struct {
+	User   *User  // nil if slot is empty
+	IsBot  bool   // true if AI bot
+	Symbol string // "X", "O", "△", "□"
+	Ready  bool   // ready status
+	Index  int    // 0-3, player index
 }

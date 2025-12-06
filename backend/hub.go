@@ -22,6 +22,7 @@ type Hub struct {
 	users         map[string]*User
 	challenges    map[string]*Challenge
 	games         map[string]*Game
+	lobbies       map[string]*Lobby
 	register      chan *Client
 	unregister    chan *Client
 	handleMessage chan *MessageWrapper
@@ -33,6 +34,7 @@ func newHub() *Hub {
 		users:         make(map[string]*User),
 		challenges:    make(map[string]*Challenge),
 		games:         make(map[string]*Game),
+		lobbies:       make(map[string]*Lobby),
 		register:      make(chan *Client),
 		unregister:    make(chan *Client),
 		handleMessage: make(chan *MessageWrapper),
@@ -93,6 +95,14 @@ func (h *Hub) handleDisconnect(client *Client) {
 	user := client.user
 	log.Printf("User disconnected: %s (%s)", user.Username, user.ID)
 
+	// Remove user from lobbies
+	if user.InLobby && user.LobbyID != "" {
+		lobby, exists := h.lobbies[user.LobbyID]
+		if exists {
+			h.removeUserFromLobby(lobby, user)
+		}
+	}
+
 	// Remove user from active games
 	for gameID, game := range h.games {
 		if game.Player1.ID == user.ID || game.Player2.ID == user.ID {
@@ -142,6 +152,21 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 		h.handleNeutrals(client.user, msg)
 	case "rematch":
 		h.handleRematch(client.user, msg)
+	// Lobby messages
+	case "create_lobby":
+		h.handleCreateLobby(client.user, msg)
+	case "join_lobby":
+		h.handleJoinLobby(client.user, msg)
+	case "leave_lobby":
+		h.handleLeaveLobby(client.user, msg)
+	case "add_bot":
+		h.handleAddBot(client.user, msg)
+	case "remove_bot":
+		h.handleRemoveBot(client.user, msg)
+	case "start_multiplayer_game":
+		h.handleStartMultiplayerGame(client.user, msg)
+	case "get_lobbies":
+		h.handleGetLobbies(client.user, msg)
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
 	}
@@ -312,42 +337,65 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 	row := *msg.Row
 	col := *msg.Col
 
-	// Verify it's the user's turn
+	// Find player number for this user
 	var playerNum int
-	if game.Player1.ID == user.ID {
-		playerNum = 1
-	} else if game.Player2.ID == user.ID {
-		playerNum = 2
+	if game.IsMultiplayer {
+		// Find player in multiplayer game
+		for i := 0; i < 4; i++ {
+			if game.Players[i] != nil && game.Players[i].User != nil && game.Players[i].User.ID == user.ID {
+				playerNum = i + 1
+				break
+			}
+		}
+		if playerNum == 0 {
+			return // User not in this game
+		}
 	} else {
-		return
+		// Legacy 1v1 mode
+		if game.Player1.ID == user.ID {
+			playerNum = 1
+		} else if game.Player2.ID == user.ID {
+			playerNum = 2
+		} else {
+			return
+		}
 	}
 
 	if game.CurrentPlayer != playerNum || game.GameOver {
 		return
 	}
 
-	// Validate and apply move (simplified - full validation would match frontend logic)
-	opponent := 3 - playerNum // 1->2, 2->1
+	// Validate and apply move
 	cellValue := game.Board[row][col]
 
+	// Check if it's a valid target (empty or opponent cell)
+	isValidTarget := false
+	if cellValue == nil {
+		isValidTarget = true
+	} else {
+		cellStr := fmt.Sprintf("%v", cellValue)
+		// Can attack opponent's non-fortified, non-base cells
+		if len(cellStr) > 0 && cellStr[0] != byte('0'+playerNum) &&
+		   !strings.Contains(cellStr, "fortified") && !strings.Contains(cellStr, "base") {
+			isValidTarget = true
+		}
+	}
+
+	if !isValidTarget {
+		return
+	}
+
+	// Apply move
 	if cellValue == nil {
 		game.Board[row][col] = playerNum
-	} else if cellValue == opponent {
-		game.Board[row][col] = fmt.Sprintf("%d-fortified", playerNum)
 	} else {
-		return // Invalid move
+		// Attacking opponent cell - fortify it
+		game.Board[row][col] = fmt.Sprintf("%d-fortified", playerNum)
 	}
 
 	game.MovesLeft--
 
-	// Broadcast move to opponent
-	var opponentUser *User
-	if playerNum == 1 {
-		opponentUser = game.Player2
-	} else {
-		opponentUser = game.Player1
-	}
-
+	// Broadcast move to all players
 	moveMsg := Message{
 		Type:   "move_made",
 		GameID: msg.GameID,
@@ -355,49 +403,15 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		Col:    msg.Col,
 		Player: playerNum,
 	}
-	h.sendToUser(opponentUser, &moveMsg)
+	h.broadcastToGame(game, &moveMsg)
 
 	// Check if turn is over
 	if game.MovesLeft == 0 {
-		game.CurrentPlayer = opponent
-		game.MovesLeft = 3
-
-		// Check if the new current player can make any moves
-		if !h.canMakeAnyMove(game, game.CurrentPlayer) {
-			// Current player has no moves, opponent wins
-			game.GameOver = true
-			game.Winner = 3 - game.CurrentPlayer // The other player wins
-
-			endMsg := Message{
-				Type:   "game_end",
-				GameID: game.ID,
-				Winner: game.Winner,
-			}
-			h.sendToUser(game.Player1, &endMsg)
-			h.sendToUser(game.Player2, &endMsg)
-
-			// Mark users as not in game
-			game.Player1.InGame = false
-			game.Player2.InGame = false
-
-			// Broadcast updated user list
-			h.broadcastUserList()
-
-			log.Printf("Game ended: %s (winner: player %d, opponent had no moves)", game.ID, game.Winner)
-			return
-		}
-
-		turnMsg := Message{
-			Type:   "turn_change",
-			GameID: msg.GameID,
-			Player: game.CurrentPlayer,
-		}
-		h.sendToUser(game.Player1, &turnMsg)
-		h.sendToUser(game.Player2, &turnMsg)
+		h.endTurn(game)
 	}
 
-	// Check win condition (all pieces captured)
-	h.checkWinCondition(game)
+	// Check win condition and elimination
+	h.checkMultiplayerStatus(game)
 }
 
 func (h *Hub) handleNeutrals(user *User, msg *Message) {
@@ -656,6 +670,7 @@ func (h *Hub) broadcastUserList() {
 			UserID:   user.ID,
 			Username: user.Username,
 			InGame:   user.InGame,
+			InLobby:  user.InLobby,
 		})
 	}
 
@@ -688,4 +703,629 @@ func (h *Hub) sendToUser(user *User, msg *Message) {
 	if user.Client != nil {
 		h.sendToClient(user.Client, msg)
 	}
+}
+
+// ========== Lobby Management Functions ==========
+
+var playerSymbols = []string{"X", "O", "△", "□"}
+
+func (h *Hub) handleCreateLobby(user *User, msg *Message) {
+	if user.InGame || user.InLobby {
+		h.sendError(user, "You are already in a game or lobby")
+		return
+	}
+
+	maxPlayers := msg.MaxPlayers
+	if maxPlayers < 2 || maxPlayers > 4 {
+		maxPlayers = 4
+	}
+
+	rows := msg.Rows
+	cols := msg.Cols
+	if rows < 5 || rows > 50 {
+		rows = 10
+	}
+	if cols < 5 || cols > 50 {
+		cols = 10
+	}
+
+	lobbyID := uuid.New().String()
+	lobby := &Lobby{
+		ID:         lobbyID,
+		Host:       user,
+		Players:    [4]*LobbyPlayer{},
+		MaxPlayers: maxPlayers,
+		Status:     "waiting",
+		Rows:       rows,
+		Cols:       cols,
+		CreatedAt:  time.Now(),
+	}
+
+	// Add host as first player
+	lobby.Players[0] = &LobbyPlayer{
+		User:   user,
+		IsBot:  false,
+		Symbol: playerSymbols[0],
+		Ready:  true, // Host is always ready
+		Index:  0,
+	}
+
+	h.lobbies[lobbyID] = lobby
+	user.InLobby = true
+	user.LobbyID = lobbyID
+
+	// Send lobby info to creator
+	lobbyInfo := h.getLobbyInfo(lobby)
+	responseMsg := Message{
+		Type:    "lobby_created",
+		LobbyID: lobbyID,
+		Lobby:   lobbyInfo,
+	}
+	h.sendToUser(user, &responseMsg)
+
+	// Broadcast updated user list
+	h.broadcastUserList()
+
+	log.Printf("Lobby created: %s by %s (max %d players, %dx%d)", lobbyID, user.Username, maxPlayers, rows, cols)
+}
+
+func (h *Hub) handleJoinLobby(user *User, msg *Message) {
+	if user.InGame || user.InLobby {
+		h.sendError(user, "You are already in a game or lobby")
+		return
+	}
+
+	lobby, exists := h.lobbies[msg.LobbyID]
+	if !exists {
+		h.sendError(user, "Lobby not found")
+		return
+	}
+
+	if lobby.Status != "waiting" {
+		h.sendError(user, "Lobby is not accepting players")
+		return
+	}
+
+	// Find empty slot
+	slotIndex := -1
+	for i := 0; i < lobby.MaxPlayers; i++ {
+		if lobby.Players[i] == nil {
+			slotIndex = i
+			break
+		}
+	}
+
+	if slotIndex == -1 {
+		h.sendError(user, "Lobby is full")
+		return
+	}
+
+	// Add player to lobby
+	lobby.Players[slotIndex] = &LobbyPlayer{
+		User:   user,
+		IsBot:  false,
+		Symbol: playerSymbols[slotIndex],
+		Ready:  false,
+		Index:  slotIndex,
+	}
+
+	user.InLobby = true
+	user.LobbyID = lobby.ID
+
+	// Broadcast lobby update to all players in lobby
+	h.broadcastLobbyUpdate(lobby)
+
+	// Broadcast updated user list
+	h.broadcastUserList()
+
+	log.Printf("User %s joined lobby %s (slot %d)", user.Username, lobby.ID, slotIndex)
+}
+
+func (h *Hub) handleLeaveLobby(user *User, msg *Message) {
+	if !user.InLobby {
+		return
+	}
+
+	lobby, exists := h.lobbies[user.LobbyID]
+	if !exists {
+		return
+	}
+
+	h.removeUserFromLobby(lobby, user)
+}
+
+func (h *Hub) handleAddBot(user *User, msg *Message) {
+	if !user.InLobby {
+		h.sendError(user, "You are not in a lobby")
+		return
+	}
+
+	lobby, exists := h.lobbies[user.LobbyID]
+	if !exists {
+		return
+	}
+
+	// Only host can add bots
+	if lobby.Host.ID != user.ID {
+		h.sendError(user, "Only the host can add bots")
+		return
+	}
+
+	// Find empty slot
+	slotIndex := -1
+	for i := 0; i < lobby.MaxPlayers; i++ {
+		if lobby.Players[i] == nil {
+			slotIndex = i
+			break
+		}
+	}
+
+	if slotIndex == -1 {
+		h.sendError(user, "Lobby is full")
+		return
+	}
+
+	// Add bot to slot
+	lobby.Players[slotIndex] = &LobbyPlayer{
+		User:   nil,
+		IsBot:  true,
+		Symbol: playerSymbols[slotIndex],
+		Ready:  true,
+		Index:  slotIndex,
+	}
+
+	h.broadcastLobbyUpdate(lobby)
+
+	log.Printf("Bot added to lobby %s (slot %d)", lobby.ID, slotIndex)
+}
+
+func (h *Hub) handleRemoveBot(user *User, msg *Message) {
+	if !user.InLobby {
+		return
+	}
+
+	lobby, exists := h.lobbies[user.LobbyID]
+	if !exists {
+		return
+	}
+
+	// Only host can remove bots
+	if lobby.Host.ID != user.ID {
+		return
+	}
+
+	slotIndex := msg.SlotIndex
+	if slotIndex < 0 || slotIndex >= 4 {
+		return
+	}
+
+	player := lobby.Players[slotIndex]
+	if player == nil || !player.IsBot {
+		return
+	}
+
+	// Remove bot
+	lobby.Players[slotIndex] = nil
+
+	h.broadcastLobbyUpdate(lobby)
+
+	log.Printf("Bot removed from lobby %s (slot %d)", lobby.ID, slotIndex)
+}
+
+func (h *Hub) handleStartMultiplayerGame(user *User, msg *Message) {
+	if !user.InLobby {
+		h.sendError(user, "You are not in a lobby")
+		return
+	}
+
+	lobby, exists := h.lobbies[user.LobbyID]
+	if !exists {
+		return
+	}
+
+	// Only host can start game
+	if lobby.Host.ID != user.ID {
+		h.sendError(user, "Only the host can start the game")
+		return
+	}
+
+	// Count players
+	playerCount := 0
+	for i := 0; i < lobby.MaxPlayers; i++ {
+		if lobby.Players[i] != nil {
+			playerCount++
+		}
+	}
+
+	if playerCount < 2 {
+		h.sendError(user, "Need at least 2 players to start")
+		return
+	}
+
+	// Create multiplayer game
+	h.createMultiplayerGame(lobby)
+}
+
+func (h *Hub) handleGetLobbies(user *User, msg *Message) {
+	lobbies := make([]LobbyInfo, 0)
+	for _, lobby := range h.lobbies {
+		if lobby.Status == "waiting" {
+			lobbies = append(lobbies, *h.getLobbyInfo(lobby))
+		}
+	}
+
+	responseMsg := Message{
+		Type:    "lobbies_list",
+		Lobbies: lobbies,
+	}
+	h.sendToUser(user, &responseMsg)
+}
+
+func (h *Hub) getLobbyInfo(lobby *Lobby) *LobbyInfo {
+	players := make([]LobbyPlayerInfo, lobby.MaxPlayers)
+	for i := 0; i < lobby.MaxPlayers; i++ {
+		if lobby.Players[i] == nil {
+			players[i] = LobbyPlayerInfo{
+				Symbol:  playerSymbols[i],
+				IsEmpty: true,
+			}
+		} else {
+			username := ""
+			if lobby.Players[i].User != nil {
+				username = lobby.Players[i].User.Username
+			} else if lobby.Players[i].IsBot {
+				username = fmt.Sprintf("Bot %d", i+1)
+			}
+			players[i] = LobbyPlayerInfo{
+				Username: username,
+				IsBot:    lobby.Players[i].IsBot,
+				Symbol:   lobby.Players[i].Symbol,
+				Ready:    lobby.Players[i].Ready,
+				IsEmpty:  false,
+			}
+		}
+	}
+
+	return &LobbyInfo{
+		LobbyID:    lobby.ID,
+		HostName:   lobby.Host.Username,
+		Players:    players,
+		MaxPlayers: lobby.MaxPlayers,
+		Status:     lobby.Status,
+	}
+}
+
+func (h *Hub) broadcastLobbyUpdate(lobby *Lobby) {
+	lobbyInfo := h.getLobbyInfo(lobby)
+	msg := Message{
+		Type:  "lobby_update",
+		Lobby: lobbyInfo,
+	}
+
+	// Send to all players in lobby
+	for i := 0; i < lobby.MaxPlayers; i++ {
+		if lobby.Players[i] != nil && lobby.Players[i].User != nil {
+			h.sendToUser(lobby.Players[i].User, &msg)
+		}
+	}
+}
+
+func (h *Hub) removeUserFromLobby(lobby *Lobby, user *User) {
+	// Find user's slot
+	slotIndex := -1
+	for i := 0; i < 4; i++ {
+		if lobby.Players[i] != nil && lobby.Players[i].User != nil && lobby.Players[i].User.ID == user.ID {
+			slotIndex = i
+			break
+		}
+	}
+
+	if slotIndex == -1 {
+		return
+	}
+
+	// Remove user
+	lobby.Players[slotIndex] = nil
+	user.InLobby = false
+	user.LobbyID = ""
+
+	// If user was host, close lobby or transfer host
+	if lobby.Host.ID == user.ID {
+		// Close lobby
+		for i := 0; i < 4; i++ {
+			if lobby.Players[i] != nil && lobby.Players[i].User != nil {
+				lobby.Players[i].User.InLobby = false
+				lobby.Players[i].User.LobbyID = ""
+				// Notify player
+				msg := Message{
+					Type:     "lobby_closed",
+					LobbyID:  lobby.ID,
+					Username: "Host left the lobby",
+				}
+				h.sendToUser(lobby.Players[i].User, &msg)
+			}
+		}
+		delete(h.lobbies, lobby.ID)
+		log.Printf("Lobby %s closed (host left)", lobby.ID)
+	} else {
+		// Broadcast update
+		h.broadcastLobbyUpdate(lobby)
+		log.Printf("User %s left lobby %s", user.Username, lobby.ID)
+	}
+
+	// Broadcast updated user list
+	h.broadcastUserList()
+}
+
+func (h *Hub) createMultiplayerGame(lobby *Lobby) {
+	gameID := uuid.New().String()
+	rows := lobby.Rows
+	cols := lobby.Cols
+
+	board := make([][]interface{}, rows)
+	for i := range board {
+		board[i] = make([]interface{}, cols)
+	}
+
+	// Determine base positions based on number of players
+	basePositions := [4]CellPos{
+		{Row: 0, Col: 0},                // Player 1: top-left
+		{Row: rows - 1, Col: cols - 1},  // Player 2: bottom-right
+		{Row: 0, Col: cols - 1},         // Player 3: top-right
+		{Row: rows - 1, Col: 0},         // Player 4: bottom-left
+	}
+
+	// Count active players and set bases
+	activePlayers := 0
+	gamePlayers := [4]*LobbyPlayer{}
+	for i := 0; i < lobby.MaxPlayers; i++ {
+		if lobby.Players[i] != nil {
+			gamePlayers[i] = lobby.Players[i]
+			board[basePositions[i].Row][basePositions[i].Col] = fmt.Sprintf("%d-base", i+1)
+			activePlayers++
+		}
+	}
+
+	game := &Game{
+		ID:            gameID,
+		Board:         board,
+		CurrentPlayer: 1,
+		MovesLeft:     3,
+		GameOver:      false,
+		Winner:        0,
+		Rows:          rows,
+		Cols:          cols,
+		IsMultiplayer: true,
+		Players:       gamePlayers,
+		PlayerBases:   basePositions,
+		NeutralsUsed:  [4]bool{false, false, false, false},
+		ActivePlayers: activePlayers,
+	}
+
+	h.games[gameID] = game
+
+	// Mark users as in game and remove from lobby
+	gamePlayerInfos := make([]GamePlayerInfo, 0)
+	for i := 0; i < 4; i++ {
+		if gamePlayers[i] != nil {
+			if gamePlayers[i].User != nil {
+				gamePlayers[i].User.InGame = true
+				gamePlayers[i].User.InLobby = false
+				gamePlayers[i].User.LobbyID = ""
+			}
+			gamePlayerInfos = append(gamePlayerInfos, GamePlayerInfo{
+				PlayerIndex: i + 1,
+				Username:    h.getPlayerName(gamePlayers[i]),
+				Symbol:      gamePlayers[i].Symbol,
+				IsBot:       gamePlayers[i].IsBot,
+				IsActive:    true,
+			})
+		}
+	}
+
+	// Send game_start to all human players
+	for i := 0; i < 4; i++ {
+		if gamePlayers[i] != nil && gamePlayers[i].User != nil {
+			startMsg := Message{
+				Type:          "multiplayer_game_start",
+				GameID:        gameID,
+				YourPlayer:    i + 1,
+				PlayerSymbol:  gamePlayers[i].Symbol,
+				Rows:          rows,
+				Cols:          cols,
+				IsMultiplayer: true,
+				GamePlayers:   gamePlayerInfos,
+			}
+			h.sendToUser(gamePlayers[i].User, &startMsg)
+		}
+	}
+
+	// Delete lobby
+	delete(h.lobbies, lobby.ID)
+
+	// Broadcast updated user list
+	h.broadcastUserList()
+
+	log.Printf("Multiplayer game started: %s with %d players", gameID, activePlayers)
+}
+
+func (h *Hub) getPlayerName(player *LobbyPlayer) string {
+	if player.User != nil {
+		return player.User.Username
+	}
+	if player.IsBot {
+		return fmt.Sprintf("Bot %d", player.Index+1)
+	}
+	return "Unknown"
+}
+
+func (h *Hub) sendError(user *User, message string) {
+	errorMsg := Message{
+		Type:     "error",
+		Username: message,
+	}
+	h.sendToUser(user, &errorMsg)
+}
+
+// ========== Multiplayer Game Logic ==========
+
+func (h *Hub) broadcastToGame(game *Game, msg *Message) {
+	if game.IsMultiplayer {
+		// Send to all human players in multiplayer game
+		for i := 0; i < 4; i++ {
+			if game.Players[i] != nil && game.Players[i].User != nil {
+				h.sendToUser(game.Players[i].User, msg)
+			}
+		}
+	} else {
+		// Send to both players in 1v1 game
+		if game.Player1 != nil {
+			h.sendToUser(game.Player1, msg)
+		}
+		if game.Player2 != nil {
+			h.sendToUser(game.Player2, msg)
+		}
+	}
+}
+
+func (h *Hub) endTurn(game *Game) {
+	if game.IsMultiplayer {
+		// Find next active player
+		nextPlayer := game.CurrentPlayer
+		for attempts := 0; attempts < 4; attempts++ {
+			nextPlayer++
+			if nextPlayer > 4 {
+				nextPlayer = 1
+			}
+
+			// Check if this player is active
+			if game.Players[nextPlayer-1] != nil {
+				// Check if player has any pieces left
+				if h.countPlayerPieces(game, nextPlayer) > 0 {
+					game.CurrentPlayer = nextPlayer
+					game.MovesLeft = 3
+					break
+				}
+			}
+		}
+	} else {
+		// 1v1 mode - switch between players
+		if game.CurrentPlayer == 1 {
+			game.CurrentPlayer = 2
+		} else {
+			game.CurrentPlayer = 1
+		}
+		game.MovesLeft = 3
+	}
+
+	// Check if the new current player can make any moves
+	if !h.canMakeAnyMove(game, game.CurrentPlayer) {
+		// Current player has no valid moves
+		if game.IsMultiplayer {
+			// In multiplayer, skip to next player
+			h.endTurn(game)
+			return
+		} else {
+			// In 1v1, other player wins
+			game.GameOver = true
+			game.Winner = 3 - game.CurrentPlayer
+
+			endMsg := Message{
+				Type:   "game_end",
+				GameID: game.ID,
+				Winner: game.Winner,
+			}
+			h.broadcastToGame(game, &endMsg)
+
+			// Mark users as not in game
+			game.Player1.InGame = false
+			game.Player2.InGame = false
+
+			h.broadcastUserList()
+			log.Printf("Game ended: %s (winner: player %d, opponent had no moves)", game.ID, game.Winner)
+			return
+		}
+	}
+
+	// Broadcast turn change
+	turnMsg := Message{
+		Type:   "turn_change",
+		GameID: game.ID,
+		Player: game.CurrentPlayer,
+	}
+	h.broadcastToGame(game, &turnMsg)
+
+	// If current player is a bot, trigger bot move
+	if game.IsMultiplayer && game.Players[game.CurrentPlayer-1] != nil && game.Players[game.CurrentPlayer-1].IsBot {
+		// TODO: Implement bot move logic
+		log.Printf("Bot %d's turn in game %s", game.CurrentPlayer, game.ID)
+	}
+}
+
+func (h *Hub) checkMultiplayerStatus(game *Game) {
+	if !game.IsMultiplayer {
+		// Use legacy win check for 1v1
+		h.checkWinCondition(game)
+		return
+	}
+
+	// Count active players (those with pieces)
+	activePlayers := 0
+	lastActivePlayer := 0
+
+	for i := 1; i <= 4; i++ {
+		if game.Players[i-1] != nil {
+			pieceCount := h.countPlayerPieces(game, i)
+			if pieceCount > 0 {
+				activePlayers++
+				lastActivePlayer = i
+			} else if pieceCount == 0 {
+				// Player eliminated - notify if not already eliminated
+				// (We track this by checking if we sent notification before)
+				log.Printf("Player %d eliminated in game %s", i, game.ID)
+			}
+		}
+	}
+
+	// Update active players count
+	game.ActivePlayers = activePlayers
+
+	// Check for game end
+	if activePlayers <= 1 {
+		game.GameOver = true
+		game.Winner = lastActivePlayer
+
+		endMsg := Message{
+			Type:   "game_end",
+			GameID: game.ID,
+			Winner: game.Winner,
+		}
+		h.broadcastToGame(game, &endMsg)
+
+		// Mark all users as not in game
+		for i := 0; i < 4; i++ {
+			if game.Players[i] != nil && game.Players[i].User != nil {
+				game.Players[i].User.InGame = false
+			}
+		}
+
+		h.broadcastUserList()
+		log.Printf("Multiplayer game ended: %s (winner: player %d)", game.ID, game.Winner)
+	}
+}
+
+func (h *Hub) countPlayerPieces(game *Game, player int) int {
+	count := 0
+	for i := 0; i < game.Rows; i++ {
+		for j := 0; j < game.Cols; j++ {
+			cell := game.Board[i][j]
+			if cell != nil {
+				cellStr := fmt.Sprintf("%v", cell)
+				if len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+					count++
+				}
+			}
+		}
+	}
+	return count
 }
