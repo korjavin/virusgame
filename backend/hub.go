@@ -1499,8 +1499,13 @@ func (h *Hub) endTurn(game *Game) {
 
 	// If current player is a bot, trigger bot move
 	if game.IsMultiplayer && game.Players[game.CurrentPlayer-1] != nil && game.Players[game.CurrentPlayer-1].IsBot {
-		// TODO: Implement bot move logic
-		log.Printf("Bot %d's turn in game %s", game.CurrentPlayer, game.ID)
+		log.Printf("Bot %d's turn in game %s - triggering bot move", game.CurrentPlayer, game.ID)
+		// Trigger bot move after a short delay to make it feel more natural
+		time.AfterFunc(500*time.Millisecond, func() {
+			if !game.GameOver && game.CurrentPlayer == game.Players[game.CurrentPlayer-1].Index+1 {
+				h.makeBotMove(game, game.CurrentPlayer)
+			}
+		})
 	}
 }
 
