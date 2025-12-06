@@ -18,6 +18,9 @@ class MultiplayerClient {
         this.isMultiplayerGame = false;
         this.gamePlayers = [];
         this.playerSymbol = null;
+        // Move timer
+        this.moveTimeLeft = 120;
+        this.moveTimerInterval = null;
     }
 
     connect() {
@@ -116,6 +119,9 @@ class MultiplayerClient {
             case 'lobby_created':
                 if (lobbyManager) lobbyManager.handleLobbyCreated(msg);
                 break;
+            case 'lobby_joined':
+                if (lobbyManager) lobbyManager.handleLobbyJoined(msg);
+                break;
             case 'lobby_update':
                 if (lobbyManager) lobbyManager.handleLobbyUpdate(msg);
                 break;
@@ -176,6 +182,8 @@ class MultiplayerClient {
             return;
         }
 
+        console.log('Move made received:', msg, 'movesLeft before:', movesLeft);
+
         const opponent = msg.player;
         const cellValue = board[msg.row][msg.col];
 
@@ -185,7 +193,17 @@ class MultiplayerClient {
             board[msg.row][msg.col] = `${opponent}-fortified`;
         }
 
+        // Update movesLeft from server
+        if (msg.movesLeft !== undefined) {
+            movesLeft = msg.movesLeft;
+            console.log('movesLeft updated from server to:', movesLeft);
+        }
+
+        // Reset move timer on each move
+        this.resetMoveTimer();
+
         renderBoard();
+        updateStatus();
         checkWinCondition();
     }
 
@@ -198,20 +216,29 @@ class MultiplayerClient {
     }
 
     handleTurnChange(msg) {
+        console.log('Turn change received:', msg);
         currentPlayer = msg.player;
-        movesLeft = 3;
+        movesLeft = msg.movesLeft !== undefined ? msg.movesLeft : 3;
         updateStatus();
 
         // Update players display in multiplayer mode
         if (this.isMultiplayerGame) {
             this.updatePlayersDisplay();
         }
+
+        // Reset move timer
+        this.resetMoveTimer();
     }
 
     handleGameEnd(msg) {
         gameOver = true;
         const winnerText = msg.winner === this.yourPlayer ? 'You win!' : 'You lose!';
         statusDisplay.textContent = `Game Over! ${winnerText}`;
+        // Stop move timer
+        this.stopMoveTimer();
+        // Hide resign button when game ends
+        const resignBtn = document.getElementById('resign-button');
+        if (resignBtn) resignBtn.style.display = 'none';
         this.showRematchButton();
     }
 
@@ -228,6 +255,43 @@ class MultiplayerClient {
 
     handleError(msg) {
         this.showNotification('Error', msg.username || 'An error occurred');
+    }
+
+    resetMoveTimer() {
+        // Stop existing timer
+        this.stopMoveTimer();
+
+        // Reset time to 120 seconds
+        this.moveTimeLeft = 120;
+
+        // Only start timer if it's multiplayer mode and we're in a game
+        if (this.isMultiplayerGame && !gameOver) {
+            this.updateResignButtonText();
+            this.moveTimerInterval = setInterval(() => {
+                this.moveTimeLeft--;
+                this.updateResignButtonText();
+
+                if (this.moveTimeLeft <= 0) {
+                    this.stopMoveTimer();
+                }
+            }, 1000);
+        }
+    }
+
+    stopMoveTimer() {
+        if (this.moveTimerInterval) {
+            clearInterval(this.moveTimerInterval);
+            this.moveTimerInterval = null;
+        }
+        this.moveTimeLeft = 120;
+        this.updateResignButtonText();
+    }
+
+    updateResignButtonText() {
+        const resignBtn = document.getElementById('resign-button');
+        if (resignBtn && resignBtn.style.display !== 'none') {
+            resignBtn.textContent = `Resign (${this.moveTimeLeft})`;
+        }
     }
 
     challengeUser(userId) {
@@ -276,6 +340,23 @@ class MultiplayerClient {
         });
     }
 
+    sendResign() {
+        this.send({
+            type: 'resign',
+            gameId: this.gameId,
+        });
+        // Update local state
+        gameOver = true;
+        if (statusDisplay) {
+            statusDisplay.textContent = 'You resigned. Game over.';
+        }
+        // Hide resign button
+        const resignBtn = document.getElementById('resign-button');
+        if (resignBtn) resignBtn.style.display = 'none';
+        // Show rematch button
+        this.showRematchButton();
+    }
+
     requestRematch() {
         if (!this.opponentId) {
             this.showNotification('Error', 'No opponent to rematch with');
@@ -305,6 +386,10 @@ class MultiplayerClient {
         if (statusDisplay) {
             statusDisplay.textContent = `Playing as ${playerSymbol} against ${this.opponentUsername}. ${turnText}`;
         }
+
+        // Show resign button
+        const resignBtn = document.getElementById('resign-button');
+        if (resignBtn) resignBtn.style.display = 'inline-block';
     }
 
     endMultiplayerGame() {
@@ -362,6 +447,10 @@ class MultiplayerClient {
 
         // Show players display
         this.updatePlayersDisplay();
+
+        // Show resign button
+        const resignBtn = document.getElementById('resign-button');
+        if (resignBtn) resignBtn.style.display = 'inline-block';
     }
 
     updatePlayersDisplay() {

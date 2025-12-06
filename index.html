@@ -69,14 +69,6 @@
             <!-- Multiplayer Lobby Section (hidden by default) -->
             <div class="sidebar-section" id="multiplayer-section" style="display: none;">
                 <h3>Multiplayer Lobbies</h3>
-                <div class="settings-group">
-                    <label for="max-players-input">Max Players:</label>
-                    <select id="max-players-input">
-                        <option value="2">2 Players</option>
-                        <option value="3">3 Players</option>
-                        <option value="4" selected>4 Players</option>
-                    </select>
-                </div>
                 <button id="create-lobby-button" class="sidebar-button">Create Lobby</button>
                 <button id="refresh-lobbies-button" class="sidebar-button">Refresh Lobbies</button>
                 <div id="lobbies-list">
@@ -141,6 +133,7 @@
                 <div id="game-board"></div>
                 <div id="status"></div>
                 <div id="game-controls">
+                    <button id="resign-button" style="display: none;">Resign</button>
                     <button id="rematch-button">Request Rematch</button>
                 </div>
             </div>

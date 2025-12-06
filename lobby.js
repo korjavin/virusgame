@@ -28,7 +28,6 @@ class LobbyManager {
         this.createLobbyBtn = document.getElementById('create-lobby-button');
         this.refreshLobbiesBtn = document.getElementById('refresh-lobbies-button');
         this.lobbiesList = document.getElementById('lobbies-list');
-        this.maxPlayersInput = document.getElementById('max-players-input');
 
         // Current lobby controls
         this.lobbyDetails = document.getElementById('lobby-details');
@@ -85,13 +84,12 @@ class LobbyManager {
     createLobby() {
         const rows = parseInt(document.getElementById('rows-input').value) || 10;
         const cols = parseInt(document.getElementById('cols-input').value) || 10;
-        const maxPlayers = parseInt(this.maxPlayersInput.value) || 4;
 
         this.mpClient.send({
             type: 'create_lobby',
             rows: rows,
             cols: cols,
-            maxPlayers: maxPlayers
+            maxPlayers: 4  // Always create 4-slot lobbies
         });
     }
 
@@ -139,6 +137,14 @@ class LobbyManager {
         this.currentLobby = msg.lobby;
         this.isInLobby = true;
         this.isHost = true;
+        this.showLobbyView();
+        this.updateLobbyDisplay();
+    }
+
+    handleLobbyJoined(msg) {
+        this.currentLobby = msg.lobby;
+        this.isInLobby = true;
+        this.isHost = false;  // Not the host, just a player
         this.showLobbyView();
         this.updateLobbyDisplay();
     }

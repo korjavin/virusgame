@@ -1,5 +1,5 @@
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
-let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting;
+let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting, resignButton;
 let player1NeutralsUsed = false;
 let player2NeutralsUsed = false;
 let neutralMode = false;
@@ -286,15 +286,28 @@ function handleCellClick(event) {
                 if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
                     mpClient.sendNeutrals(window.neutralCells);
                     window.neutralCells = [];
+                    // Don't call endTurn() in multiplayer - server handles it
+                } else {
+                    // Local mode only
+                    endTurn();
                 }
-
-                endTurn();
             }
         }
         return;
     }
 
     if (movesLeft > 0 && isValidMove(row, col, currentPlayer)) {
+        // In multiplayer mode, send to server and wait for response
+        if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+            mpClient.sendMove(row, col);
+            // Don't apply locally - wait for server's move_made message
+            // Optimistically decrement to prevent spam clicks
+            movesLeft--;
+            updateStatus();
+            return;
+        }
+
+        // Local mode only - apply move locally
         const cellValue = board[row][col];
 
         if (cellValue === null) {
@@ -315,13 +328,8 @@ function handleCellClick(event) {
             }
         }
 
+        // Local mode only - manage movesLeft locally
         movesLeft--;
-
-        // Send move to server in multiplayer
-        if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
-            mpClient.sendMove(row, col);
-        }
-
         renderBoard();
 
         if (!canMakeMove(currentPlayer)) {
@@ -339,6 +347,22 @@ function handleCellClick(event) {
     }
 }
 
+function handleResign() {
+    if (gameOver) return;
+
+    // Multiplayer mode - send resign to server
+    if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+        mpClient.sendResign();
+        return;
+    }
+
+    // Local mode - current player loses
+    gameOver = true;
+    const winner = currentPlayer === 1 ? 2 : 1;
+    statusDisplay.textContent = `Player ${currentPlayer} resigned. Player ${winner} wins!`;
+    if (resignButton) resignButton.style.display = 'none';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     gameBoard = document.getElementById('game-board');
     statusDisplay = document.getElementById('status');
@@ -351,6 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
     aiTimeInput = document.getElementById('ai-time-input');
     aiTimeSetting = document.getElementById('ai-time-setting');
     putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
+    resignButton = document.getElementById('resign-button');
 
     // Show/hide AI depth setting and tuning based on AI checkbox
     aiEnabledCheckbox.addEventListener('change', () => {
@@ -453,6 +478,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (putNeutralsButton && countNonFortifiedCells(1) < 2) {
             putNeutralsButton.disabled = true;
         }
+
+        // Show resign button for local games
+        if (resignButton) {
+            resignButton.style.display = 'inline-block';
+        }
     }
 
     newGameButton.addEventListener('click', initGame);
@@ -471,6 +501,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     gameBoard.addEventListener('click', handleCellClick);
+
+    // Resign button handler
+    if (resignButton) {
+        resignButton.addEventListener('click', handleResign);
+    }
 
     // Initial game start
     initGame();
