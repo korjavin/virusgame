@@ -23,6 +23,7 @@ type Message struct {
 	Col          *int        `json:"col,omitempty"`
 	Player       int         `json:"player,omitempty"`
 	Winner       int         `json:"winner,omitempty"`
+	MovesLeft    int         `json:"movesLeft,omitempty"`
 	Users        []UserInfo  `json:"users,omitempty"`
 	Cells        []CellPos   `json:"cells,omitempty"`
 	// Lobby fields
@@ -116,6 +117,7 @@ type Game struct {
 	PlayerBases   [4]CellPos       // Bases for each player
 	NeutralsUsed  [4]bool          // Track neutrals usage
 	ActivePlayers int              // Number of active players
+	MoveTimer     *time.Timer      // Timer for auto-resign after 120 seconds
 }
 
 // Lobby represents a multiplayer game lobby
