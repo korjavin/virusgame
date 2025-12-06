@@ -201,6 +201,11 @@ class MultiplayerClient {
         currentPlayer = msg.player;
         movesLeft = 3;
         updateStatus();
+
+        // Update players display in multiplayer mode
+        if (this.isMultiplayerGame) {
+            this.updatePlayersDisplay();
+        }
     }
 
     handleGameEnd(msg) {
@@ -558,6 +563,9 @@ function initGameMultiplayerMode(rowsVal, colsVal, gamePlayers, yourPlayerIndex)
         { row: 0, col: cols - 1 },         // Player 3: top-right
         { row: rows - 1, col: 0 }          // Player 4: bottom-left
     ];
+
+    // Initialize playerBases array
+    playerBases = basePositions;
 
     // Set bases for active players
     gamePlayers.forEach(player => {

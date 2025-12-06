@@ -4,9 +4,23 @@ let player1NeutralsUsed = false;
 let player2NeutralsUsed = false;
 let neutralMode = false;
 let neutralsPlaced = 0;
+// Multiplayer mode variables
+let playerBases = []; // Array of {row, col} for each player
 
 function isConnectedToBase(startRow, startCol, player) {
-    const base = player === 1 ? player1Base : player2Base;
+    let base;
+    if (typeof mpClient !== 'undefined' && mpClient.isMultiplayerGame) {
+        // Multiplayer mode - use playerBases array
+        if (playerBases[player - 1]) {
+            base = playerBases[player - 1];
+        } else {
+            return false;
+        }
+    } else {
+        // 1v1 mode - use player1Base or player2Base
+        base = player === 1 ? player1Base : player2Base;
+    }
+
     const visited = new Set();
     const stack = [{ row: startRow, col: startCol }];
     visited.add(`${startRow},${startCol}`);
@@ -43,11 +57,15 @@ function isValidMove(row, col, player) {
         return false; // Cannot attack fortified or base cells
     }
 
-    const opponent = player === 1 ? 2 : 1;
-    if (cellValue !== null && !String(cellValue).startsWith(opponent)) {
-        return false; // Not an empty or opponent cell
+    // Check if cell is empty or belongs to an opponent
+    if (cellValue !== null) {
+        const cellStr = String(cellValue);
+        if (cellStr.startsWith(player.toString())) {
+            return false; // Cannot place on own cell
+        }
     }
 
+    // Check if adjacent to own territory connected to base
     for (let i = -1; i <= 1; i++) {
         for (let j = -1; j <= 1; j++) {
             if (i === 0 && j === 0) continue;
