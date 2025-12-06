@@ -6,7 +6,6 @@ import (
 	"math"
 	"sort"
 	"strings"
-	"time"
 )
 
 const (
@@ -685,11 +684,11 @@ func (h *Hub) applyBotMove(game *Game, row, col, player int) {
 		h.endTurn(game)
 	} else {
 		// Bot makes another move (has 3 moves per turn)
-		time.AfterFunc(500*time.Millisecond, func() {
+		go func() {
 			if !game.GameOver && game.CurrentPlayer == player {
 				h.makeBotMove(game, player)
 			}
-		})
+		}()
 	}
 
 	// Check win condition
