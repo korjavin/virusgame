@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -218,7 +219,7 @@ func (h *Hub) evaluateBoard(game *Game, board [][]interface{}, aiPlayer int) flo
 				if cellStr[0] == byte('0'+aiPlayer) {
 					// AI cell
 					aiCells++
-					if len(cellStr) > 2 && cellStr[len(cellStr)-9:] == "fortified" {
+					if strings.HasSuffix(cellStr, "-fortified") {
 						aiFortified++
 					}
 
@@ -249,7 +250,7 @@ func (h *Hub) evaluateBoard(game *Game, board [][]interface{}, aiPlayer int) flo
 				} else {
 					// Opponent cell
 					opponentCells++
-					if len(cellStr) > 2 && cellStr[len(cellStr)-9:] == "fortified" {
+					if strings.HasSuffix(cellStr, "-fortified") {
 						opponentFortified++
 					}
 
@@ -344,7 +345,7 @@ func (h *Hub) scoreMoveQuick(game *Game, move BotMove, player int) float64 {
 
 		if isOpponentCell {
 			score += 1000.0
-			if len(cellStr) > 2 && cellStr[len(cellStr)-9:] == "fortified" {
+			if strings.HasSuffix(cellStr, "-fortified") {
 				score += 500.0
 			}
 		}
@@ -426,8 +427,8 @@ func (h *Hub) isValidMoveOnBoard(game *Game, board [][]interface{}, row, col, pl
 	cellStr := fmt.Sprintf("%v", cell)
 
 	// Cannot move on fortified or base cells
-	if cell != nil && len(cellStr) > 2 {
-		if cellStr[len(cellStr)-9:] == "fortified" || cellStr[len(cellStr)-4:] == "base" {
+	if cell != nil {
+		if strings.HasSuffix(cellStr, "-fortified") || strings.HasSuffix(cellStr, "-base") {
 			return false
 		}
 	}
