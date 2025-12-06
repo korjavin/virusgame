@@ -131,16 +131,29 @@ function updateStatus() {
     // Multiplayer mode status
     if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
         const isYourTurn = currentPlayer === mpClient.yourPlayer;
-        const playerSymbol = mpClient.yourPlayer === 1 ? 'X' : 'O';
+        const playerSymbol = mpClient.playerSymbol || playerSymbols[mpClient.yourPlayer - 1];
 
         if (neutralMode) {
             statusDisplay.textContent = i18n.t('placeNeutral', { count: 2 - neutralsPlaced });
             if (statusDisplay) statusDisplay.classList.add('your-turn');
         } else if (isYourTurn) {
-            statusDisplay.textContent = i18n.t('yourTurn', { symbol: playerSymbol, opponent: mpClient.opponentUsername, moves: movesLeft });
+            if (mpClient.isMultiplayerGame) {
+                // Multiplayer 3-4 players mode
+                statusDisplay.textContent = `Your turn as ${playerSymbol}! (${movesLeft} moves left)`;
+            } else {
+                // 1v1 mode
+                statusDisplay.textContent = i18n.t('yourTurn', { symbol: playerSymbol, opponent: mpClient.opponentUsername, moves: movesLeft });
+            }
             if (statusDisplay) statusDisplay.classList.add('your-turn');
         } else {
-            statusDisplay.textContent = i18n.t('opponentTurn', { opponent: mpClient.opponentUsername });
+            if (mpClient.isMultiplayerGame) {
+                // Multiplayer 3-4 players mode
+                const currentPlayerName = mpClient.getPlayerName(currentPlayer);
+                statusDisplay.textContent = `${currentPlayerName}'s turn (${playerSymbols[currentPlayer - 1]})...`;
+            } else {
+                // 1v1 mode
+                statusDisplay.textContent = i18n.t('opponentTurn', { opponent: mpClient.opponentUsername });
+            }
             if (statusDisplay) statusDisplay.classList.remove('your-turn');
         }
         return;
@@ -282,13 +295,20 @@ function handleCellClick(event) {
     }
 
     if (movesLeft > 0 && isValidMove(row, col, currentPlayer)) {
-        const opponent = currentPlayer === 1 ? 2 : 1;
         const cellValue = board[row][col];
 
         if (cellValue === null) {
+            // Place on empty cell
             board[row][col] = currentPlayer;
-        } else if (String(cellValue).startsWith(opponent)) {
-            board[row][col] = `${currentPlayer}-fortified`;
+        } else {
+            // Attack opponent's cell - convert and fortify it
+            const cellStr = String(cellValue);
+            // Check if it's opponent's cell (not our own)
+            if (!cellStr.startsWith(currentPlayer.toString())) {
+                board[row][col] = `${currentPlayer}-fortified`;
+            } else {
+                return; // Can't attack own cell
+            }
         }
 
         movesLeft--;
