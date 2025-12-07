@@ -1,14 +1,14 @@
-# WebAssembly AI Implementation
+# WebAssembly AI Implementation (Experimental/Unused)
 
-This directory contains the Go implementation of the Virus Game AI, compiled to WebAssembly for improved performance.
+**⚠️ Note: This module is currently not in active use in the production build. The project relies on the JavaScript implementation for AI logic.**
 
-## Performance Improvement
+This directory contains the Go implementation of the Virus Game AI, compiled to WebAssembly.
+
+## Performance Improvement (When Enabled)
 
 The WASM implementation provides **3-10x faster** AI calculations compared to JavaScript:
 - At depth 3-4: ~3-5x faster
 - At depth 5-6: ~5-10x faster
-
-This allows for higher AI depths with acceptable response times.
 
 ## Building
 
@@ -34,7 +34,7 @@ The WASM module is built automatically in the multi-stage Dockerfile:
 ### Go Implementation (`ai.go`)
 
 - **Minimax with Alpha-Beta Pruning**: Same algorithm as JavaScript version
-- **Board Evaluation**: 4 criteria (material, mobility, position, attacks)
+- **Board Evaluation**: 8 tunable criteria (material, mobility, position, attacks, redundancy, defensibility, etc.)
 - **Move Validation**: Includes base connectivity checks
 - **Progress Callbacks**: Updates UI during long calculations
 
@@ -52,33 +52,3 @@ The WASM module is built automatically in the multi-stage Dockerfile:
 - `build.sh` - Local build script
 - `../ai-wasm.js` - JavaScript glue code
 - `../wasm_exec.js` - Go WASM runtime (from Go stdlib)
-
-## Usage
-
-The WASM AI is automatically used when available. Check console for:
-
-```
-Loading WASM AI module...
-WASM AI module loaded successfully!
-Using WASM AI (depth: 3)
-WASM AI took: 45.23 ms
-```
-
-If WASM fails to load, it automatically falls back to JavaScript:
-
-```
-Failed to load WASM AI module: ...
-Falling back to JavaScript AI
-Using JavaScript AI (depth: 3)
-JS AI took: 234.56 ms
-```
-
-## Browser Compatibility
-
-WebAssembly is supported in:
-- Chrome 57+
-- Firefox 52+
-- Safari 11+
-- Edge 16+
-
-Older browsers will automatically use the JavaScript implementation.

@@ -3,7 +3,7 @@
 
 // Default search depth - controls how many moves ahead AI thinks
 // Higher = smarter but slower. Recommended: 2-4
-let aiDepth = 3;
+let aiDepth = 4;
 
 // Time limit for AI search (milliseconds) - 0 means use fixed depth
 let aiTimeLimit = 5000; // 5 seconds default

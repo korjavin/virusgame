@@ -1,196 +1,75 @@
 # Multiplayer Architecture
 
 ## Overview
-The multiplayer system uses WebSockets to enable real-time gameplay between users. The Go backend manages user connections, game sessions, and move synchronization.
+The multiplayer system uses WebSockets to enable real-time gameplay between users. It supports two distinct modes of play:
+1.  **Direct Challenge (1v1)**: Quick duel requests between two online users.
+2.  **Lobby System (2-4 Players)**: Hosted rooms where multiple players can join, with optional AI bots to fill empty slots.
 
 ## Architecture
 
 ### Backend (Go + WebSockets)
-- **WebSocket Server**: Handles all client connections
-- **User Manager**: Tracks online users with random generated names
-- **Challenge System**: Manages game challenges between users
-- **Game Session Manager**: Handles active game state and move validation
-- **Move Synchronization**: Broadcasts moves between players in real-time
+-   **WebSocket Server**: Handles persistent client connections (`client.go`).
+-   **Hub**: The central message router (`hub.go`). Manages:
+    -   **User List**: Tracks online users and their status (In Lobby, In Game).
+    -   **Challenges**: Handles 1v1 requests.
+    -   **Lobbies**: Manages creation, joining, and state of game rooms (`Lobby` struct).
+    -   **Game Sessions**: Authoritative game state for active matches.
+-   **Move Synchronization**: Validates and broadcasts moves to all players in a session.
 
 ### Frontend (JavaScript)
-- **WebSocket Client**: Connects to backend server
-- **Online Users UI**: Displays list of available players (left sidebar)
-- **Challenge Notifications**: Shows incoming/outgoing challenges
-- **Multiplayer Game Mode**: Replaces local game logic with networked moves
-- **Rematch System**: Allows players to quickly start new games
+-   **`multiplayer.js`**: Core WebSocket client. Handles connection, message dispatching, and game state updates.
+-   **`lobby.js`**: Manages the UI and logic for the lobby system (creating rooms, adding bots, starting games).
+-   **`script.js`**: renders the game board and handles user input, delegating to `multiplayer.js` when in online mode.
+
+## Lobby System
+The lobby system allows for flexible 2-4 player games.
+-   **Host**: The user who creates the lobby controls settings (board size) and game start.
+-   **Slots**: Lobbies have 4 slots.
+-   **Bots**: The host can fill empty slots with AI bots.
+-   **Ready State**: The game begins when the host initiates it (usually requiring >1 player).
 
 ## Message Protocol
 
-### Client → Server
+Communication uses JSON payloads over WebSockets.
 
-```json
-// User connects (automatic on WebSocket connection)
-{
-  "type": "connect"
-}
+### Key Message Types
 
-// Challenge another user
-{
-  "type": "challenge",
-  "targetUserId": "user123"
-}
+#### Connection & Status
+-   `connect`: Initial handshake.
+-   `welcome`: Server assigns identity (User ID, Name).
+-   `users_update`: Broadcast of online player list.
 
-// Accept a challenge
-{
-  "type": "accept_challenge",
-  "challengeId": "challenge456"
-}
+#### Lobbies
+-   `create_lobby`: Client requests a new room.
+-   `join_lobby`: Client requests to join a specific room.
+-   `leave_lobby`: Client exits current room.
+-   `add_bot` / `remove_bot`: Host manages AI participants.
+-   `start_multiplayer_game`: Host triggers transition from Lobby to Game.
 
-// Decline a challenge
-{
-  "type": "decline_challenge",
-  "challengeId": "challenge456"
-}
+#### Gameplay
+-   `move`: Player sends `{row, col}`.
+-   `move_made`: Server broadcasts confirmed move to all players.
+-   `game_start`: Transition to game view, provides initial board and player assignments.
+-   `game_end`: Announcements of winner/elimination.
 
-// Make a move
-{
-  "type": "move",
-  "gameId": "game789",
-  "row": 2,
-  "col": 3
-}
+#### Direct Challenge (Legacy/Quick)
+-   `challenge`: Target a specific user.
+-   `accept_challenge` / `decline_challenge`: Response.
 
-// Place neutral fields
-{
-  "type": "neutrals",
-  "gameId": "game789",
-  "cells": [{row: 1, col: 1}, {row: 1, col: 2}]
-}
+## Game Flow (Lobby)
 
-// Request rematch
-{
-  "type": "rematch",
-  "gameId": "game789"
-}
-```
-
-### Server → Client
-
-```json
-// Welcome message with user ID and name
-{
-  "type": "welcome",
-  "userId": "user123",
-  "username": "BraveOctopus42"
-}
-
-// Online users list update
-{
-  "type": "users_update",
-  "users": [
-    {"userId": "user123", "username": "BraveOctopus42"},
-    {"userId": "user456", "username": "CleverTiger88"}
-  ]
-}
-
-// Incoming challenge notification
-{
-  "type": "challenge_received",
-  "challengeId": "challenge456",
-  "fromUserId": "user123",
-  "fromUsername": "BraveOctopus42"
-}
-
-// Challenge accepted
-{
-  "type": "game_start",
-  "gameId": "game789",
-  "opponentId": "user456",
-  "opponentUsername": "CleverTiger88",
-  "yourPlayer": 1,
-  "rows": 10,
-  "cols": 10
-}
-
-// Challenge declined
-{
-  "type": "challenge_declined",
-  "challengeId": "challenge456"
-}
-
-// Opponent made a move
-{
-  "type": "move_made",
-  "gameId": "game789",
-  "row": 2,
-  "col": 3,
-  "player": 2
-}
-
-// Game ended
-{
-  "type": "game_end",
-  "gameId": "game789",
-  "winner": 1
-}
-
-// Rematch request received
-{
-  "type": "rematch_received",
-  "gameId": "game789",
-  "fromUserId": "user456"
-}
-```
-
-## Game Flow
-
-1. **User Connection**
-   - User opens page → WebSocket connects to server
-   - Server assigns random name (e.g., "BraveOctopus42")
-   - Server sends welcome message with userId and username
-   - Server broadcasts updated user list to all clients
-
-2. **Challenge Flow**
-   - User A clicks on User B in online list
-   - Challenge dialog appears, User A confirms
-   - Server sends challenge notification to User B
-   - User B can accept or decline
-   - If accepted, server creates game session and notifies both players
-
-3. **Gameplay**
-   - Game starts with initial board state
-   - Players take turns making moves
-   - Each move is sent to server, validated, and broadcast to opponent
-   - Server maintains authoritative game state
-   - Win condition checked after each turn
-
-4. **Rematch**
-   - After game ends, "Rematch" button appears
-   - Clicking sends rematch request to opponent
-   - If opponent accepts, new game session starts
-   - If opponent declines or doesn't respond, player returns to lobby
-
-## Backend Components
-
-### User
-- `ID`: Unique identifier
-- `Username`: Random generated name
-- `Connection`: WebSocket connection
-- `InGame`: Boolean flag
-
-### Challenge
-- `ID`: Unique identifier
-- `FromUser`: Challenger user ID
-- `ToUser`: Challenged user ID
-- `Timestamp`: Creation time
-
-### Game
-- `ID`: Unique identifier
-- `Player1`: User ID
-- `Player2`: User ID
-- `Board`: Game state (2D array)
-- `CurrentPlayer`: 1 or 2
-- `MovesLeft`: Remaining moves in turn
-- `GameOver`: Boolean flag
-- `Winner`: Player number or 0
+1.  **Creation**: User A clicks "Create Lobby". Server creates a `Lobby` object and adds User A as Player 1 (Host).
+2.  **Joining**: User B sees the lobby in the list and joins. Server adds User B as Player 2.
+3.  **Bot Setup**: Host adds a bot. Server marks Player 3 as a Bot.
+4.  **Start**: Host clicks "Start".
+    -   Server instantiates a `Game` object.
+    -   Server sends `game_start` to User A and User B.
+    -   Server initializes Bot AI for Player 3.
+5.  **Play**:
+    -   Turns rotate P1 -> P2 -> P3 -> ...
+    -   Server validates moves.
+    -   Server calculates Bot moves when it's their turn.
 
 ## Random Name Generation
 
-Names are generated using the pattern: `[Adjective][Animal][Number]`
-- Examples: BraveOctopus42, CleverTiger88, WildPhoenix15
-- Ensures uniqueness with number suffix
+Names are generated server-side using `[Adjective][Animal][Number]` (e.g., "WildPhoenix15") to ensure friendly, unique identifiers.

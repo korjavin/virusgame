@@ -43,7 +43,7 @@ COPY --from=wasm-builder /wasm/ai.wasm ./wasm/
 
 # Copy all frontend files (HTML, CSS, JS)
 COPY index.html style.css favicon.jpg ./
-COPY script.js ai.js ai-wasm.js multiplayer.js tutorial.js translations.js wasm_exec.js ./
+COPY script.js ai.js ai-wasm.js multiplayer.js lobby.js tutorial.js translations.js wasm_exec.js ./
 COPY DOCS.md README.md ./
 
 # Add build argument for commit SHA

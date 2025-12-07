@@ -29,6 +29,15 @@
             <div id="connection-status" class="disconnected">Connecting...</div>
             <div id="welcome-message">Connecting...</div>
 
+            <!-- Game Mode Selector -->
+            <div class="sidebar-section">
+                <h3>Game Mode</h3>
+                <div class="game-mode-toggle">
+                    <button id="mode-1v1" class="mode-button active">1v1</button>
+                    <button id="mode-multiplayer" class="mode-button">Multiplayer</button>
+                </div>
+            </div>
+
             <!-- Game settings -->
             <div class="sidebar-section">
                 <h3>Game Settings</h3>
@@ -40,7 +49,7 @@
                     <label for="cols-input">Cols:</label>
                     <input type="number" id="cols-input" value="10" min="5" max="50">
                 </div>
-                <div class="settings-group">
+                <div class="settings-group" id="ai-enabled-group">
                     <label for="ai-enabled">
                         <input type="checkbox" id="ai-enabled">
                         vs AI
@@ -55,6 +64,25 @@
                     <input type="number" id="ai-time-input" value="5000" min="0" max="60000" step="1000" title="0 = fixed depth, >0 = iterative deepening with time limit">
                 </div>
                 <button id="new-game-button" class="sidebar-button">New Local Game</button>
+            </div>
+
+            <!-- Multiplayer Lobby Section (hidden by default) -->
+            <div class="sidebar-section" id="multiplayer-section" style="display: none;">
+                <h3>Multiplayer Lobbies</h3>
+                <button id="create-lobby-button" class="sidebar-button">Create Lobby</button>
+                <button id="refresh-lobbies-button" class="sidebar-button">Refresh Lobbies</button>
+                <div id="lobbies-list">
+                    <div class="no-lobbies">No lobbies available</div>
+                </div>
+            </div>
+
+            <!-- Current Lobby View (hidden by default) -->
+            <div class="sidebar-section" id="current-lobby-section" style="display: none;">
+                <h3>Lobby</h3>
+                <div id="lobby-details"></div>
+                <button id="leave-lobby-button" class="sidebar-button">Leave Lobby</button>
+                <button id="add-bot-button" class="sidebar-button" style="display: none;">Add Bot</button>
+                <button id="start-game-button" class="sidebar-button" style="display: none;">Start Game</button>
             </div>
 
             <!-- AI Tuning (collapsible) -->
@@ -105,6 +133,7 @@
                 <div id="game-board"></div>
                 <div id="status"></div>
                 <div id="game-controls">
+                    <button id="resign-button" style="display: none;">Resign</button>
                     <button id="rematch-button">Request Rematch</button>
                 </div>
             </div>
@@ -198,6 +227,7 @@
     <script src="script.js?v=2.7"></script>
     <script src="ai.js?v=2.7"></script>
     <script src="multiplayer.js?v=2.7"></script>
+    <script src="lobby.js?v=2.7"></script>
     <script src="tutorial.js?v=2.7"></script>
     <script>
         // Theme toggle
@@ -251,6 +281,8 @@
         // Initialize multiplayer on page load
         document.addEventListener('DOMContentLoaded', () => {
             mpClient.connect();
+            // Initialize lobby manager
+            lobbyManager = new LobbyManager(mpClient);
         });
 
         // Handle rematch button

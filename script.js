@@ -1,12 +1,26 @@
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
-let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting;
+let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting, resignButton;
 let player1NeutralsUsed = false;
 let player2NeutralsUsed = false;
 let neutralMode = false;
 let neutralsPlaced = 0;
+// Multiplayer mode variables
+let playerBases = []; // Array of {row, col} for each player
 
 function isConnectedToBase(startRow, startCol, player) {
-    const base = player === 1 ? player1Base : player2Base;
+    let base;
+    if (typeof mpClient !== 'undefined' && mpClient.isMultiplayerGame) {
+        // Multiplayer mode - use playerBases array
+        if (playerBases[player - 1]) {
+            base = playerBases[player - 1];
+        } else {
+            return false;
+        }
+    } else {
+        // 1v1 mode - use player1Base or player2Base
+        base = player === 1 ? player1Base : player2Base;
+    }
+
     const visited = new Set();
     const stack = [{ row: startRow, col: startCol }];
     visited.add(`${startRow},${startCol}`);
@@ -43,11 +57,15 @@ function isValidMove(row, col, player) {
         return false; // Cannot attack fortified or base cells
     }
 
-    const opponent = player === 1 ? 2 : 1;
-    if (cellValue !== null && !String(cellValue).startsWith(opponent)) {
-        return false; // Not an empty or opponent cell
+    // Check if cell is empty or belongs to an opponent
+    if (cellValue !== null) {
+        const cellStr = String(cellValue);
+        if (cellStr.startsWith(player.toString())) {
+            return false; // Cannot place on own cell
+        }
     }
 
+    // Check if adjacent to own territory connected to base
     for (let i = -1; i <= 1; i++) {
         for (let j = -1; j <= 1; j++) {
             if (i === 0 && j === 0) continue;
@@ -65,6 +83,8 @@ function isValidMove(row, col, player) {
     return false;
 }
 
+const playerSymbols = ['X', 'O', '△', '□'];
+
 function renderBoard() {
     gameBoard.innerHTML = '';
     gameBoard.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
@@ -77,25 +97,22 @@ function renderBoard() {
             cell.dataset.col = j;
 
             const cellValue = board[i][j];
-            if (cellValue === 1) {
-                cell.classList.add('player1');
-                cell.textContent = 'X';
-            } else if (cellValue === 2) {
-                cell.classList.add('player2');
-                cell.textContent = 'O';
-            } else if (cellValue === '1-fortified') {
-                cell.classList.add('player1-fortified');
-                cell.textContent = 'X';
-            } else if (cellValue === '2-fortified') {
-                cell.classList.add('player2-fortified');
-                cell.textContent = 'O';
-            } else if (cellValue === '1-base') {
-                cell.classList.add('player1-base');
-                cell.textContent = 'X';
-            } else if (cellValue === '2-base') {
-                cell.classList.add('player2-base');
-                cell.textContent = 'O';
-            } else if (cellValue === 'killed') {
+
+            // Handle player cells (1, 2, 3, 4)
+            for (let p = 1; p <= 4; p++) {
+                if (cellValue === p) {
+                    cell.classList.add(`player${p}`);
+                    cell.textContent = playerSymbols[p - 1];
+                } else if (cellValue === `${p}-fortified`) {
+                    cell.classList.add(`player${p}-fortified`);
+                    cell.textContent = playerSymbols[p - 1];
+                } else if (cellValue === `${p}-base`) {
+                    cell.classList.add(`player${p}-base`);
+                    cell.textContent = playerSymbols[p - 1];
+                }
+            }
+
+            if (cellValue === 'killed') {
                 cell.classList.add('killed');
             }
 
@@ -114,16 +131,29 @@ function updateStatus() {
     // Multiplayer mode status
     if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
         const isYourTurn = currentPlayer === mpClient.yourPlayer;
-        const playerSymbol = mpClient.yourPlayer === 1 ? 'X' : 'O';
+        const playerSymbol = mpClient.playerSymbol || playerSymbols[mpClient.yourPlayer - 1];
 
         if (neutralMode) {
             statusDisplay.textContent = i18n.t('placeNeutral', { count: 2 - neutralsPlaced });
             if (statusDisplay) statusDisplay.classList.add('your-turn');
         } else if (isYourTurn) {
-            statusDisplay.textContent = i18n.t('yourTurn', { symbol: playerSymbol, opponent: mpClient.opponentUsername, moves: movesLeft });
+            if (mpClient.isMultiplayerGame) {
+                // Multiplayer 3-4 players mode
+                statusDisplay.textContent = `Your turn as ${playerSymbol}! (${movesLeft} moves left)`;
+            } else {
+                // 1v1 mode
+                statusDisplay.textContent = i18n.t('yourTurn', { symbol: playerSymbol, opponent: mpClient.opponentUsername, moves: movesLeft });
+            }
             if (statusDisplay) statusDisplay.classList.add('your-turn');
         } else {
-            statusDisplay.textContent = i18n.t('opponentTurn', { opponent: mpClient.opponentUsername });
+            if (mpClient.isMultiplayerGame) {
+                // Multiplayer 3-4 players mode
+                const currentPlayerName = mpClient.getPlayerName(currentPlayer);
+                statusDisplay.textContent = `${currentPlayerName}'s turn (${playerSymbols[currentPlayer - 1]})...`;
+            } else {
+                // 1v1 mode
+                statusDisplay.textContent = i18n.t('opponentTurn', { opponent: mpClient.opponentUsername });
+            }
             if (statusDisplay) statusDisplay.classList.remove('your-turn');
         }
         return;
@@ -194,9 +224,7 @@ function checkWinCondition() {
         if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
             const youWon = winner === mpClient.yourPlayer;
             statusDisplay.textContent = youWon ? i18n.t('youWin') : i18n.t('youLose');
-            // Show rematch button
-            const rematchBtn = document.getElementById('rematch-button');
-            if (rematchBtn) rematchBtn.style.display = 'block';
+            // Don't show rematch button in multiplayer (doesn't work)
         } else {
             // Local mode
             statusDisplay.textContent = i18n.t('playerWins', { player: winner });
@@ -256,31 +284,50 @@ function handleCellClick(event) {
                 if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
                     mpClient.sendNeutrals(window.neutralCells);
                     window.neutralCells = [];
+                    // Don't call endTurn() in multiplayer - server handles it
+                } else {
+                    // Local mode only
+                    endTurn();
                 }
-
-                endTurn();
             }
         }
         return;
     }
 
     if (movesLeft > 0 && isValidMove(row, col, currentPlayer)) {
-        const opponent = currentPlayer === 1 ? 2 : 1;
+        // In multiplayer mode, send to server and wait for response
+        if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+            mpClient.sendMove(row, col);
+            // Don't apply locally - wait for server's move_made message
+            // Optimistically decrement to prevent spam clicks
+            movesLeft--;
+            updateStatus();
+            return;
+        }
+
+        // Local mode only - apply move locally
         const cellValue = board[row][col];
 
         if (cellValue === null) {
+            // Place on empty cell - just the number, not fortified
             board[row][col] = currentPlayer;
-        } else if (String(cellValue).startsWith(opponent)) {
-            board[row][col] = `${currentPlayer}-fortified`;
+        } else {
+            // Attacking opponent's cell - it becomes ours and fortified
+            // This should only happen if it's a non-fortified, non-base opponent cell
+            const cellStr = String(cellValue);
+
+            // Check it's opponent's non-fortified cell
+            if (!cellStr.includes('fortified') && !cellStr.includes('base') &&
+                !cellStr.startsWith(currentPlayer.toString())) {
+                // Capture it and make it fortified
+                board[row][col] = `${currentPlayer}-fortified`;
+            } else {
+                return; // Invalid attack
+            }
         }
 
+        // Local mode only - manage movesLeft locally
         movesLeft--;
-
-        // Send move to server in multiplayer
-        if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
-            mpClient.sendMove(row, col);
-        }
-
         renderBoard();
 
         if (!canMakeMove(currentPlayer)) {
@@ -298,6 +345,22 @@ function handleCellClick(event) {
     }
 }
 
+function handleResign() {
+    if (gameOver) return;
+
+    // Multiplayer mode - send resign to server
+    if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+        mpClient.sendResign();
+        return;
+    }
+
+    // Local mode - current player loses
+    gameOver = true;
+    const winner = currentPlayer === 1 ? 2 : 1;
+    statusDisplay.textContent = `Player ${currentPlayer} resigned. Player ${winner} wins!`;
+    if (resignButton) resignButton.style.display = 'none';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     gameBoard = document.getElementById('game-board');
     statusDisplay = document.getElementById('status');
@@ -310,6 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
     aiTimeInput = document.getElementById('ai-time-input');
     aiTimeSetting = document.getElementById('ai-time-setting');
     putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
+    resignButton = document.getElementById('resign-button');
 
     // Show/hide AI depth setting and tuning based on AI checkbox
     aiEnabledCheckbox.addEventListener('change', () => {
@@ -412,6 +476,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (putNeutralsButton && countNonFortifiedCells(1) < 2) {
             putNeutralsButton.disabled = true;
         }
+
+        // Show resign button for local games
+        if (resignButton) {
+            resignButton.style.display = 'inline-block';
+        }
     }
 
     newGameButton.addEventListener('click', initGame);
@@ -430,6 +499,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     gameBoard.addEventListener('click', handleCellClick);
+
+    // Resign button handler
+    if (resignButton) {
+        resignButton.addEventListener('click', handleResign);
+    }
 
     // Initial game start
     initGame();
