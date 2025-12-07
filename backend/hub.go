@@ -445,9 +445,14 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 	}
 	h.broadcastToGame(game, &moveMsg)
 
-	// Check if turn is over
-	if game.MovesLeft == 0 {
-		log.Printf("Turn ending for game %s, calling endTurn()", game.ID)
+	// Check if turn is over OR if player has no more valid moves
+	hasValidMoves := h.canMakeAnyMove(game, playerNum)
+	if game.MovesLeft == 0 || !hasValidMoves {
+		if !hasValidMoves && game.MovesLeft > 0 {
+			log.Printf("Player %d has no more valid moves (had %d moves left), ending turn early", playerNum, game.MovesLeft)
+		} else {
+			log.Printf("Turn ending for game %s, calling endTurn()", game.ID)
+		}
 		h.endTurn(game)
 	}
 
@@ -757,12 +762,11 @@ func (h *Hub) isValidMove(game *Game, row, col, player int) bool {
 		}
 	}
 
-	opponent := 3 - player
-
-	// Must be empty or opponent cell
+	// Must be empty or opponent cell (not own cell)
 	if cellValue != nil {
 		cellStr := fmt.Sprintf("%v", cellValue)
-		if len(cellStr) > 0 && cellStr[0] != byte('0'+opponent) {
+		// If cell belongs to this player, it's not a valid target
+		if len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
 			return false
 		}
 	}
