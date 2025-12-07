@@ -42,6 +42,10 @@ func newHub() *Hub {
 }
 
 func (h *Hub) run() {
+	// Periodic cleanup ticker - runs every 5 minutes
+	cleanupTicker := time.NewTicker(5 * time.Minute)
+	defer cleanupTicker.Stop()
+
 	for {
 		select {
 		case client := <-h.register:
@@ -55,6 +59,8 @@ func (h *Hub) run() {
 			}
 		case wrapper := <-h.handleMessage:
 			h.handleClientMessage(wrapper.client, wrapper.message)
+		case <-cleanupTicker.C:
+			h.cleanupStaleGames()
 		}
 	}
 }
@@ -182,6 +188,11 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 		h.handleLeaveGame(client.user, msg)
 	case "cleanup_game":
 		h.handleCleanupGame(msg)
+	// Internal messages (from timers/bots - no client)
+	case "bot_move":
+		h.handleBotMoveRequest(msg)
+	case "move_timeout":
+		h.handleMoveTimeout(msg)
 	// Lobby messages
 	case "create_lobby":
 		h.handleCreateLobby(client.user, msg)
@@ -670,6 +681,7 @@ func (h *Hub) handleLeaveGame(user *User, msg *Message) {
 
 	// Mark user as not in game
 	user.InGame = false
+	user.GameID = ""
 
 	log.Printf("Player %s left game %s (player index %d)", user.Username, game.ID, leavingPlayerIndex+1)
 
@@ -680,6 +692,157 @@ func (h *Hub) handleCleanupGame(msg *Message) {
 	if _, exists := h.games[msg.GameID]; exists {
 		delete(h.games, msg.GameID)
 		log.Printf("Cleaned up ended game: %s", msg.GameID)
+	}
+}
+
+// cleanupUserFromPreviousGame removes a user from any previous game they were in
+// This prevents state glitches when starting a new game
+func (h *Hub) cleanupUserFromPreviousGame(user *User) {
+	if !user.InGame || user.GameID == "" {
+		return
+	}
+
+	oldGame, exists := h.games[user.GameID]
+	if !exists {
+		// Game already cleaned up, just reset user state
+		user.InGame = false
+		user.GameID = ""
+		return
+	}
+
+	// Remove user from the old game
+	for i := 0; i < 4; i++ {
+		if oldGame.Players[i] != nil && oldGame.Players[i].User != nil && oldGame.Players[i].User.ID == user.ID {
+			oldGame.Players[i].User = nil
+			log.Printf("Removed user %s from previous game %s (slot %d)", user.Username, oldGame.ID, i+1)
+			break
+		}
+	}
+
+	// If old game is over and has no more human players, clean it up immediately
+	if oldGame.GameOver {
+		hasHumanPlayers := false
+		for i := 0; i < 4; i++ {
+			if oldGame.Players[i] != nil && oldGame.Players[i].User != nil {
+				hasHumanPlayers = true
+				break
+			}
+		}
+		if !hasHumanPlayers {
+			delete(h.games, oldGame.ID)
+			log.Printf("Cleaned up orphaned game %s (no human players left)", oldGame.ID)
+		}
+	}
+
+	user.InGame = false
+	user.GameID = ""
+}
+
+// cleanupStaleGames removes games that are finished or have no human players
+// This runs periodically to prevent memory leaks
+func (h *Hub) cleanupStaleGames() {
+	now := time.Now()
+	cleanedCount := 0
+
+	for gameID, game := range h.games {
+		shouldClean := false
+		reason := ""
+
+		// Check if game is over and has been for a while (no cleanup timer fired)
+		if game.GameOver {
+			shouldClean = true
+			reason = "game over"
+		}
+
+		// Check if game has no human players connected
+		if !shouldClean {
+			hasHumanPlayers := false
+			for i := 0; i < 4; i++ {
+				if game.Players[i] != nil && game.Players[i].User != nil {
+					hasHumanPlayers = true
+					break
+				}
+			}
+			if !hasHumanPlayers && game.IsMultiplayer {
+				shouldClean = true
+				reason = "no human players"
+			}
+		}
+
+		// Check for 1v1 games that are orphaned
+		if !shouldClean && !game.IsMultiplayer {
+			if (game.Player1 == nil || game.Player1.Client == nil) &&
+				(game.Player2 == nil || game.Player2.Client == nil) {
+				shouldClean = true
+				reason = "1v1 orphaned"
+			}
+		}
+
+		if shouldClean {
+			// Cancel any timers
+			if game.MoveTimer != nil {
+				game.MoveTimer.Stop()
+			}
+			delete(h.games, gameID)
+			cleanedCount++
+			log.Printf("Periodic cleanup: removed game %s (reason: %s)", gameID, reason)
+		}
+	}
+
+	if cleanedCount > 0 {
+		log.Printf("Periodic cleanup completed: removed %d stale games, %d games remain", cleanedCount, len(h.games))
+	} else {
+		log.Printf("Periodic cleanup: %d games checked, none stale (time: %v)", len(h.games), now.Format("15:04:05"))
+	}
+}
+
+// handleBotMoveRequest processes a bot move request routed through the Hub channel
+// This ensures bot moves are processed in the single-threaded event loop
+func (h *Hub) handleBotMoveRequest(msg *Message) {
+	game, exists := h.games[msg.GameID]
+	if !exists {
+		return
+	}
+
+	if game.GameOver {
+		return
+	}
+
+	// Verify it's still this player's turn
+	if game.CurrentPlayer != msg.Player {
+		return
+	}
+
+	// Make the bot move
+	h.makeBotMove(game, msg.Player)
+}
+
+// handleMoveTimeout processes a move timeout routed through the Hub channel
+// This ensures timeout handling is processed in the single-threaded event loop
+func (h *Hub) handleMoveTimeout(msg *Message) {
+	game, exists := h.games[msg.GameID]
+	if !exists {
+		return
+	}
+
+	if game.GameOver {
+		return
+	}
+
+	// Verify it's still this player's turn (they might have moved just in time)
+	if game.CurrentPlayer != msg.Player {
+		return
+	}
+
+	log.Printf("Move timeout for player %d in game %s - auto-resigning", msg.Player, msg.GameID)
+
+	// Auto-resign the player
+	if game.IsMultiplayer {
+		player := game.Players[msg.Player-1]
+		if player != nil && player.User != nil {
+			resignMsg := &Message{GameID: game.ID}
+			h.handleResign(player.User, resignMsg)
+		}
 	}
 }
 
@@ -1363,11 +1526,15 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 	log.Printf("Multiplayer game created: %s with %d active players, starting with player %d, %d moves", gameID, activePlayers, game.CurrentPlayer, game.MovesLeft)
 
 	// Mark users as in game and remove from lobby
+	// Also cleanup any previous game state for each user
 	gamePlayerInfos := make([]GamePlayerInfo, 0)
 	for i := 0; i < 4; i++ {
 		if gamePlayers[i] != nil {
 			if gamePlayers[i].User != nil {
+				// Cleanup previous game if user was in one
+				h.cleanupUserFromPreviousGame(gamePlayers[i].User)
 				gamePlayers[i].User.InGame = true
+				gamePlayers[i].User.GameID = gameID
 				gamePlayers[i].User.InLobby = false
 				gamePlayers[i].User.LobbyID = ""
 			}
@@ -1469,17 +1636,21 @@ func (h *Hub) startMoveTimer(game *Game) {
 		return // Don't set timer for bots
 	}
 
-	// Start 120 second timer
-	game.MoveTimer = time.AfterFunc(120*time.Second, func() {
-		log.Printf("Move timeout for player %d in game %s - auto-resigning", game.CurrentPlayer, game.ID)
+	// Capture values for the closure (don't access game directly in timer callback)
+	gameID := game.ID
+	currentPlayer := game.CurrentPlayer
 
-		// Auto-resign the player
-		currentPlayer := game.CurrentPlayer
-		if game.Players[currentPlayer-1] != nil && game.Players[currentPlayer-1].User != nil {
-			msg := &Message{
-				GameID: game.ID,
-			}
-			h.handleResign(game.Players[currentPlayer-1].User, msg)
+	// Start 120 second timer - route through Hub channel for thread safety
+	game.MoveTimer = time.AfterFunc(120*time.Second, func() {
+		// Send timeout message through Hub's channel instead of calling handleResign directly
+		// This ensures the timeout is processed in the Hub's single-threaded event loop
+		h.handleMessage <- &MessageWrapper{
+			client: nil, // Internal message, no client
+			message: &Message{
+				Type:   "move_timeout",
+				GameID: gameID,
+				Player: currentPlayer,
+			},
 		}
 	})
 
@@ -1600,15 +1771,20 @@ func (h *Hub) endTurn(game *Game) {
 	// Start move timer for the new current player
 	h.startMoveTimer(game)
 
-	// If current player is a bot, trigger bot move
+	// If current player is a bot, trigger bot move via Hub channel
 	if game.IsMultiplayer && game.Players[game.CurrentPlayer-1] != nil && game.Players[game.CurrentPlayer-1].IsBot {
 		log.Printf("Bot %d's turn in game %s - triggering bot move", game.CurrentPlayer, game.ID)
-		// Trigger bot move immediately
-		go func() {
-			if !game.GameOver && game.CurrentPlayer == game.Players[game.CurrentPlayer-1].Index+1 {
-				h.makeBotMove(game, game.CurrentPlayer)
-			}
-		}()
+		// Route through Hub channel to maintain thread safety
+		gameID := game.ID
+		currentPlayer := game.CurrentPlayer
+		h.handleMessage <- &MessageWrapper{
+			client: nil,
+			message: &Message{
+				Type:   "bot_move",
+				GameID: gameID,
+				Player: currentPlayer,
+			},
+		}
 	}
 }
 

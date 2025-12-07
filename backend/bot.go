@@ -865,11 +865,16 @@ func (h *Hub) applyBotMove(game *Game, row, col, player int) {
 		h.endTurn(game)
 	} else {
 		// Bot makes another move (has 3 moves per turn)
-		go func() {
-			if !game.GameOver && game.CurrentPlayer == player {
-				h.makeBotMove(game, player)
-			}
-		}()
+		// Route through Hub channel to maintain thread safety
+		gameID := game.ID
+		h.handleMessage <- &MessageWrapper{
+			client: nil,
+			message: &Message{
+				Type:   "bot_move",
+				GameID: gameID,
+				Player: player,
+			},
+		}
 	}
 
 	// Check win condition

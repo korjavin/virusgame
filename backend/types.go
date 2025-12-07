@@ -83,6 +83,7 @@ type User struct {
 	Username string
 	Client   *Client
 	InGame   bool
+	GameID   string // ID of game user is in
 	InLobby  bool
 	LobbyID  string // ID of lobby user is in
 }
