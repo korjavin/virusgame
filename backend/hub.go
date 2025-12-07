@@ -116,8 +116,8 @@ func (h *Hub) handleDisconnect(client *Client) {
 				}
 			}
 
-			if userInGame {
-				// Auto-resign the disconnected player
+			if userInGame && !game.GameOver {
+				// Auto-resign the disconnected player (only if game is still active)
 				log.Printf("Player %s disconnected from multiplayer game %s - auto-resigning", user.Username, gameID)
 				resignMsg := &Message{
 					GameID: gameID,
@@ -180,6 +180,8 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 		h.handleResign(client.user, msg)
 	case "leave_game":
 		h.handleLeaveGame(client.user, msg)
+	case "cleanup_game":
+		h.handleCleanupGame(msg)
 	// Lobby messages
 	case "create_lobby":
 		h.handleCreateLobby(client.user, msg)
@@ -544,6 +546,11 @@ func (h *Hub) handleResign(user *User, msg *Message) {
 		return
 	}
 
+	// Don't process resign if game is already over
+	if game.GameOver {
+		return
+	}
+
 	// Cancel move timer if it exists
 	if game.MoveTimer != nil {
 		game.MoveTimer.Stop()
@@ -662,6 +669,13 @@ func (h *Hub) handleLeaveGame(user *User, msg *Message) {
 	log.Printf("Player %s left game %s (player index %d)", user.Username, game.ID, leavingPlayerIndex+1)
 
 	h.broadcastUserList()
+}
+
+func (h *Hub) handleCleanupGame(msg *Message) {
+	if _, exists := h.games[msg.GameID]; exists {
+		delete(h.games, msg.GameID)
+		log.Printf("Cleaned up ended game: %s", msg.GameID)
+	}
 }
 
 func (h *Hub) checkWinCondition(game *Game) {
@@ -860,14 +874,10 @@ func (h *Hub) broadcastUserList() {
 }
 
 func (h *Hub) sendToClient(client *Client, msg *Message) {
-	// Recover from panic if channel is closed
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("Recovered from panic in sendToClient: %v", r)
-			// Clean up the client
-			delete(h.clients, client)
-		}
-	}()
+	// Check if client is still registered
+	if _, exists := h.clients[client]; !exists {
+		return // Client already disconnected
+	}
 
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -875,8 +885,10 @@ func (h *Hub) sendToClient(client *Client, msg *Message) {
 		return
 	}
 
+	// Try to send without blocking
 	select {
 	case client.send <- data:
+		// Message sent successfully
 	default:
 		// Channel is full or closed, clean up
 		log.Printf("Failed to send to client, removing from clients map")
@@ -1603,6 +1615,11 @@ func (h *Hub) checkMultiplayerStatus(game *Game) {
 		return
 	}
 
+	// Don't check if game is already over
+	if game.GameOver {
+		return
+	}
+
 	// Count active players (those with pieces)
 	activePlayers := 0
 	lastActivePlayer := 0
@@ -1663,6 +1680,19 @@ func (h *Hub) checkMultiplayerStatus(game *Game) {
 
 		h.broadcastUserList()
 		log.Printf("Multiplayer game ended: %s (winner: player %d)", game.ID, game.Winner)
+
+		// Schedule game cleanup after a delay to allow final messages to be delivered
+		gameID := game.ID
+		time.AfterFunc(10*time.Second, func() {
+			// Send cleanup message to hub's main goroutine
+			h.handleMessage <- &MessageWrapper{
+				client: nil,
+				message: &Message{
+					Type:   "cleanup_game",
+					GameID: gameID,
+				},
+			}
+		})
 	}
 }
 
