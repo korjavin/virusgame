@@ -85,10 +85,29 @@ function isValidMove(row, col, player) {
 
 const playerSymbols = ['X', 'O', '△', '□'];
 
+function calculateCellSize() {
+    // Get available width (viewport width minus some padding)
+    const padding = 20; // 10px on each side
+    const availableWidth = window.innerWidth - padding;
+
+    // Calculate cell size based on columns
+    // Default to 40px but shrink if needed to fit screen
+    const maxCellSize = 40;
+    const calculatedSize = Math.floor(availableWidth / cols);
+
+    // Use the smaller of maxCellSize or calculated size, but at least 20px
+    return Math.max(20, Math.min(maxCellSize, calculatedSize));
+}
+
 function renderBoard() {
+    const cellSize = calculateCellSize();
     gameBoard.innerHTML = '';
-    gameBoard.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
-    gameBoard.style.gridTemplateRows = `repeat(${rows}, 40px)`;
+    gameBoard.style.gridTemplateColumns = `repeat(${cols}, ${cellSize}px)`;
+    gameBoard.style.gridTemplateRows = `repeat(${rows}, ${cellSize}px)`;
+
+    // Update CSS custom property for cell size
+    document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);
+    document.documentElement.style.setProperty('--cell-font-size', `${Math.max(12, Math.floor(cellSize * 0.6))}px`);
     for (let i = 0; i < rows; i++) {
         for (let j = 0; j < cols; j++) {
             const cell = document.createElement('div');
@@ -514,6 +533,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Handle window resize to recalculate cell sizes
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            if (board && board.length > 0) {
+                renderBoard();
+            }
+        }, 150); // Debounce resize events
+    });
 
     // Initial game start
     initGame();
