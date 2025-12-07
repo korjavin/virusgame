@@ -602,14 +602,6 @@ func (h *Hub) handleResign(user *User, msg *Message) {
 			}
 		}
 
-		// Notify all players that someone resigned
-		resignMsg := Message{
-			Type:             "player_eliminated",
-			GameID:           msg.GameID,
-			EliminatedPlayer: resignedPlayer,
-		}
-		h.broadcastToGame(game, &resignMsg)
-
 		// If the resigned player was the current player, pass turn to next player
 		if game.CurrentPlayer == resignedPlayer && !game.GameOver {
 			log.Printf("Resigned player %d was current player, passing turn", resignedPlayer)
