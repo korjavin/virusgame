@@ -233,6 +233,11 @@ class MultiplayerClient {
             this.updatePlayersDisplay();
         }
 
+        // Notify player if it's their turn
+        if (currentPlayer === this.yourPlayer) {
+            this.notifyYourTurn();
+        }
+
         // Reset move timer
         this.resetMoveTimer();
     }
@@ -534,6 +539,11 @@ class MultiplayerClient {
         const resignBtn = document.getElementById('resign-button');
         if (resignBtn) resignBtn.style.display = 'inline-block';
 
+        // Notify if it's player's turn at game start
+        if (currentPlayer === this.yourPlayer) {
+            this.notifyYourTurn();
+        }
+
         // Start move timer
         this.resetMoveTimer();
     }
@@ -695,6 +705,36 @@ class MultiplayerClient {
         }
 
         return notification;
+    }
+
+    // Play a beep sound and vibrate to notify player it's their turn
+    notifyYourTurn() {
+        // Play beep sound using Web Audio API
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // Two-tone beep for attention
+            oscillator.frequency.setValueAtTime(880, audioContext.currentTime); // A5
+            oscillator.frequency.setValueAtTime(1100, audioContext.currentTime + 0.1); // C#6
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.2);
+        } catch (e) {
+            console.log('Could not play turn notification sound:', e);
+        }
+
+        // Vibrate on mobile devices (if supported)
+        if (navigator.vibrate) {
+            navigator.vibrate([100, 50, 100]); // Two short vibrations
+        }
     }
 }
 
