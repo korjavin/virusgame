@@ -191,6 +191,8 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 	// Internal messages (from timers/bots - no client)
 	case "bot_move":
 		h.handleBotMoveRequest(msg)
+	case "bot_move_result":
+		h.handleBotMoveResult(msg)
 	case "move_timeout":
 		h.handleMoveTimeout(msg)
 	// Lobby messages
@@ -796,8 +798,8 @@ func (h *Hub) cleanupStaleGames() {
 	}
 }
 
-// handleBotMoveRequest processes a bot move request routed through the Hub channel
-// This ensures bot moves are processed in the single-threaded event loop
+// handleBotMoveRequest spawns a goroutine to calculate the bot's move asynchronously
+// The heavy CPU work (minimax) runs in a goroutine, then sends the result back to the Hub
 func (h *Hub) handleBotMoveRequest(msg *Message) {
 	game, exists := h.games[msg.GameID]
 	if !exists {
@@ -813,8 +815,86 @@ func (h *Hub) handleBotMoveRequest(msg *Message) {
 		return
 	}
 
-	// Make the bot move
-	h.makeBotMove(game, msg.Player)
+	// Capture values needed for the goroutine
+	gameID := game.ID
+	botPlayer := msg.Player
+	botSettings := h.getBotSettings(game, botPlayer)
+
+	// Copy the board for safe read-only access in goroutine
+	boardCopy := h.copyBoard(game.Board)
+
+	// Copy game metadata needed for move calculation
+	gameSnapshot := &Game{
+		ID:            game.ID,
+		Board:         boardCopy,
+		Rows:          game.Rows,
+		Cols:          game.Cols,
+		Players:       game.Players,      // Read-only reference is safe
+		PlayerBases:   game.PlayerBases,  // Copy of array
+		IsMultiplayer: game.IsMultiplayer,
+	}
+
+	// Spawn goroutine to calculate move (CPU heavy, doesn't modify shared state)
+	go func() {
+		row, col, ok := h.calculateBotMove(gameSnapshot, botPlayer, botSettings)
+		if !ok {
+			log.Printf("Bot player %d has no valid moves in game %s", botPlayer, gameID)
+			return
+		}
+
+		// Send result back to Hub's main loop for application
+		h.handleMessage <- &MessageWrapper{
+			client: nil,
+			message: &Message{
+				Type:   "bot_move_result",
+				GameID: gameID,
+				Player: botPlayer,
+				Row:    &row,
+				Col:    &col,
+			},
+		}
+	}()
+}
+
+// handleBotMoveResult applies a calculated bot move to the game state
+// This runs in the Hub's main loop, ensuring thread-safe state modification
+func (h *Hub) handleBotMoveResult(msg *Message) {
+	game, exists := h.games[msg.GameID]
+	if !exists {
+		log.Printf("Bot move result for non-existent game %s", msg.GameID)
+		return
+	}
+
+	if game.GameOver {
+		log.Printf("Bot move result for ended game %s", msg.GameID)
+		return
+	}
+
+	// Verify it's still this player's turn (game state may have changed while calculating)
+	if game.CurrentPlayer != msg.Player {
+		log.Printf("Bot move result for wrong player: expected %d, got %d", game.CurrentPlayer, msg.Player)
+		return
+	}
+
+	// Verify the move is still valid (board may have changed)
+	row := *msg.Row
+	col := *msg.Col
+	if !h.isValidMove(game, row, col, msg.Player) {
+		log.Printf("Bot calculated move [%d,%d] is no longer valid, recalculating", row, col)
+		// Trigger a new calculation
+		h.handleMessage <- &MessageWrapper{
+			client: nil,
+			message: &Message{
+				Type:   "bot_move",
+				GameID: msg.GameID,
+				Player: msg.Player,
+			},
+		}
+		return
+	}
+
+	// Apply the move
+	h.applyBotMove(game, row, col, msg.Player)
 }
 
 // handleMoveTimeout processes a move timeout routed through the Hub channel

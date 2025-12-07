@@ -138,9 +138,33 @@ These messages are sent through `handleMessage` for internal coordination:
 
 | Type | Purpose | Sender |
 |------|---------|--------|
-| `bot_move` | Trigger bot to make a move | Hub channel (after previous move) |
+| `bot_move` | Request bot move calculation | Hub (triggers async goroutine) |
+| `bot_move_result` | Apply calculated bot move | Bot goroutine (after minimax) |
 | `move_timeout` | Player ran out of time | Timer callback (via Hub channel) |
 | `cleanup_game` | Delete finished game | Cleanup timer (via Hub channel) |
+
+## Bot Move Architecture
+
+Bot moves use an async pattern to avoid blocking the Hub's event loop:
+
+```
+┌─────────────────┐     1. bot_move           ┌─────────────────┐
+│   Hub (main)    │ ─────────────────────────▶│  Goroutine      │
+│   event loop    │   (spawn goroutine)       │                 │
+│                 │                           │  copyBoard()    │
+│  (continues     │                           │  minimax()      │
+│   processing)   │  2. bot_move_result       │  (CPU heavy)    │
+│                 │ ◀─────────────────────────│                 │
+└─────────────────┘     {row, col}            └─────────────────┘
+        │
+        ▼
+   3. Validate & apply move (fast)
+```
+
+Key points:
+- `handleBotMoveRequest`: Copies board, spawns goroutine for calculation
+- Goroutine: Runs minimax on board copy (safe, read-only)
+- `handleBotMoveResult`: Validates move is still valid, applies to game state
 
 ## Cleanup Mechanisms
 

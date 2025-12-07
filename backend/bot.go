@@ -74,23 +74,22 @@ type MinimaxResult struct {
 	Move  *BotMove
 }
 
-// makeBotMove makes a move for a bot player using minimax search
-func (h *Hub) makeBotMove(game *Game, botPlayer int) {
-	// Get bot settings
-	botSettings := h.getBotSettings(game, botPlayer)
+// calculateBotMove calculates the best move for a bot player using minimax search
+// This function is safe to call from a goroutine as it only reads from the game snapshot
+// Returns (row, col, ok) where ok is false if no valid moves exist
+func (h *Hub) calculateBotMove(game *Game, botPlayer int, botSettings *BotSettings) (int, int, bool) {
 	depth := botSettings.SearchDepth
 	if depth <= 0 {
 		depth = defaultBotDepth
 	}
 
-	log.Printf("Bot player %d making move in game %s (using minimax depth %d)", botPlayer, game.ID, depth)
+	log.Printf("Bot player %d calculating move in game %s (using minimax depth %d)", botPlayer, game.ID, depth)
 
 	// Get all valid moves
 	validMoves := h.getAllBotMoves(game, botPlayer)
 
 	if len(validMoves) == 0 {
-		log.Printf("Bot player %d has no valid moves", botPlayer)
-		return
+		return 0, 0, false
 	}
 
 	// Create transposition table for this search
@@ -99,11 +98,10 @@ func (h *Hub) makeBotMove(game *Game, botPlayer int) {
 	// Use minimax to find best move
 	bestMove := h.findBestMoveWithMinimax(game, validMoves, botPlayer, botSettings, depth, transTable)
 
-	log.Printf("Bot player %d selected move [%d,%d] with score %.2f (TT size: %d)",
+	log.Printf("Bot player %d calculated move [%d,%d] with score %.2f (TT size: %d)",
 		botPlayer, bestMove.Row, bestMove.Col, bestMove.Score, len(transTable.table))
 
-	// Apply the move
-	h.applyBotMove(game, bestMove.Row, bestMove.Col, botPlayer)
+	return bestMove.Row, bestMove.Col, true
 }
 
 // hashBoard creates a hash key for the board state
