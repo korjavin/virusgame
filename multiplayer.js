@@ -199,9 +199,6 @@ class MultiplayerClient {
             console.log('movesLeft updated from server to:', movesLeft);
         }
 
-        // Reset move timer on each move
-        this.resetMoveTimer();
-
         renderBoard();
         updateStatus();
         checkWinCondition();
