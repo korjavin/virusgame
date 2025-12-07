@@ -37,7 +37,7 @@ func newHub() *Hub {
 		lobbies:       make(map[string]*Lobby),
 		register:      make(chan *Client),
 		unregister:    make(chan *Client),
-		handleMessage: make(chan *MessageWrapper),
+		handleMessage: make(chan *MessageWrapper, 256), // Buffered to prevent deadlock when sending internal messages
 	}
 }
 
@@ -801,19 +801,26 @@ func (h *Hub) cleanupStaleGames() {
 // handleBotMoveRequest spawns a goroutine to calculate the bot's move asynchronously
 // The heavy CPU work (minimax) runs in a goroutine, then sends the result back to the Hub
 func (h *Hub) handleBotMoveRequest(msg *Message) {
+	log.Printf("handleBotMoveRequest: received for game %s, player %d", msg.GameID, msg.Player)
+
 	game, exists := h.games[msg.GameID]
 	if !exists {
+		log.Printf("handleBotMoveRequest: game %s not found", msg.GameID)
 		return
 	}
 
 	if game.GameOver {
+		log.Printf("handleBotMoveRequest: game %s is over", msg.GameID)
 		return
 	}
 
 	// Verify it's still this player's turn
 	if game.CurrentPlayer != msg.Player {
+		log.Printf("handleBotMoveRequest: wrong player turn, expected %d, got %d", game.CurrentPlayer, msg.Player)
 		return
 	}
+
+	log.Printf("handleBotMoveRequest: spawning goroutine for bot player %d", msg.Player)
 
 	// Capture values needed for the goroutine
 	gameID := game.ID
