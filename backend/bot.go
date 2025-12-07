@@ -11,7 +11,7 @@ import (
 
 const (
 	// Default search depth - increased due to optimizations
-	defaultBotDepth = 4
+	defaultBotDepth = 3
 
 	// Transposition table entry types
 	exactScore = iota
