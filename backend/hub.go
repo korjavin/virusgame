@@ -1024,13 +1024,28 @@ func (h *Hub) handleAddBot(user *User, msg *Message) {
 		return
 	}
 
+	// Get bot settings from message, or use defaults
+	botSettings := msg.BotSettings
+	if botSettings == nil {
+		// Default bot settings
+		botSettings = &BotSettings{
+			MaterialWeight:   100.0,
+			MobilityWeight:   50.0,
+			PositionWeight:   30.0,
+			RedundancyWeight: 40.0,
+			CohesionWeight:   25.0,
+			SearchDepth:      5,
+		}
+	}
+
 	// Add bot to slot
 	lobby.Players[slotIndex] = &LobbyPlayer{
-		User:   nil,
-		IsBot:  true,
-		Symbol: playerSymbols[slotIndex],
-		Ready:  true,
-		Index:  slotIndex,
+		User:        nil,
+		IsBot:       true,
+		Symbol:      playerSymbols[slotIndex],
+		Ready:       true,
+		Index:       slotIndex,
+		BotSettings: botSettings,
 	}
 
 	h.broadcastLobbyUpdate(lobby)

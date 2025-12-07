@@ -37,6 +37,8 @@ type Message struct {
 	PlayerSymbol  string           `json:"playerSymbol,omitempty"`
 	GamePlayers   []GamePlayerInfo `json:"gamePlayers,omitempty"`
 	EliminatedPlayer int           `json:"eliminatedPlayer,omitempty"`
+	// Bot settings
+	BotSettings   *BotSettings     `json:"botSettings,omitempty"`
 }
 
 type UserInfo struct {
@@ -132,11 +134,22 @@ type Lobby struct {
 	CreatedAt  time.Time
 }
 
+// BotSettings contains AI configuration for bots
+type BotSettings struct {
+	MaterialWeight   float64 `json:"materialWeight"`
+	MobilityWeight   float64 `json:"mobilityWeight"`
+	PositionWeight   float64 `json:"positionWeight"`
+	RedundancyWeight float64 `json:"redundancyWeight"`
+	CohesionWeight   float64 `json:"cohesionWeight"`
+	SearchDepth      int     `json:"searchDepth"`
+}
+
 // LobbyPlayer represents a player slot in a lobby
 type LobbyPlayer struct {
-	User   *User  // nil if slot is empty
-	IsBot  bool   // true if AI bot
-	Symbol string // "X", "O", "△", "□"
-	Ready  bool   // ready status
-	Index  int    // 0-3, player index
+	User        *User        // nil if slot is empty
+	IsBot       bool         // true if AI bot
+	Symbol      string       // "X", "O", "△", "□"
+	Ready       bool         // ready status
+	Index       int          // 0-3, player index
+	BotSettings *BotSettings // AI settings for bots (nil for human players)
 }

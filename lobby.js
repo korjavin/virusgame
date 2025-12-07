@@ -114,8 +114,20 @@ class LobbyManager {
     }
 
     addBot() {
+        // Get current AI coefficients from the global aiCoeffs object
+        // (defined in ai.js and modified via UI controls)
+        const botSettings = {
+            materialWeight: aiCoeffs.materialWeight,
+            mobilityWeight: aiCoeffs.mobilityWeight,
+            positionWeight: aiCoeffs.positionWeight,
+            redundancyWeight: aiCoeffs.redundancyWeight,
+            cohesionWeight: aiCoeffs.cohesionWeight,
+            searchDepth: 5  // Increased from 4 due to performance optimizations
+        };
+
         this.mpClient.send({
-            type: 'add_bot'
+            type: 'add_bot',
+            botSettings: botSettings
         });
     }
 

@@ -6,19 +6,60 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 )
 
 const (
-	// Default search depth - set to 4 as requested
+	// Default search depth - increased due to optimizations
 	defaultBotDepth = 4
 
-	// AI Evaluation Coefficients matching ai.js lines 55-61
-	materialWeight   = 100.0
-	mobilityWeight   = 50.0
-	positionWeight   = 30.0
-	redundancyWeight = 40.0
-	cohesionWeight   = 25.0
+	// Transposition table entry types
+	exactScore = iota
+	lowerBound
+	upperBound
 )
+
+// TranspositionEntry stores cached board evaluations
+type TranspositionEntry struct {
+	Score float64
+	Depth int
+	Flag  int
+}
+
+// TranspositionTable caches board positions to avoid re-evaluation
+type TranspositionTable struct {
+	table map[string]TranspositionEntry
+	mu    sync.RWMutex
+}
+
+// NewTranspositionTable creates a new transposition table
+func NewTranspositionTable() *TranspositionTable {
+	return &TranspositionTable{
+		table: make(map[string]TranspositionEntry),
+	}
+}
+
+// Get retrieves an entry from the table
+func (tt *TranspositionTable) Get(key string) (TranspositionEntry, bool) {
+	tt.mu.RLock()
+	defer tt.mu.RUnlock()
+	entry, exists := tt.table[key]
+	return entry, exists
+}
+
+// Put stores an entry in the table
+func (tt *TranspositionTable) Put(key string, entry TranspositionEntry) {
+	tt.mu.Lock()
+	defer tt.mu.Unlock()
+	tt.table[key] = entry
+}
+
+// Clear clears the transposition table
+func (tt *TranspositionTable) Clear() {
+	tt.mu.Lock()
+	defer tt.mu.Unlock()
+	tt.table = make(map[string]TranspositionEntry)
+}
 
 // BotMove represents a potential move for the bot
 type BotMove struct {
@@ -35,7 +76,14 @@ type MinimaxResult struct {
 
 // makeBotMove makes a move for a bot player using minimax search
 func (h *Hub) makeBotMove(game *Game, botPlayer int) {
-	log.Printf("Bot player %d making move in game %s (using minimax depth %d)", botPlayer, game.ID, defaultBotDepth)
+	// Get bot settings
+	botSettings := h.getBotSettings(game, botPlayer)
+	depth := botSettings.SearchDepth
+	if depth <= 0 {
+		depth = defaultBotDepth
+	}
+
+	log.Printf("Bot player %d making move in game %s (using minimax depth %d)", botPlayer, game.ID, depth)
 
 	// Get all valid moves
 	validMoves := h.getAllBotMoves(game, botPlayer)
@@ -45,17 +93,57 @@ func (h *Hub) makeBotMove(game *Game, botPlayer int) {
 		return
 	}
 
-	// Use minimax to find best move
-	bestMove := h.findBestMoveWithMinimax(game, validMoves, botPlayer)
+	// Create transposition table for this search
+	transTable := NewTranspositionTable()
 
-	log.Printf("Bot player %d selected move [%d,%d] with score %.2f", botPlayer, bestMove.Row, bestMove.Col, bestMove.Score)
+	// Use minimax to find best move
+	bestMove := h.findBestMoveWithMinimax(game, validMoves, botPlayer, botSettings, depth, transTable)
+
+	log.Printf("Bot player %d selected move [%d,%d] with score %.2f (TT size: %d)",
+		botPlayer, bestMove.Row, bestMove.Col, bestMove.Score, len(transTable.table))
 
 	// Apply the move
 	h.applyBotMove(game, bestMove.Row, bestMove.Col, botPlayer)
 }
 
+// hashBoard creates a hash key for the board state
+func (h *Hub) hashBoard(board [][]interface{}, player int) string {
+	var key strings.Builder
+	key.WriteString(fmt.Sprintf("P%d:", player))
+	for r := range board {
+		for c := range board[r] {
+			if board[r][c] == nil {
+				key.WriteString("_")
+			} else {
+				key.WriteString(fmt.Sprintf("%v", board[r][c]))
+			}
+			key.WriteString(",")
+		}
+	}
+	return key.String()
+}
+
+// getBotSettings retrieves bot settings for a player
+func (h *Hub) getBotSettings(game *Game, player int) *BotSettings {
+	if game.IsMultiplayer && player >= 1 && player <= 4 {
+		lobbyPlayer := game.Players[player-1]
+		if lobbyPlayer != nil && lobbyPlayer.IsBot && lobbyPlayer.BotSettings != nil {
+			return lobbyPlayer.BotSettings
+		}
+	}
+	// Return default settings
+	return &BotSettings{
+		MaterialWeight:   100.0,
+		MobilityWeight:   50.0,
+		PositionWeight:   30.0,
+		RedundancyWeight: 40.0,
+		CohesionWeight:   25.0,
+		SearchDepth:      5,
+	}
+}
+
 // findBestMoveWithMinimax uses minimax algorithm to find the best move
-func (h *Hub) findBestMoveWithMinimax(game *Game, moves []BotMove, player int) BotMove {
+func (h *Hub) findBestMoveWithMinimax(game *Game, moves []BotMove, player int, botSettings *BotSettings, depth int, transTable *TranspositionTable) BotMove {
 	// Sort moves by heuristic score for better alpha-beta pruning (move ordering)
 	for i := range moves {
 		moves[i].Score = h.scoreMoveQuick(game, moves[i], player)
@@ -63,6 +151,12 @@ func (h *Hub) findBestMoveWithMinimax(game *Game, moves []BotMove, player int) B
 	sort.Slice(moves, func(i, j int) bool {
 		return moves[i].Score > moves[j].Score
 	})
+
+	// Only search top N moves if there are too many (pruning weak moves)
+	maxMovesToConsider := 20
+	if len(moves) > maxMovesToConsider {
+		moves = moves[:maxMovesToConsider]
+	}
 
 	bestMove := moves[0]
 	bestScore := math.Inf(-1)
@@ -75,7 +169,7 @@ func (h *Hub) findBestMoveWithMinimax(game *Game, moves []BotMove, player int) B
 		h.applyMoveToBoard(newBoard, move.Row, move.Col, player)
 
 		// Recursively evaluate this position
-		result := h.minimax(game, newBoard, defaultBotDepth-1, alpha, beta, false, player)
+		result := h.minimax(game, newBoard, depth-1, alpha, beta, false, player, botSettings, transTable)
 
 		if result.Score > bestScore {
 			bestScore = result.Score
@@ -92,15 +186,33 @@ func (h *Hub) findBestMoveWithMinimax(game *Game, moves []BotMove, player int) B
 	return bestMove
 }
 
-// minimax implements the minimax algorithm with alpha-beta pruning
-// Matches ai.js minimax function (lines 329-446)
-func (h *Hub) minimax(game *Game, board [][]interface{}, depth int, alpha, beta float64, isMaximizing bool, aiPlayer int) MinimaxResult {
+// minimax implements the minimax algorithm with alpha-beta pruning and transposition table
+func (h *Hub) minimax(game *Game, board [][]interface{}, depth int, alpha, beta float64, isMaximizing bool, aiPlayer int, botSettings *BotSettings, transTable *TranspositionTable) MinimaxResult {
+	// Check transposition table
+	boardHash := h.hashBoard(board, aiPlayer)
+	if entry, exists := transTable.Get(boardHash); exists && entry.Depth >= depth {
+		// Use cached result if depth is sufficient
+		if entry.Flag == exactScore {
+			return MinimaxResult{Score: entry.Score, Move: nil}
+		} else if entry.Flag == lowerBound {
+			alpha = math.Max(alpha, entry.Score)
+		} else if entry.Flag == upperBound {
+			beta = math.Min(beta, entry.Score)
+		}
+		if alpha >= beta {
+			return MinimaxResult{Score: entry.Score, Move: nil}
+		}
+	}
+
 	// Base case: reached max depth
 	if depth == 0 {
-		return MinimaxResult{
-			Score: h.evaluateBoard(game, board, aiPlayer),
-			Move:  nil,
-		}
+		score := h.evaluateBoard(game, board, aiPlayer, botSettings)
+		transTable.Put(boardHash, TranspositionEntry{
+			Score: score,
+			Depth: depth,
+			Flag:  exactScore,
+		})
+		return MinimaxResult{Score: score, Move: nil}
 	}
 
 	player := aiPlayer
@@ -113,12 +225,19 @@ func (h *Hub) minimax(game *Game, board [][]interface{}, depth int, alpha, beta 
 
 	// Terminal state: no moves available
 	if len(possibleMoves) == 0 {
-		score := h.evaluateBoard(game, board, aiPlayer)
+		score := h.evaluateBoard(game, board, aiPlayer, botSettings)
 		// Penalize losing positions, reward winning positions
 		if isMaximizing {
-			return MinimaxResult{Score: score - 10000, Move: nil}
+			score -= 10000
+		} else {
+			score += 10000
 		}
-		return MinimaxResult{Score: score + 10000, Move: nil}
+		transTable.Put(boardHash, TranspositionEntry{
+			Score: score,
+			Depth: depth,
+			Flag:  exactScore,
+		})
+		return MinimaxResult{Score: score, Move: nil}
 	}
 
 	// Move ordering: sort by heuristic score
@@ -135,6 +254,16 @@ func (h *Hub) minimax(game *Game, board [][]interface{}, depth int, alpha, beta 
 		})
 	}
 
+	// Limit number of moves to consider at deeper levels for speed
+	maxMoves := 15
+	if depth <= 2 {
+		maxMoves = 10
+	}
+	if len(possibleMoves) > maxMoves {
+		possibleMoves = possibleMoves[:maxMoves]
+	}
+
+	originalAlpha := alpha
 	if isMaximizing {
 		// AI's turn: maximize score
 		maxScore := math.Inf(-1)
@@ -146,7 +275,7 @@ func (h *Hub) minimax(game *Game, board [][]interface{}, depth int, alpha, beta 
 			h.applyMoveToBoard(newBoard, move.Row, move.Col, player)
 
 			// Recursively evaluate
-			result := h.minimax(game, newBoard, depth-1, alpha, beta, false, aiPlayer)
+			result := h.minimax(game, newBoard, depth-1, alpha, beta, false, aiPlayer, botSettings, transTable)
 
 			if result.Score > maxScore {
 				maxScore = result.Score
@@ -158,6 +287,19 @@ func (h *Hub) minimax(game *Game, board [][]interface{}, depth int, alpha, beta 
 				break // Beta cutoff
 			}
 		}
+
+		// Store in transposition table
+		flag := exactScore
+		if maxScore <= originalAlpha {
+			flag = upperBound
+		} else if maxScore >= beta {
+			flag = lowerBound
+		}
+		transTable.Put(boardHash, TranspositionEntry{
+			Score: maxScore,
+			Depth: depth,
+			Flag:  flag,
+		})
 
 		return MinimaxResult{Score: maxScore, Move: bestMove}
 
@@ -172,7 +314,7 @@ func (h *Hub) minimax(game *Game, board [][]interface{}, depth int, alpha, beta 
 			h.applyMoveToBoard(newBoard, move.Row, move.Col, player)
 
 			// Recursively evaluate
-			result := h.minimax(game, newBoard, depth-1, alpha, beta, true, aiPlayer)
+			result := h.minimax(game, newBoard, depth-1, alpha, beta, true, aiPlayer, botSettings, transTable)
 
 			if result.Score < minScore {
 				minScore = result.Score
@@ -185,13 +327,26 @@ func (h *Hub) minimax(game *Game, board [][]interface{}, depth int, alpha, beta 
 			}
 		}
 
+		// Store in transposition table
+		flag := exactScore
+		if minScore <= alpha {
+			flag = lowerBound
+		} else if minScore >= beta {
+			flag = upperBound
+		}
+		transTable.Put(boardHash, TranspositionEntry{
+			Score: minScore,
+			Depth: depth,
+			Flag:  flag,
+		})
+
 		return MinimaxResult{Score: minScore, Move: bestMove}
 	}
 }
 
 // evaluateBoard evaluates the board position from AI's perspective
 // Matches ai.js evaluateBoard function (lines 464-570)
-func (h *Hub) evaluateBoard(game *Game, board [][]interface{}, aiPlayer int) float64 {
+func (h *Hub) evaluateBoard(game *Game, board [][]interface{}, aiPlayer int, botSettings *BotSettings) float64 {
 	// Single pass through board to collect all metrics
 	aiCells := 0
 	opponentCells := 0
@@ -201,9 +356,9 @@ func (h *Hub) evaluateBoard(game *Game, board [][]interface{}, aiPlayer int) flo
 	opponentAttackOpportunities := 0
 	aiAggression := 0.0
 	opponentAggression := 0.0
-	aiRedundantCells := 0    // Cells with 2+ friendly neighbors
+	aiRedundantCells := 0 // Cells with 2+ friendly neighbors
 	opponentRedundantCells := 0
-	aiCohesionPenalty := 0   // Gaps in territory
+	aiCohesionPenalty := 0 // Gaps in territory
 	opponentCohesionPenalty := 0
 
 	// Get opponent bases for aggression calculation
@@ -316,44 +471,48 @@ func (h *Hub) evaluateBoard(game *Game, board [][]interface{}, aiPlayer int) flo
 	// 5. Cohesion Score (penalize gaps/holes)
 	cohesionScore := float64(opponentCohesionPenalty - aiCohesionPenalty)
 
-	// Combine scores with weights
-	totalScore := materialScore*materialWeight +
-		mobilityScore*mobilityWeight +
-		positionScore*positionWeight +
-		redundancyScore*redundancyWeight +
-		cohesionScore*cohesionWeight
+	// Combine scores with weights from bot settings
+	totalScore := materialScore*botSettings.MaterialWeight +
+		mobilityScore*botSettings.MobilityWeight +
+		positionScore*botSettings.PositionWeight +
+		redundancyScore*botSettings.RedundancyWeight +
+		cohesionScore*botSettings.CohesionWeight
 
 	return totalScore
 }
 
-// scoreMoveQuick scores a move for move ordering (matches ai.js scoreMove)
+// scoreMoveQuick scores a move for move ordering - improved heuristics
 func (h *Hub) scoreMoveQuick(game *Game, move BotMove, player int) float64 {
 	cellValue := game.Board[move.Row][move.Col]
 	cellStr := fmt.Sprintf("%v", cellValue)
 	score := 0.0
 
-	// 1. Capturing opponent cells (1000 points, +500 if fortified)
+	// 1. Capturing opponent cells (1500 points, +800 if fortified)
+	isCapture := false
 	if cellValue != nil && len(cellStr) > 0 {
-		isOpponentCell := false
 		for p := 1; p <= 4; p++ {
 			if p != player && game.Players[p-1] != nil && cellStr[0] == byte('0'+p) {
-				isOpponentCell = true
+				isCapture = true
+				score += 1500.0
+				if strings.HasSuffix(cellStr, "-fortified") {
+					score += 800.0
+				}
+				// Bonus for capturing cells near their base (aggressive play)
+				oppBase := game.PlayerBases[p-1]
+				distToTheirBase := abs(move.Row-oppBase.Row) + abs(move.Col-oppBase.Col)
+				if distToTheirBase <= 3 {
+					score += 500.0 // Big bonus for attacking near their base
+				}
 				break
-			}
-		}
-
-		if isOpponentCell {
-			score += 1000.0
-			if strings.HasSuffix(cellStr, "-fortified") {
-				score += 500.0
 			}
 		}
 	}
 
-	// 2. Count neighbors (only cardinal directions)
+	// 2. Count neighbors with improved scoring
 	friendlyNeighbors := 0
 	opponentNeighbors := 0
 	emptyNeighbors := 0
+	fortifiedNeighbors := 0
 	directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
 
 	for _, dir := range directions {
@@ -365,6 +524,9 @@ func (h *Hub) scoreMoveQuick(game *Game, move BotMove, player int) float64 {
 			if neighbor != nil && len(neighborStr) > 0 {
 				if neighborStr[0] == byte('0'+player) {
 					friendlyNeighbors++
+					if strings.HasSuffix(neighborStr, "-fortified") {
+						fortifiedNeighbors++
+					}
 				} else {
 					opponentNeighbors++
 				}
@@ -374,22 +536,41 @@ func (h *Hub) scoreMoveQuick(game *Game, move BotMove, player int) float64 {
 		}
 	}
 
-	score += float64(friendlyNeighbors * 50)
-	score += float64(opponentNeighbors * 30)
-	score += float64(emptyNeighbors * 10)
+	// Reward connecting to existing territory
+	score += float64(friendlyNeighbors * 80)
+	// Bonus for being near fortified cells (defensive strength)
+	score += float64(fortifiedNeighbors * 40)
+	// Reward being near opponent cells (attack opportunities)
+	score += float64(opponentNeighbors * 60)
+	// Slight bonus for expansion potential
+	score += float64(emptyNeighbors * 15)
 
-	// 3. Distance to opponent base
+	// 3. Strategic positioning
 	opponentBase := h.getClosestOpponentBase(game, player, move.Row, move.Col)
 	if opponentBase != nil {
 		distToOpponentBase := abs(move.Row-opponentBase.Row) + abs(move.Col-opponentBase.Col)
-		score -= float64(distToOpponentBase * 3)
+		// Encourage aggressive expansion toward opponent
+		score += float64((game.Rows+game.Cols)-distToOpponentBase) * 5
 	}
 
-	// 4. Distance to own base (penalize overextension)
+	// 4. Penalize overextension from own base
 	ownBase := game.PlayerBases[player-1]
 	distToOwnBase := abs(move.Row-ownBase.Row) + abs(move.Col-ownBase.Col)
-	if distToOwnBase > 8 {
-		score -= float64((distToOwnBase - 8) * 5)
+	if distToOwnBase > 10 {
+		score -= float64((distToOwnBase - 10) * 20)
+	}
+
+	// 5. Prefer moves that create multiple expansion opportunities
+	if !isCapture && emptyNeighbors >= 2 {
+		score += 100.0 // Bonus for creating branching points
+	}
+
+	// 6. Slight preference for center control early game
+	centerRow := game.Rows / 2
+	centerCol := game.Cols / 2
+	distToCenter := abs(move.Row-centerRow) + abs(move.Col-centerCol)
+	if h.countPlayerPieces(game, player) < 15 {
+		score += float64((game.Rows+game.Cols)-distToCenter) * 2
 	}
 
 	return score
