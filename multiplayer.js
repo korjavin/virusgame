@@ -137,6 +137,16 @@ class MultiplayerClient {
             case 'player_eliminated':
                 this.handlePlayerEliminated(msg);
                 break;
+            case 'game_end':
+                this.handleGameEnd(msg);
+                break;
+        }
+    }
+
+    handleGameEnd(msg) {
+        // Game has ended - show leave game button for multiplayer games
+        if (this.isMultiplayerGame) {
+            this.showLeaveGameButton();
         }
     }
 
@@ -455,6 +465,51 @@ class MultiplayerClient {
         }
         this.updatePlayersDisplay();
         this.showNotification('Player Eliminated', `${player ? player.username : 'Player'} has been eliminated!`);
+
+        // Show leave game button if this player was eliminated
+        if (msg.eliminatedPlayer === this.yourPlayer) {
+            this.showLeaveGameButton();
+        }
+    }
+
+    showLeaveGameButton() {
+        const resignBtn = document.getElementById('resign-button');
+        const leaveGameBtn = document.getElementById('leave-game-button');
+
+        if (resignBtn) resignBtn.style.display = 'none';
+        if (leaveGameBtn) leaveGameBtn.style.display = 'inline-block';
+    }
+
+    leaveGame() {
+        // Send leave game message to server
+        this.send({
+            type: 'leave_game',
+            gameId: this.gameId
+        });
+
+        // Reset local state
+        this.gameId = null;
+        this.yourPlayer = null;
+        this.gamePlayers = [];
+        this.isMultiplayerGame = false;
+        this.stopMoveTimer();
+
+        // Hide game buttons and players display
+        const resignBtn = document.getElementById('resign-button');
+        const leaveGameBtn = document.getElementById('leave-game-button');
+        const playersInfo = document.getElementById('players-info');
+
+        if (resignBtn) resignBtn.style.display = 'none';
+        if (leaveGameBtn) leaveGameBtn.style.display = 'none';
+        if (playersInfo) playersInfo.remove();
+
+        // Show notification
+        this.showNotification('Left Game', 'You have left the game');
+
+        // Start a new local game
+        if (typeof initGame === 'function') {
+            initGame();
+        }
     }
 
     startMultiplayerGameMode(rows, cols, gamePlayers) {

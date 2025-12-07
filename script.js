@@ -505,6 +505,16 @@ document.addEventListener('DOMContentLoaded', () => {
         resignButton.addEventListener('click', handleResign);
     }
 
+    // Leave game button handler
+    const leaveGameButton = document.getElementById('leave-game-button');
+    if (leaveGameButton) {
+        leaveGameButton.addEventListener('click', () => {
+            if (mpClient && mpClient.isMultiplayerGame) {
+                mpClient.leaveGame();
+            }
+        });
+    }
+
     // Initial game start
     initGame();
 });

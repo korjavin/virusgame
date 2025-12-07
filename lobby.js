@@ -26,7 +26,6 @@ class LobbyManager {
 
         // Lobby controls
         this.createLobbyBtn = document.getElementById('create-lobby-button');
-        this.refreshLobbiesBtn = document.getElementById('refresh-lobbies-button');
         this.lobbiesList = document.getElementById('lobbies-list');
 
         // Current lobby controls
@@ -43,7 +42,6 @@ class LobbyManager {
 
         // Lobby actions
         this.createLobbyBtn.addEventListener('click', () => this.createLobby());
-        this.refreshLobbiesBtn.addEventListener('click', () => this.refreshLobbies());
         this.leaveLobbyBtn.addEventListener('click', () => this.leaveLobby());
         this.addBotBtn.addEventListener('click', () => this.addBot());
         this.startGameBtn.addEventListener('click', () => this.startGame());

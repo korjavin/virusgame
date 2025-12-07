@@ -178,6 +178,8 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 		h.handleRematch(client.user, msg)
 	case "resign":
 		h.handleResign(client.user, msg)
+	case "leave_game":
+		h.handleLeaveGame(client.user, msg)
 	// Lobby messages
 	case "create_lobby":
 		h.handleCreateLobby(client.user, msg)
@@ -623,6 +625,43 @@ func (h *Hub) handleResign(user *User, msg *Message) {
 
 		log.Printf("Game ended by resignation: %s (winner: player %d)", game.ID, winner)
 	}
+}
+
+func (h *Hub) handleLeaveGame(user *User, msg *Message) {
+	game, exists := h.games[msg.GameID]
+	if !exists {
+		return
+	}
+
+	if !game.IsMultiplayer {
+		return // Only for multiplayer games
+	}
+
+	// Find player who wants to leave
+	var leavingPlayerIndex int = -1
+	for i := 0; i < 4; i++ {
+		if game.Players[i] != nil && game.Players[i].User != nil && game.Players[i].User.ID == user.ID {
+			leavingPlayerIndex = i
+			break
+		}
+	}
+
+	if leavingPlayerIndex == -1 {
+		return // User not in this game
+	}
+
+	// Mark player as having left by setting User to nil but keeping the player slot
+	// This prevents them from receiving further updates
+	if game.Players[leavingPlayerIndex] != nil {
+		game.Players[leavingPlayerIndex].User = nil
+	}
+
+	// Mark user as not in game
+	user.InGame = false
+
+	log.Printf("Player %s left game %s (player index %d)", user.Username, game.ID, leavingPlayerIndex+1)
+
+	h.broadcastUserList()
 }
 
 func (h *Hub) checkWinCondition(game *Game) {
