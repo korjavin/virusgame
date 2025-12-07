@@ -290,7 +290,27 @@ class MultiplayerClient {
     updateResignButtonText() {
         const resignBtn = document.getElementById('resign-button');
         if (resignBtn && resignBtn.style.display !== 'none') {
-            resignBtn.textContent = `Resign (${this.moveTimeLeft})`;
+            resignBtn.textContent = 'Resign';
+        }
+
+        // Update separate timer display
+        let timerDisplay = document.getElementById('move-timer-display');
+        if (!timerDisplay) {
+            // Create timer display element
+            timerDisplay = document.createElement('div');
+            timerDisplay.id = 'move-timer-display';
+            timerDisplay.className = 'move-timer-display';
+            const gameControls = document.getElementById('game-controls');
+            if (gameControls) {
+                gameControls.appendChild(timerDisplay);
+            }
+        }
+
+        if (this.isMultiplayerGame && !gameOver) {
+            timerDisplay.textContent = `seconds before resign ${this.moveTimeLeft}`;
+            timerDisplay.style.display = 'block';
+        } else {
+            timerDisplay.style.display = 'none';
         }
     }
 
@@ -390,9 +410,14 @@ class MultiplayerClient {
         // Show resign button
         const resignBtn = document.getElementById('resign-button');
         if (resignBtn) resignBtn.style.display = 'inline-block';
+
+        // Start move timer
+        this.resetMoveTimer();
     }
 
     endMultiplayerGame() {
+        // Stop move timer
+        this.stopMoveTimer();
         this.multiplayerMode = false;
         this.isMultiplayerGame = false;
         this.gameId = null;
@@ -451,6 +476,9 @@ class MultiplayerClient {
         // Show resign button
         const resignBtn = document.getElementById('resign-button');
         if (resignBtn) resignBtn.style.display = 'inline-block';
+
+        // Start move timer
+        this.resetMoveTimer();
     }
 
     updatePlayersDisplay() {

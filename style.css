@@ -1365,3 +1365,31 @@ body.dark-theme .player-symbol-badge.symbol-△ {
 body.dark-theme .player-symbol-badge.symbol-□ {
     background-color: rgba(243, 156, 18, 0.3);
 }
+
+/* Move timer display */
+.move-timer-display {
+    display: none;
+    font-size: 14px;
+    color: #e74c3c;
+    text-align: center;
+    margin-top: 10px;
+    padding: 8px;
+    background-color: rgba(231, 76, 60, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(231, 76, 60, 0.3);
+    font-weight: 500;
+}
+
+body.dark-theme .move-timer-display {
+    background-color: rgba(231, 76, 60, 0.15);
+    border-color: rgba(231, 76, 60, 0.4);
+    color: #ff6b6b;
+}
+
+@media (max-width: 768px) {
+    .move-timer-display {
+        font-size: 13px;
+        padding: 6px;
+        margin-top: 8px;
+    }
+}
