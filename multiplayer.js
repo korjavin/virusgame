@@ -144,9 +144,27 @@ class MultiplayerClient {
     }
 
     handleGameEnd(msg) {
-        // Game has ended - show leave game button for multiplayer games
+        gameOver = true;
+        this.stopMoveTimer();
+
+        // Hide resign button
+        const resignBtn = document.getElementById('resign-button');
+        if (resignBtn) resignBtn.style.display = 'none';
+
         if (this.isMultiplayerGame) {
+            // Multiplayer mode (3-4 players) - show leave game button
             this.showLeaveGameButton();
+        } else {
+            // 1v1 mode - show result and rematch button, auto-cleanup
+            const winnerText = msg.winner === this.yourPlayer ? 'You win!' : 'You lose!';
+            if (statusDisplay) {
+                statusDisplay.textContent = `Game Over! ${winnerText}`;
+            }
+            this.showRematchButton();
+            // Auto-cleanup 1v1 game state after a short delay
+            setTimeout(() => {
+                this.endMultiplayerGame();
+            }, 100);
         }
     }
 
@@ -240,18 +258,6 @@ class MultiplayerClient {
 
         // Reset move timer
         this.resetMoveTimer();
-    }
-
-    handleGameEnd(msg) {
-        gameOver = true;
-        const winnerText = msg.winner === this.yourPlayer ? 'You win!' : 'You lose!';
-        statusDisplay.textContent = `Game Over! ${winnerText}`;
-        // Stop move timer
-        this.stopMoveTimer();
-        // Hide resign button when game ends
-        const resignBtn = document.getElementById('resign-button');
-        if (resignBtn) resignBtn.style.display = 'none';
-        this.showRematchButton();
     }
 
     handleRematchReceived(msg) {
@@ -478,6 +484,11 @@ class MultiplayerClient {
     }
 
     showLeaveGameButton() {
+        // Only show leave game button in multiplayer mode (3-4 players), not 1v1
+        if (!this.isMultiplayerGame) {
+            return;
+        }
+
         const resignBtn = document.getElementById('resign-button');
         const leaveGameBtn = document.getElementById('leave-game-button');
 
