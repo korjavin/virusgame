@@ -821,6 +821,15 @@ func (h *Hub) broadcastUserList() {
 }
 
 func (h *Hub) sendToClient(client *Client, msg *Message) {
+	// Recover from panic if channel is closed
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered from panic in sendToClient: %v", r)
+			// Clean up the client
+			delete(h.clients, client)
+		}
+	}()
+
 	data, err := json.Marshal(msg)
 	if err != nil {
 		log.Printf("Error marshaling message: %v", err)
@@ -830,7 +839,8 @@ func (h *Hub) sendToClient(client *Client, msg *Message) {
 	select {
 	case client.send <- data:
 	default:
-		close(client.send)
+		// Channel is full or closed, clean up
+		log.Printf("Failed to send to client, removing from clients map")
 		delete(h.clients, client)
 	}
 }
