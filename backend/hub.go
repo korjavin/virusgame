@@ -1475,15 +1475,7 @@ func (h *Hub) endTurn(game *Game) {
 				}
 			}
 
-			// Notify about elimination
-			elimMsg := Message{
-				Type:             "player_eliminated",
-				GameID:           game.ID,
-				EliminatedPlayer: eliminatedPlayer,
-			}
-			h.broadcastToGame(game, &elimMsg)
-
-			// Check if game should end
+			// Check if game should end (this will also send player_eliminated message)
 			h.checkMultiplayerStatus(game)
 			if game.GameOver {
 				return
@@ -1558,10 +1550,17 @@ func (h *Hub) checkMultiplayerStatus(game *Game) {
 			if pieceCount > 0 {
 				activePlayers++
 				lastActivePlayer = i
-			} else if pieceCount == 0 {
-				// Check if player was just eliminated (had pieces before)
-				// We detect this by checking if active count decreased
-				if previousActivePlayers > 0 {
+			}
+		}
+	}
+
+	// Only send elimination messages if active count decreased
+	if previousActivePlayers > activePlayers {
+		// Find which player(s) were eliminated
+		for i := 1; i <= 4; i++ {
+			if game.Players[i-1] != nil {
+				pieceCount := h.countPlayerPieces(game, i)
+				if pieceCount == 0 {
 					log.Printf("Player %d eliminated in game %s", i, game.ID)
 
 					// Send player_eliminated message
