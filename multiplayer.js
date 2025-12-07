@@ -599,6 +599,11 @@ class MultiplayerClient {
     }
 
     showRematchButton() {
+        // Don't show rematch button in multiplayer mode
+        if (this.isMultiplayerGame) {
+            return;
+        }
+
         const rematchBtn = document.getElementById('rematch-button');
         if (rematchBtn) {
             rematchBtn.style.display = 'block';
