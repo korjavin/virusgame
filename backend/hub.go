@@ -1456,9 +1456,40 @@ func (h *Hub) endTurn(game *Game) {
 	log.Printf("endTurn: Checking if player %d can make moves: %v", game.CurrentPlayer, canMove)
 	if !canMove {
 		// Current player has no valid moves
-		log.Printf("endTurn: Player %d has no valid moves, skipping to next player", game.CurrentPlayer)
+		log.Printf("endTurn: Player %d has no valid moves", game.CurrentPlayer)
 		if game.IsMultiplayer {
-			// In multiplayer, skip to next player
+			// In multiplayer, eliminate this player and check game status
+			eliminatedPlayer := game.CurrentPlayer
+			log.Printf("endTurn: Eliminating player %d (no valid moves)", eliminatedPlayer)
+
+			// Remove all pieces for this player
+			for i := 0; i < game.Rows; i++ {
+				for j := 0; j < game.Cols; j++ {
+					cell := game.Board[i][j]
+					if cell != nil {
+						cellStr := fmt.Sprintf("%v", cell)
+						if len(cellStr) > 0 && cellStr[0] == byte('0'+eliminatedPlayer) {
+							game.Board[i][j] = nil
+						}
+					}
+				}
+			}
+
+			// Notify about elimination
+			elimMsg := Message{
+				Type:             "player_eliminated",
+				GameID:           game.ID,
+				EliminatedPlayer: eliminatedPlayer,
+			}
+			h.broadcastToGame(game, &elimMsg)
+
+			// Check if game should end
+			h.checkMultiplayerStatus(game)
+			if game.GameOver {
+				return
+			}
+
+			// Skip to next player
 			h.endTurn(game)
 			return
 		} else {
