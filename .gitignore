@@ -1,1 +1,8 @@
 wasm/ai.wasm
+
+# Compiled binaries
+backend/virusgame
+backend/bot-hoster
+*.exe
+*.out
+*.bin
