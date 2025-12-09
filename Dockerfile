@@ -10,10 +10,13 @@ COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
 # Copy backend source
-COPY backend/*.go ./
+COPY backend/ .
 
 # Build the Go binary
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o virusgame-server .
+
+# Build the bot-hoster binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bot-hoster ./cmd/bot-hoster
 
 # Stage 2: Build the WASM AI module
 FROM golang:1.21-alpine AS wasm-builder
@@ -36,6 +39,7 @@ WORKDIR /app
 
 # Copy the Go binary from builder
 COPY --from=go-builder /build/virusgame-server .
+COPY --from=go-builder /build/bot-hoster .
 
 # Copy WASM module and create wasm directory
 RUN mkdir -p wasm

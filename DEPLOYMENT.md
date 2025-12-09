@@ -97,6 +97,60 @@ export NETWORK_NAME=traefik_network  # or your Traefik network name
 docker-compose up -d
 ```
 
+## Deploying Bot-Hoster
+
+### Prerequisites
+
+1. Backend must be running
+2. Backend must be accessible at the configured URL
+
+### Option 1: Same Host as Backend
+
+# Start backend
+cd backend
+docker-compose up -d
+
+# Start bot-hoster (connects via Docker network)
+cd ..
+docker-compose -f bot-hoster-compose.yml --env-file .env.bot-hoster up -d
+
+### Option 2: Different Host (e.g., Portainer)
+
+1. Copy `bot-hoster-compose.yml` to target host
+2. Configure `.env.bot-hoster`:
+   ```env
+   BACKEND_URL=ws://your-game-server.com:8080/ws
+   BOT_POOL_SIZE=20
+   ```
+3. Deploy via Portainer or:
+   ```bash
+   docker-compose -f bot-hoster-compose.yml --env-file .env.bot-hoster up -d
+   ```
+
+### Scaling
+
+Run multiple bot-hoster instances:
+
+# Instance 1
+docker-compose -f bot-hoster-compose.yml -p bot-hoster-1 up -d
+
+# Instance 2
+docker-compose -f bot-hoster-compose.yml -p bot-hoster-2 up -d
+
+# Now you have 20 bots total (10 per instance)
+
+### Monitoring
+
+# Check bot-hoster logs
+docker logs -f virusgame-bot-hoster
+
+# Should see:
+# Starting bot-hoster service...
+# Bot 1 connected: AI-BraveOctopus42
+# Bot 2 connected: AI-CleverWolf19
+# ...
+# Bot-hoster started with 10 bots connected to ws://backend:8080/ws
+
 ## WebSocket Configuration
 
 ### Traefik Labels Explained
