@@ -1098,6 +1098,27 @@ func (h *Hub) isConnectedToBase(game *Game, startRow, startCol, player int) bool
 	return false
 }
 
+// broadcast sends a message to all connected clients
+func (h *Hub) broadcast(msg *Message) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("Error marshaling broadcast message: %v", err)
+		return
+	}
+
+	for client := range h.clients {
+		// Try to send without blocking
+		select {
+		case client.send <- data:
+			// Message sent successfully
+		default:
+			// Channel is full or closed, clean up
+			log.Printf("Failed to broadcast to client, removing from clients map")
+			delete(h.clients, client)
+		}
+	}
+}
+
 func (h *Hub) broadcastUserList() {
 	users := make([]UserInfo, 0, len(h.users))
 	for _, user := range h.users {
@@ -1114,9 +1135,7 @@ func (h *Hub) broadcastUserList() {
 		Users: users,
 	}
 
-	for client := range h.clients {
-		h.sendToClient(client, &msg)
-	}
+	h.broadcast(&msg)
 }
 
 func (h *Hub) sendToClient(client *Client, msg *Message) {
@@ -1335,20 +1354,23 @@ func (h *Hub) handleAddBot(user *User, msg *Message) {
 		}
 	}
 
-	// Add bot to slot
-	lobby.Players[slotIndex] = &LobbyPlayer{
-		User:        nil,
-		IsBot:       true,
-		Symbol:      playerSymbols[slotIndex],
-		Ready:       true,
-		Index:       slotIndex,
+	// NEW: Broadcast bot_wanted signal to all clients
+	requestID := uuid.New().String()
+	botWantedMsg := Message{
+		Type:        "bot_wanted",
+		LobbyID:     lobby.ID,
+		RequestID:   requestID,
 		BotSettings: botSettings,
+		Rows:        lobby.Rows,
+		Cols:        lobby.Cols,
 	}
+	h.broadcast(&botWantedMsg)
 
-	h.broadcastLobbyUpdate(lobby)
-	h.broadcastLobbiesList()
+	log.Printf("Broadcasted bot_wanted for lobby %s (requestId: %s)", lobby.ID, requestID)
 
-	log.Printf("Bot added to lobby %s (slot %d)", lobby.ID, slotIndex)
+	// Note: We don't create a LobbyPlayer here anymore!
+	// The bot will join via regular join_lobby message
+	// The lobby update will happen when bot actually joins
 }
 
 func (h *Hub) handleRemoveBot(user *User, msg *Message) {
