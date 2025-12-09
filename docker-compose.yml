@@ -5,9 +5,9 @@ services:
   virusgame:
     # The image tag will be replaced by the GitHub Actions workflow
     image: ghcr.io/korjavin/virusgame:latest
-    container_name: virusgame
+    container_name: virusgame-backend
     networks:
-      - net1
+      - virusgame-network
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.virusgame.rule=Host(`${HOSTNAME}`)"
@@ -21,6 +21,6 @@ services:
     restart: unless-stopped
 
 networks:
-  net1:
-    external: true
-    name: ${NETWORK_NAME}
+  virusgame-network:
+    name: virusgame-network
+    driver: bridge
