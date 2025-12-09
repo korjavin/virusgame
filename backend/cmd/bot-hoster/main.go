@@ -1,32 +1,47 @@
 package main
 
 import (
-    "log"
-    "os"
-    "os/signal"
-    "syscall"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
-    log.Println("Starting bot-hoster service...")
+	log.Println("=== Bot-Hoster Service Starting ===")
 
-    config := LoadConfig()
-    manager := NewBotManager(config)
+	config := LoadConfig()
+	log.Printf("Configuration:")
+	log.Printf("  Backend URL: %s", config.BackendURL)
+	log.Printf("  Pool Size: %d", config.PoolSize)
 
-    // Start bot pool
-    if err := manager.Start(); err != nil {
-        log.Fatalf("Failed to start bot manager: %v", err)
-    }
+	manager := NewBotManager(config)
 
-    log.Printf("Bot-hoster started with %d bots connected to %s",
-        config.PoolSize, config.BackendURL)
+	// Start bot pool
+	if err := manager.Start(); err != nil {
+		log.Fatalf("Failed to start bot manager: %v", err)
+	}
 
-    // Wait for interrupt signal
-    sigChan := make(chan os.Signal, 1)
-    signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-    <-sigChan
+	log.Println("=== Bot-Hoster Service Running ===")
 
-    log.Println("Shutting down bot-hoster...")
-    manager.Stop()
-    log.Println("Bot-hoster stopped")
+	// Print stats periodically
+	statsTicker := time.NewTicker(30 * time.Second)
+	go func() {
+		for range statsTicker.C {
+			stats := manager.GetStats()
+			log.Printf("Pool stats: Total=%d, Idle=%d, InLobby=%d, InGame=%d, Disconnected=%d",
+				stats["total"], stats["idle"], stats["in_lobby"], stats["in_game"], stats["disconnected"])
+		}
+	}()
+
+	// Wait for interrupt signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	<-sigChan
+
+	log.Println("=== Shutdown Signal Received ===")
+	statsTicker.Stop()
+	manager.Stop()
+	log.Println("=== Bot-Hoster Service Stopped ===")
 }
