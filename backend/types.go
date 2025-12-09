@@ -32,6 +32,8 @@ type Message struct {
 	SlotIndex    int         `json:"slotIndex,omitempty"`
 	Lobby        *LobbyInfo  `json:"lobby,omitempty"`
 	Lobbies      []LobbyInfo `json:"lobbies,omitempty"`
+	// RequestID for tracking requests (e.g., bot_wanted)
+	RequestID    string      `json:"requestId,omitempty"`
 	// Multiplayer game fields
 	IsMultiplayer bool             `json:"isMultiplayer,omitempty"`
 	PlayerSymbol  string           `json:"playerSymbol,omitempty"`

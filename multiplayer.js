@@ -140,6 +140,11 @@ class MultiplayerClient {
             case 'game_end':
                 this.handleGameEnd(msg);
                 break;
+            case 'bot_wanted':
+                // Human clients ignore this message
+                // Only bot clients will respond to this signal
+                console.log('Bot wanted signal received (ignored by human client):', msg.lobbyId);
+                break;
         }
     }
 
