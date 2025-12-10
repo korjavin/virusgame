@@ -373,12 +373,12 @@ func (b *Bot) handleGameStart(msg *Message) {
 	} else {
 		// Use defaults
 		b.AIEngine = NewAIEngine(&BotSettings{
-			MaterialWeight:   100.0,
-			MobilityWeight:   50.0,
-			PositionWeight:   30.0,
+			MaterialWeight:   30.0,
+			MobilityWeight:   150.0,
+			PositionWeight:   130.0,
 			RedundancyWeight: 40.0,
-			CohesionWeight:   25.0,
-			SearchDepth:      5,
+			CohesionWeight:   40.0,
+			SearchDepth:      3,
 		})
 	}
 
