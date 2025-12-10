@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: virusgame:latest
+    image: ghcr.io/korjavin/virusgame:latest
     container_name: virusgame-bot-hoster
     command: ["./bot-hoster"]  # Override default command
     restart: unless-stopped

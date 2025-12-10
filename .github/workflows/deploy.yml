@@ -40,7 +40,9 @@ jobs:
           git config user.email "actions@github.com"
           git checkout -B deploy
           sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:.*|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" docker-compose.yml
-          git add docker-compose.yml
+          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:.*|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" bot-hoster-compose.yml
+
+          git add docker-compose.yml bot-hoster-compose.yml
           git commit -m "ci: Update image tag to ${{ github.sha }}"
           git push origin deploy --force
 
