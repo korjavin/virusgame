@@ -89,6 +89,14 @@ type Message struct {
 	Lobby            *LobbyInfo       `json:"lobby,omitempty"`
 	GamePlayers      []GamePlayerInfo `json:"gamePlayers,omitempty"`
 	EliminatedPlayer int              `json:"eliminatedPlayer,omitempty"`
+	// 1v1 Challenge fields
+	ChallengeID      string           `json:"challengeId,omitempty"`
+	FromUserID       string           `json:"fromUserId,omitempty"`
+	FromUsername     string           `json:"fromUsername,omitempty"`
+	OpponentID       string           `json:"opponentId,omitempty"`
+	OpponentUsername string           `json:"opponentUsername,omitempty"`
+	PlayerSymbol     string           `json:"playerSymbol,omitempty"`
+	IsMultiplayer    bool             `json:"isMultiplayer,omitempty"`
 }
 
 type BotSettings struct {
@@ -263,11 +271,17 @@ func (b *Bot) handleMessage(msg *Message) {
 	case "welcome":
 		b.handleWelcome(msg)
 
+	case "challenge_received":
+		b.handleChallengeReceived(msg)
+
 	case "bot_wanted":
 		b.handleBotWanted(msg)
 
 	case "lobby_joined":
 		b.handleLobbyJoined(msg)
+
+	case "game_start":
+		b.handleGameStart1v1(msg)
 
 	case "multiplayer_game_start":
 		b.handleGameStart(msg)
@@ -300,6 +314,88 @@ func (b *Bot) handleWelcome(msg *Message) {
 	b.mu.Unlock()
 
 	log.Printf("[Bot %s] Registered as %s (ID: %s)", b.ID, b.Username, b.UserID)
+}
+
+func (b *Bot) handleChallengeReceived(msg *Message) {
+	b.mu.RLock()
+	isIdle := b.State == BotIdle
+	b.mu.RUnlock()
+
+	if !isIdle {
+		// Bot is busy, decline the challenge
+		log.Printf("[Bot %s] Received challenge from %s but bot is busy, declining",
+			b.Username, msg.FromUsername)
+		b.declineChallenge(msg.ChallengeID)
+		return
+	}
+
+	log.Printf("[Bot %s] Received 1v1 challenge from %s (%dx%d), accepting...",
+		b.Username, msg.FromUsername, msg.Rows, msg.Cols)
+
+	// Accept the challenge
+	b.acceptChallenge(msg.ChallengeID)
+}
+
+func (b *Bot) acceptChallenge(challengeID string) {
+	msg := Message{
+		Type:        "accept_challenge",
+		ChallengeID: challengeID,
+	}
+	b.sendMessage(&msg)
+	log.Printf("[Bot %s] Sent accept_challenge for %s", b.Username, challengeID)
+}
+
+func (b *Bot) declineChallenge(challengeID string) {
+	msg := Message{
+		Type:        "decline_challenge",
+		ChallengeID: challengeID,
+	}
+	b.sendMessage(&msg)
+	log.Printf("[Bot %s] Sent decline_challenge for %s", b.Username, challengeID)
+}
+
+func (b *Bot) handleGameStart1v1(msg *Message) {
+	b.mu.Lock()
+	b.State = BotInGame
+	b.CurrentGame = msg.GameID
+	b.YourPlayer = msg.YourPlayer
+	b.Rows = msg.Rows
+	b.Cols = msg.Cols
+
+	// Initialize board for 1v1 game
+	b.Board = make([][]interface{}, b.Rows)
+	for i := range b.Board {
+		b.Board[i] = make([]interface{}, b.Cols)
+	}
+
+	// Set up bases for 1v1
+	b.PlayerBases[0] = CellPos{Row: 0, Col: 0}
+	b.PlayerBases[1] = CellPos{Row: b.Rows - 1, Col: b.Cols - 1}
+
+	// Place bases on board
+	b.Board[b.PlayerBases[0].Row][b.PlayerBases[0].Col] = "1-base"
+	b.Board[b.PlayerBases[1].Row][b.PlayerBases[1].Col] = "2-base"
+
+	// Set up game players info for 1v1
+	b.GamePlayers = []GamePlayerInfo{
+		{PlayerIndex: 1, Username: "Player 1", IsBot: false, IsActive: true},
+		{PlayerIndex: 2, Username: "Player 2", IsBot: false, IsActive: true},
+	}
+
+	// Initialize AI engine with default settings for 1v1
+	b.AIEngine = NewAIEngine(&BotSettings{
+		MaterialWeight:   30.0,
+		MobilityWeight:   150.0,
+		PositionWeight:   130.0,
+		RedundancyWeight: 40.0,
+		CohesionWeight:   40.0,
+		SearchDepth:      3,
+	})
+
+	b.mu.Unlock()
+
+	log.Printf("[Bot %s] 1v1 game started as player %d vs %s in game %s",
+		b.Username, b.YourPlayer, msg.OpponentUsername, b.CurrentGame)
 }
 
 func (b *Bot) handleBotWanted(msg *Message) {
