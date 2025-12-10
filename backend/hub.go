@@ -462,10 +462,32 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 	hasValidMoves := h.canMakeAnyMove(game, playerNum)
 	if game.MovesLeft == 0 || !hasValidMoves {
 		if !hasValidMoves && game.MovesLeft > 0 {
-			log.Printf("Player %d has no more valid moves (had %d moves left), ending turn early", playerNum, game.MovesLeft)
-		} else {
-			log.Printf("Turn ending for game %s, calling endTurn()", game.ID)
+			log.Printf("Player %d has no more valid moves (had %d moves left), eliminating player", playerNum, game.MovesLeft)
+
+			// Eliminate this player in multiplayer games
+			if game.IsMultiplayer {
+				// Remove all pieces for this player
+				for i := 0; i < game.Rows; i++ {
+					for j := 0; j < game.Cols; j++ {
+						cell := game.Board[i][j]
+						if cell != nil {
+							cellStr := fmt.Sprintf("%v", cell)
+							if len(cellStr) > 0 && cellStr[0] == byte('0'+playerNum) {
+								game.Board[i][j] = nil
+							}
+						}
+					}
+				}
+
+				// Check if game should end
+				h.checkMultiplayerStatus(game)
+				if game.GameOver {
+					return
+				}
+			}
 		}
+
+		log.Printf("Turn ending for game %s, calling endTurn()", game.ID)
 		h.endTurn(game)
 	}
 
@@ -809,6 +831,13 @@ func (h *Hub) handleBotMoveRequest(msg *Message) {
 	// Verify it's still this player's turn
 	if game.CurrentPlayer != msg.Player {
 		log.Printf("handleBotMoveRequest: wrong player turn, expected %d, got %d", game.CurrentPlayer, msg.Player)
+		return
+	}
+
+	// Check if player has any valid moves before calculating
+	if !h.canMakeAnyMove(game, msg.Player) {
+		log.Printf("handleBotMoveRequest: player %d has no valid moves, ending turn", msg.Player)
+		h.endTurn(game)
 		return
 	}
 

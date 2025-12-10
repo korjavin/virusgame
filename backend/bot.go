@@ -857,9 +857,35 @@ func (h *Hub) applyBotMove(game *Game, row, col, player int) {
 
 	log.Printf("Bot player %d moved to (%d,%d), %d moves left", player, row, col, game.MovesLeft)
 
-	// Check if turn is over
-	if game.MovesLeft == 0 {
-		log.Printf("Bot turn ending for game %s", game.ID)
+	// Check if turn is over OR if bot has no more valid moves
+	hasValidMoves := h.canMakeAnyMove(game, player)
+	if game.MovesLeft == 0 || !hasValidMoves {
+		if !hasValidMoves && game.MovesLeft > 0 {
+			log.Printf("Bot player %d has no more valid moves (had %d moves left), eliminating player", player, game.MovesLeft)
+
+			// Eliminate this player in multiplayer games
+			if game.IsMultiplayer {
+				// Remove all pieces for this player
+				for i := 0; i < game.Rows; i++ {
+					for j := 0; j < game.Cols; j++ {
+						cell := game.Board[i][j]
+						if cell != nil {
+							cellStr := fmt.Sprintf("%v", cell)
+							if len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+								game.Board[i][j] = nil
+							}
+						}
+					}
+				}
+
+				// Check if game should end
+				h.checkMultiplayerStatus(game)
+				if game.GameOver {
+					return
+				}
+			}
+		}
+
 		h.endTurn(game)
 	} else {
 		// Bot makes another move (has 3 moves per turn)
