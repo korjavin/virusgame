@@ -23,4 +23,4 @@ services:
 networks:
   virusgame-network:
     name: ${NETWORK_NAME}
-    driver: bridge
+    external: true
