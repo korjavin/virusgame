@@ -2,9 +2,6 @@ version: '3.8'
 
 services:
   bot-hoster:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: ghcr.io/korjavin/virusgame:latest
     container_name: virusgame-bot-hoster
     command: ["./bot-hoster"]  # Override default command
