@@ -1,0 +1,874 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"math"
+	"sort"
+	"strings"
+	"sync"
+)
+
+// AIEngine handles bot move calculations
+type AIEngine struct {
+	settings   *BotSettings
+	transTable *TranspositionTable
+}
+
+// TranspositionTable caches board evaluations
+type TranspositionTable struct {
+	table map[string]TranspositionEntry
+	mu    sync.RWMutex
+}
+
+type TranspositionEntry struct {
+	Score float64
+	Depth int
+	Flag  int
+}
+
+const (
+	exactScore = iota
+	lowerBound
+	upperBound
+)
+
+func NewAIEngine(settings *BotSettings) *AIEngine {
+	return &AIEngine{
+		settings:   settings,
+		transTable: NewTranspositionTable(),
+	}
+}
+
+func NewTranspositionTable() *TranspositionTable {
+	return &TranspositionTable{
+		table: make(map[string]TranspositionEntry),
+	}
+}
+
+// CalculateMove returns the best move for the given game state
+// Returns (row, col, ok) where ok is false if no valid moves exist
+func (ai *AIEngine) CalculateMove(state *GameState, player int) (int, int, bool) {
+	depth := ai.settings.SearchDepth
+	if depth <= 0 {
+		depth = 3 // default
+	}
+
+	log.Printf("[AI] Calculating move for player %d (depth: %d)", player, depth)
+
+	// Get all valid moves
+	validMoves := ai.getAllValidMoves(state, player)
+	if len(validMoves) == 0 {
+		return 0, 0, false
+	}
+
+	// Use minimax to find best move
+	bestMove := ai.findBestMoveWithMinimax(state, validMoves, player, depth)
+
+	log.Printf("[AI] Selected move: (%d, %d) with score %.2f",
+		bestMove.Row, bestMove.Col, bestMove.Score)
+
+	return bestMove.Row, bestMove.Col, true
+}
+
+// GameState represents the current state of the game
+type GameState struct {
+	Board       [][]interface{}
+	Rows        int
+	Cols        int
+	PlayerBases [4]CellPos
+	Players     []GamePlayerInfo
+}
+
+type Move struct {
+	Row   int
+	Col   int
+	Score float64
+}
+
+// MinimaxResult represents the result of minimax search
+type MinimaxResult struct {
+	Score float64
+	Move  *Move
+}
+
+func (ai *AIEngine) getAllValidMoves(state *GameState, player int) []Move {
+	var moves []Move
+	for row := 0; row < state.Rows; row++ {
+		for col := 0; col < state.Cols; col++ {
+			if ai.isValidMove(state, row, col, player) {
+				moves = append(moves, Move{Row: row, Col: col})
+			}
+		}
+	}
+	return moves
+}
+
+func (ai *AIEngine) isValidMove(state *GameState, row, col, player int) bool {
+	// Check bounds
+	if row < 0 || row >= state.Rows || col < 0 || col >= state.Cols {
+		return false
+	}
+
+	if state.Board == nil || len(state.Board) <= row || len(state.Board[row]) <= col {
+		return false
+	}
+
+	cell := state.Board[row][col]
+	cellStr := fmt.Sprintf("%v", cell)
+
+	// Cannot move on fortified or base cells
+	if cell != nil {
+		if strings.HasSuffix(cellStr, "-fortified") || strings.HasSuffix(cellStr, "-base") {
+			return false
+		}
+	}
+
+	// Can only attack opponent's non-fortified cells or expand to empty cells
+	if cell != nil {
+		isOpponent := false
+		// state.Players is only set during initialization and might not be reliable for quick checks
+		// Check player ID from cell string directly
+		cellPlayer := 0
+		if len(cellStr) > 0 {
+			cellPlayer = int(cellStr[0] - '0')
+		}
+
+		if cellPlayer != player && cellPlayer > 0 && cellPlayer <= 4 {
+			isOpponent = true
+		}
+
+		if !isOpponent {
+			return false
+		}
+	}
+
+	// Must be adjacent to own territory and connected to base
+	return ai.isAdjacentAndConnected(state, row, col, player)
+}
+
+func (ai *AIEngine) isAdjacentAndConnected(state *GameState, row, col, player int) bool {
+	// Check all 8 neighbors for friendly cells that are connected to base
+	for i := -1; i <= 1; i++ {
+		for j := -1; j <= 1; j++ {
+			if i == 0 && j == 0 {
+				continue
+			}
+			adjRow := row + i
+			adjCol := col + j
+			if adjRow >= 0 && adjRow < state.Rows && adjCol >= 0 && adjCol < state.Cols {
+				adjCell := state.Board[adjRow][adjCol]
+				adjStr := fmt.Sprintf("%v", adjCell)
+				if adjCell != nil && len(adjStr) > 0 && adjStr[0] == byte('0'+player) {
+					if ai.isConnectedToBase(state, adjRow, adjCol, player) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (ai *AIEngine) isConnectedToBase(state *GameState, startRow, startCol, player int) bool {
+	// BFS to check if cell is connected to base
+	base := state.PlayerBases[player-1]
+	visited := make(map[string]bool)
+	stack := []struct{ row, col int }{{startRow, startCol}}
+	visited[fmt.Sprintf("%d,%d", startRow, startCol)] = true
+
+	for len(stack) > 0 {
+		curr := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if curr.row == base.Row && curr.col == base.Col {
+			return true
+		}
+
+		for i := -1; i <= 1; i++ {
+			for j := -1; j <= 1; j++ {
+				if i == 0 && j == 0 {
+					continue
+				}
+				newRow := curr.row + i
+				newCol := curr.col + j
+				key := fmt.Sprintf("%d,%d", newRow, newCol)
+
+				if newRow >= 0 && newRow < state.Rows && newCol >= 0 && newCol < state.Cols && !visited[key] {
+					cell := state.Board[newRow][newCol]
+					cellStr := fmt.Sprintf("%v", cell)
+					if cell != nil && len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+						visited[key] = true
+						stack = append(stack, struct{ row, col int }{newRow, newCol})
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, player int, depth int) Move {
+	// Sort moves by heuristic for better pruning
+	for i := range moves {
+		moves[i].Score = ai.scoreMoveQuick(state, moves[i], player)
+	}
+	sort.Slice(moves, func(i, j int) bool {
+		return moves[i].Score > moves[j].Score
+	})
+
+	// Limit moves to consider
+	maxMoves := 20
+	if len(moves) > maxMoves {
+		moves = moves[:maxMoves]
+	}
+
+	bestMove := moves[0]
+	bestScore := math.Inf(-1)
+	alpha := math.Inf(-1)
+	beta := math.Inf(1)
+
+	for _, move := range moves {
+		newBoard := ai.copyBoard(state.Board)
+		ai.applyMoveToBoard(newBoard, move.Row, move.Col, player)
+
+		newState := &GameState{
+			Board:       newBoard,
+			Rows:        state.Rows,
+			Cols:        state.Cols,
+			PlayerBases: state.PlayerBases,
+			Players:     state.Players,
+		}
+
+		result := ai.minimax(newState, depth-1, alpha, beta, false, player)
+
+		if result.Score > bestScore {
+			bestScore = result.Score
+			bestMove = move
+			bestMove.Score = bestScore
+		}
+
+		alpha = math.Max(alpha, result.Score)
+		if beta <= alpha {
+			break
+		}
+	}
+
+	return bestMove
+}
+
+func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, isMaximizing bool, aiPlayer int) MinimaxResult {
+	// Check transposition table
+	boardHash := ai.hashBoard(state.Board, aiPlayer)
+	if entry, exists := ai.transTable.Get(boardHash); exists && entry.Depth >= depth {
+		if entry.Flag == exactScore {
+			return MinimaxResult{Score: entry.Score, Move: nil}
+		} else if entry.Flag == lowerBound {
+			alpha = math.Max(alpha, entry.Score)
+		} else if entry.Flag == upperBound {
+			beta = math.Min(beta, entry.Score)
+		}
+		if alpha >= beta {
+			return MinimaxResult{Score: entry.Score, Move: nil}
+		}
+	}
+
+	// Base case: reached max depth
+	if depth == 0 {
+		score := ai.evaluateBoard(state, aiPlayer)
+		ai.transTable.Put(boardHash, TranspositionEntry{
+			Score: score,
+			Depth: depth,
+			Flag:  exactScore,
+		})
+		return MinimaxResult{Score: score, Move: nil}
+	}
+
+	player := aiPlayer
+	if !isMaximizing {
+		player = ai.getNextOpponent(state, aiPlayer)
+	}
+
+	possibleMoves := ai.getAllValidMoves(state, player)
+
+	// Terminal state: no moves available
+	if len(possibleMoves) == 0 {
+		score := ai.evaluateBoard(state, aiPlayer)
+		// Penalize losing positions, reward winning positions
+		if isMaximizing {
+			score -= 10000
+		} else {
+			score += 10000
+		}
+		ai.transTable.Put(boardHash, TranspositionEntry{
+			Score: score,
+			Depth: depth,
+			Flag:  exactScore,
+		})
+		return MinimaxResult{Score: score, Move: nil}
+	}
+
+	// Move ordering: sort by heuristic score
+	for i := range possibleMoves {
+		possibleMoves[i].Score = ai.scoreMoveQuick(state, possibleMoves[i], player)
+	}
+	if isMaximizing {
+		sort.Slice(possibleMoves, func(i, j int) bool {
+			return possibleMoves[i].Score > possibleMoves[j].Score
+		})
+	} else {
+		sort.Slice(possibleMoves, func(i, j int) bool {
+			return possibleMoves[i].Score < possibleMoves[j].Score
+		})
+	}
+
+	// Limit number of moves to consider at deeper levels for speed
+	maxMoves := 15
+	if depth <= 2 {
+		maxMoves = 10
+	}
+	if len(possibleMoves) > maxMoves {
+		possibleMoves = possibleMoves[:maxMoves]
+	}
+
+	originalAlpha := alpha
+	if isMaximizing {
+		// AI's turn: maximize score
+		maxScore := math.Inf(-1)
+		var bestMove *Move
+
+		for _, move := range possibleMoves {
+			// Try this move
+			newBoard := ai.copyBoard(state.Board)
+			ai.applyMoveToBoard(newBoard, move.Row, move.Col, player)
+
+			newState := &GameState{
+				Board:       newBoard,
+				Rows:        state.Rows,
+				Cols:        state.Cols,
+				PlayerBases: state.PlayerBases,
+				Players:     state.Players,
+			}
+
+			// Recursively evaluate
+			result := ai.minimax(newState, depth-1, alpha, beta, false, aiPlayer)
+
+			if result.Score > maxScore {
+				maxScore = result.Score
+				bestMove = &move
+			}
+
+			alpha = math.Max(alpha, result.Score)
+			if beta <= alpha {
+				break // Beta cutoff
+			}
+		}
+
+		// Store in transposition table
+		flag := exactScore
+		if maxScore <= originalAlpha {
+			flag = upperBound
+		} else if maxScore >= beta {
+			flag = lowerBound
+		}
+		ai.transTable.Put(boardHash, TranspositionEntry{
+			Score: maxScore,
+			Depth: depth,
+			Flag:  flag,
+		})
+
+		return MinimaxResult{Score: maxScore, Move: bestMove}
+
+	} else {
+		// Opponent's turn: minimize score
+		minScore := math.Inf(1)
+		var bestMove *Move
+
+		for _, move := range possibleMoves {
+			// Try this move
+			newBoard := ai.copyBoard(state.Board)
+			ai.applyMoveToBoard(newBoard, move.Row, move.Col, player)
+
+			newState := &GameState{
+				Board:       newBoard,
+				Rows:        state.Rows,
+				Cols:        state.Cols,
+				PlayerBases: state.PlayerBases,
+				Players:     state.Players,
+			}
+
+			// Recursively evaluate
+			result := ai.minimax(newState, depth-1, alpha, beta, true, aiPlayer)
+
+			if result.Score < minScore {
+				minScore = result.Score
+				bestMove = &move
+			}
+
+			beta = math.Min(beta, result.Score)
+			if beta <= alpha {
+				break // Alpha cutoff
+			}
+		}
+
+		// Store in transposition table
+		flag := exactScore
+		if minScore <= alpha {
+			flag = lowerBound
+		} else if minScore >= beta {
+			flag = upperBound
+		}
+		ai.transTable.Put(boardHash, TranspositionEntry{
+			Score: minScore,
+			Depth: depth,
+			Flag:  flag,
+		})
+
+		return MinimaxResult{Score: minScore, Move: bestMove}
+	}
+}
+
+func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
+	// Single pass through board to collect all metrics
+	aiCells := 0
+	opponentCells := 0
+	aiFortified := 0
+	opponentFortified := 0
+	aiAttackOpportunities := 0
+	opponentAttackOpportunities := 0
+	aiAggression := 0.0
+	opponentAggression := 0.0
+	aiRedundantCells := 0 // Cells with 2+ friendly neighbors
+	opponentRedundantCells := 0
+	aiCohesionPenalty := 0 // Gaps in territory
+	opponentCohesionPenalty := 0
+
+	// Get opponent bases for aggression calculation
+	opponentBases := ai.getOpponentBases(state, aiPlayer)
+
+	for r := 0; r < state.Rows; r++ {
+		for c := 0; c < state.Cols; c++ {
+			cell := state.Board[r][c]
+			cellStr := fmt.Sprintf("%v", cell)
+
+			if cell != nil && len(cellStr) > 0 {
+				if cellStr[0] == byte('0'+aiPlayer) {
+					// AI cell
+					aiCells++
+					if strings.HasSuffix(cellStr, "-fortified") {
+						aiFortified++
+					}
+
+					// Aggression: distance to closest opponent base
+					if len(opponentBases) > 0 {
+						minDist := 999999
+						for _, base := range opponentBases {
+							dist := abs(r-base.Row) + abs(c-base.Col)
+							if dist < minDist {
+								minDist = dist
+							}
+						}
+						aiAggression += float64(state.Rows + state.Cols - minDist)
+					}
+
+					// Count opponent neighbors (cells opponent can attack)
+					opponentNeighborCount := ai.countOpponentNeighborsOnBoard(state.Board, r, c, aiPlayer, state.Rows, state.Cols)
+					if opponentNeighborCount > 0 {
+						opponentAttackOpportunities++
+					}
+
+					// Redundancy: cells with 2+ friendly neighbors
+					friendlyNeighbors := ai.countFriendlyNeighborsOnBoard(state.Board, r, c, aiPlayer, state.Rows, state.Cols)
+					if friendlyNeighbors >= 2 {
+						aiRedundantCells++
+					}
+
+				} else {
+					// Opponent cell
+					opponentCells++
+					if strings.HasSuffix(cellStr, "-fortified") {
+						opponentFortified++
+					}
+
+					// Count AI neighbors (cells AI can attack)
+					aiNeighborCount := ai.countPlayerNeighborsOnBoard(state.Board, r, c, aiPlayer, state.Rows, state.Cols)
+					if aiNeighborCount > 0 {
+						aiAttackOpportunities++
+					}
+
+					// Opponent aggression and redundancy
+					opponentPlayer := ai.getCellPlayer(cellStr)
+					if opponentPlayer > 0 {
+						// Distance to AI base
+						aiBase := state.PlayerBases[aiPlayer-1]
+						dist := abs(r-aiBase.Row) + abs(c-aiBase.Col)
+						opponentAggression += float64(state.Rows + state.Cols - dist)
+
+						// Redundancy
+						friendlyNeighbors := ai.countFriendlyNeighborsOnBoard(state.Board, r, c, opponentPlayer, state.Rows, state.Cols)
+						if friendlyNeighbors >= 2 {
+							opponentRedundantCells++
+						}
+					}
+				}
+			} else {
+				// Empty cell - check for gaps/holes
+				aiFriendlyNeighbors := ai.countFriendlyNeighborsOnBoard(state.Board, r, c, aiPlayer, state.Rows, state.Cols)
+				if aiFriendlyNeighbors >= 2 {
+					aiCohesionPenalty += aiFriendlyNeighbors
+				}
+
+				// Check for opponent gaps
+				for p := 1; p <= 4; p++ {
+					// Check if player is active
+					isActive := false
+					for _, player := range state.Players {
+						if player.PlayerIndex+1 == p && player.IsActive {
+							isActive = true
+							break
+						}
+					}
+
+					if p != aiPlayer && isActive {
+						oppNeighbors := ai.countFriendlyNeighborsOnBoard(state.Board, r, c, p, state.Rows, state.Cols)
+						if oppNeighbors >= 2 {
+							opponentCohesionPenalty += oppNeighbors
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 1. Material Score (cells + fortifications)
+	materialScore := float64(aiCells*10+aiFortified*20) - float64(opponentCells*10+opponentFortified*20)
+
+	// 2. Mobility Score (available moves)
+	aiMoves := len(ai.getAllValidMoves(state, aiPlayer))
+	opponentMoves := 0
+	for p := 1; p <= 4; p++ {
+		// Check if player is active
+		isActive := false
+		for _, player := range state.Players {
+			if player.PlayerIndex+1 == p && player.IsActive {
+				isActive = true
+				break
+			}
+		}
+
+		if p != aiPlayer && isActive {
+			opponentMoves += len(ai.getAllValidMoves(state, p))
+		}
+	}
+	mobilityScore := float64(aiMoves - opponentMoves)
+
+	// 3. Strategic Position Score (aggression + attack opportunities)
+	positionScore := (aiAggression - opponentAggression) + float64(aiAttackOpportunities-opponentAttackOpportunities)*5.0
+
+	// 4. Redundancy Score (network resilience)
+	redundancyScore := float64(aiRedundantCells - opponentRedundantCells)
+
+	// 5. Cohesion Score (penalize gaps/holes)
+	cohesionScore := float64(opponentCohesionPenalty - aiCohesionPenalty)
+
+	// Combine scores with weights from bot settings
+	totalScore := materialScore*ai.settings.MaterialWeight +
+		mobilityScore*ai.settings.MobilityWeight +
+		positionScore*ai.settings.PositionWeight +
+		redundancyScore*ai.settings.RedundancyWeight +
+		cohesionScore*ai.settings.CohesionWeight
+
+	return totalScore
+}
+
+func (ai *AIEngine) scoreMoveQuick(state *GameState, move Move, player int) float64 {
+	cellValue := state.Board[move.Row][move.Col]
+	cellStr := fmt.Sprintf("%v", cellValue)
+	score := 0.0
+
+	// 1. Capturing opponent cells (1500 points, +800 if fortified)
+	isCapture := false
+	if cellValue != nil && len(cellStr) > 0 {
+		for p := 1; p <= 4; p++ {
+			// Check if player is active
+			isActive := false
+			for _, pl := range state.Players {
+				if pl.PlayerIndex+1 == p && pl.IsActive {
+					isActive = true
+					break
+				}
+			}
+
+			if p != player && isActive && cellStr[0] == byte('0'+p) {
+				isCapture = true
+				score += 1500.0
+				if strings.HasSuffix(cellStr, "-fortified") {
+					score += 800.0
+				}
+				// Bonus for capturing cells near their base (aggressive play)
+				oppBase := state.PlayerBases[p-1]
+				distToTheirBase := abs(move.Row-oppBase.Row) + abs(move.Col-oppBase.Col)
+				if distToTheirBase <= 3 {
+					score += 500.0 // Big bonus for attacking near their base
+				}
+				break
+			}
+		}
+	}
+
+	// 2. Count neighbors with improved scoring
+	friendlyNeighbors := 0
+	opponentNeighbors := 0
+	emptyNeighbors := 0
+	fortifiedNeighbors := 0
+	directions := [][]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+
+	for _, dir := range directions {
+		nr := move.Row + dir[0]
+		nc := move.Col + dir[1]
+		if nr >= 0 && nr < state.Rows && nc >= 0 && nc < state.Cols {
+			neighbor := state.Board[nr][nc]
+			neighborStr := fmt.Sprintf("%v", neighbor)
+			if neighbor != nil && len(neighborStr) > 0 {
+				if neighborStr[0] == byte('0'+player) {
+					friendlyNeighbors++
+					if strings.HasSuffix(neighborStr, "-fortified") {
+						fortifiedNeighbors++
+					}
+				} else {
+					opponentNeighbors++
+				}
+			} else {
+				emptyNeighbors++
+			}
+		}
+	}
+
+	// Reward connecting to existing territory
+	score += float64(friendlyNeighbors * 80)
+	// Bonus for being near fortified cells (defensive strength)
+	score += float64(fortifiedNeighbors * 40)
+	// Reward being near opponent cells (attack opportunities)
+	score += float64(opponentNeighbors * 60)
+	// Slight bonus for expansion potential
+	score += float64(emptyNeighbors * 15)
+
+	// 3. Strategic positioning
+	opponentBase := ai.getClosestOpponentBase(state, player, move.Row, move.Col)
+	if opponentBase != nil {
+		distToOpponentBase := abs(move.Row-opponentBase.Row) + abs(move.Col-opponentBase.Col)
+		// Encourage aggressive expansion toward opponent
+		score += float64((state.Rows+state.Cols)-distToOpponentBase) * 5
+	}
+
+	// 4. Penalize overextension from own base
+	ownBase := state.PlayerBases[player-1]
+	distToOwnBase := abs(move.Row-ownBase.Row) + abs(move.Col-ownBase.Col)
+	if distToOwnBase > 10 {
+		score -= float64((distToOwnBase - 10) * 20)
+	}
+
+	// 5. Prefer moves that create multiple expansion opportunities
+	if !isCapture && emptyNeighbors >= 2 {
+		score += 100.0 // Bonus for creating branching points
+	}
+
+	// 6. Slight preference for center control early game
+	centerRow := state.Rows / 2
+	centerCol := state.Cols / 2
+	distToCenter := abs(move.Row-centerRow) + abs(move.Col-centerCol)
+	if ai.countPlayerPieces(state, player) < 15 {
+		score += float64((state.Rows+state.Cols)-distToCenter) * 2
+	}
+
+	return score
+}
+
+func (ai *AIEngine) copyBoard(board [][]interface{}) [][]interface{} {
+	newBoard := make([][]interface{}, len(board))
+	for i := range board {
+		newBoard[i] = make([]interface{}, len(board[i]))
+		copy(newBoard[i], board[i])
+	}
+	return newBoard
+}
+
+func (ai *AIEngine) applyMoveToBoard(board [][]interface{}, row, col, player int) {
+	cell := board[row][col]
+	if cell == nil {
+		board[row][col] = player
+	} else {
+		board[row][col] = fmt.Sprintf("%d-fortified", player)
+	}
+}
+
+func (ai *AIEngine) hashBoard(board [][]interface{}, player int) string {
+	var key strings.Builder
+	key.WriteString(fmt.Sprintf("P%d:", player))
+	for r := range board {
+		for c := range board[r] {
+			if board[r][c] == nil {
+				key.WriteString("_")
+			} else {
+				key.WriteString(fmt.Sprintf("%v", board[r][c]))
+			}
+			key.WriteString(",")
+		}
+	}
+	return key.String()
+}
+
+// TranspositionTable methods
+func (tt *TranspositionTable) Get(key string) (TranspositionEntry, bool) {
+	tt.mu.RLock()
+	defer tt.mu.RUnlock()
+	entry, exists := tt.table[key]
+	return entry, exists
+}
+
+func (tt *TranspositionTable) Put(key string, entry TranspositionEntry) {
+	tt.mu.Lock()
+	defer tt.mu.Unlock()
+	tt.table[key] = entry
+}
+
+func (ai *AIEngine) getNextOpponent(state *GameState, currentPlayer int) int {
+	// Find next active opponent
+	for i := 1; i <= 4; i++ {
+		if i != currentPlayer {
+			isActive := false
+			for _, p := range state.Players {
+				if p.PlayerIndex+1 == i && p.IsActive {
+					isActive = true
+					break
+				}
+			}
+			if isActive && ai.countPlayerPieces(state, i) > 0 {
+				return i
+			}
+		}
+	}
+	return currentPlayer
+}
+
+func (ai *AIEngine) countPlayerPieces(state *GameState, player int) int {
+	count := 0
+	for r := 0; r < state.Rows; r++ {
+		for c := 0; c < state.Cols; c++ {
+			cell := state.Board[r][c]
+			cellStr := fmt.Sprintf("%v", cell)
+			if cell != nil && len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+func (ai *AIEngine) getOpponentBases(state *GameState, aiPlayer int) []CellPos {
+	var bases []CellPos
+	for i := 1; i <= 4; i++ {
+		if i != aiPlayer {
+			isActive := false
+			for _, p := range state.Players {
+				if p.PlayerIndex+1 == i && p.IsActive {
+					isActive = true
+					break
+				}
+			}
+			if isActive && ai.countPlayerPieces(state, i) > 0 {
+				bases = append(bases, state.PlayerBases[i-1])
+			}
+		}
+	}
+	return bases
+}
+
+func (ai *AIEngine) countFriendlyNeighborsOnBoard(board [][]interface{}, row, col, player, rows, cols int) int {
+	count := 0
+	for i := -1; i <= 1; i++ {
+		for j := -1; j <= 1; j++ {
+			if i == 0 && j == 0 {
+				continue
+			}
+			nr := row + i
+			nc := col + j
+			if nr >= 0 && nr < rows && nc >= 0 && nc < cols {
+				cell := board[nr][nc]
+				cellStr := fmt.Sprintf("%v", cell)
+				if cell != nil && len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+					count++
+				}
+			}
+		}
+	}
+	return count
+}
+
+func (ai *AIEngine) countPlayerNeighborsOnBoard(board [][]interface{}, row, col, player, rows, cols int) int {
+	return ai.countFriendlyNeighborsOnBoard(board, row, col, player, rows, cols)
+}
+
+func (ai *AIEngine) countOpponentNeighborsOnBoard(board [][]interface{}, row, col, player, rows, cols int) int {
+	count := 0
+	for i := -1; i <= 1; i++ {
+		for j := -1; j <= 1; j++ {
+			if i == 0 && j == 0 {
+				continue
+			}
+			nr := row + i
+			nc := col + j
+			if nr >= 0 && nr < rows && nc >= 0 && nc < cols {
+				cell := board[nr][nc]
+				cellStr := fmt.Sprintf("%v", cell)
+				if cell != nil && len(cellStr) > 0 && cellStr[0] != byte('0'+player) {
+					count++
+				}
+			}
+		}
+	}
+	return count
+}
+
+func (ai *AIEngine) getCellPlayer(cellStr string) int {
+	if len(cellStr) > 0 {
+		playerChar := cellStr[0]
+		if playerChar >= '1' && playerChar <= '4' {
+			return int(playerChar - '0')
+		}
+	}
+	return 0
+}
+
+func (ai *AIEngine) getClosestOpponentBase(state *GameState, player int, fromRow, fromCol int) *CellPos {
+	var closestBase *CellPos
+	minDist := 999999
+
+	for i := 1; i <= 4; i++ {
+		if i != player {
+			isActive := false
+			for _, p := range state.Players {
+				if p.PlayerIndex+1 == i && p.IsActive {
+					isActive = true
+					break
+				}
+			}
+			if isActive && ai.countPlayerPieces(state, i) > 0 {
+				base := state.PlayerBases[i-1]
+				dist := abs(fromRow-base.Row) + abs(fromCol-base.Col)
+				if dist < minDist {
+					minDist = dist
+					closestBase = &base
+				}
+			}
+		}
+	}
+	return closestBase
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}

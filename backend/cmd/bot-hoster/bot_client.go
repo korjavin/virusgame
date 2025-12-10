@@ -58,6 +58,9 @@ type Bot struct {
 	Rows        int
 	Cols        int
 
+	// AI
+	AIEngine *AIEngine // NEW
+
 	// Communication channels
 	send chan []byte
 	done chan bool
@@ -346,9 +349,42 @@ func (b *Bot) handleGameStart(msg *Message) {
 	b.PlayerBases[2] = CellPos{Row: 0, Col: b.Cols - 1}
 	b.PlayerBases[3] = CellPos{Row: b.Rows - 1, Col: 0}
 
+	// Place bases on board
+	if len(b.Board) > b.PlayerBases[0].Row && len(b.Board[0]) > b.PlayerBases[0].Col {
+		b.Board[b.PlayerBases[0].Row][b.PlayerBases[0].Col] = "1-base"
+	}
+	if len(b.Board) > b.PlayerBases[1].Row && len(b.Board[0]) > b.PlayerBases[1].Col {
+		b.Board[b.PlayerBases[1].Row][b.PlayerBases[1].Col] = "2-base"
+	}
+	if len(b.GamePlayers) > 2 {
+		if len(b.Board) > b.PlayerBases[2].Row && len(b.Board[0]) > b.PlayerBases[2].Col {
+			b.Board[b.PlayerBases[2].Row][b.PlayerBases[2].Col] = "3-base"
+		}
+	}
+	if len(b.GamePlayers) > 3 {
+		if len(b.Board) > b.PlayerBases[3].Row && len(b.Board[0]) > b.PlayerBases[3].Col {
+			b.Board[b.PlayerBases[3].Row][b.PlayerBases[3].Col] = "4-base"
+		}
+	}
+
+	// NEW: Initialize AI engine with bot settings
+	if b.BotSettings != nil {
+		b.AIEngine = NewAIEngine(b.BotSettings)
+	} else {
+		// Use defaults
+		b.AIEngine = NewAIEngine(&BotSettings{
+			MaterialWeight:   100.0,
+			MobilityWeight:   50.0,
+			PositionWeight:   30.0,
+			RedundancyWeight: 40.0,
+			CohesionWeight:   25.0,
+			SearchDepth:      5,
+		})
+	}
+
 	b.mu.Unlock()
 
-	log.Printf("[Bot %s] Game started as player %d in game %s",
+	log.Printf("[Bot %s] Game started as player %d in game %s (AI ready)",
 		b.Username, b.YourPlayer, b.CurrentGame)
 }
 
@@ -359,22 +395,86 @@ func (b *Bot) handleMoveMade(msg *Message) {
 
 	b.mu.Lock()
 	b.applyMove(*msg.Row, *msg.Col, msg.Player)
+	isMyTurn := msg.Player == b.YourPlayer
+	movesLeft := msg.MovesLeft
+	gameID := b.CurrentGame
 	b.mu.Unlock()
 
-	log.Printf("[Bot %s] Move made by player %d at (%d, %d)",
-		b.Username, msg.Player, *msg.Row, *msg.Col)
+	log.Printf("[Bot %s] Move made by player %d at (%d, %d). Moves left: %d",
+		b.Username, msg.Player, *msg.Row, *msg.Col, movesLeft)
+
+	// If it's my turn and I have moves left, calculate next move
+	if isMyTurn && movesLeft > 0 {
+		log.Printf("[Bot %s] Still my turn (%d moves left). Calculating next move...", b.Username, movesLeft)
+		go b.calculateAndSendMove(gameID)
+	}
 }
 
 func (b *Bot) handleTurnChange(msg *Message) {
 	b.mu.RLock()
 	isMyTurn := msg.Player == b.YourPlayer
+	gameID := b.CurrentGame
 	b.mu.RUnlock()
 
 	if isMyTurn {
 		log.Printf("[Bot %s] My turn! Calculating move...", b.Username)
-		// TODO: Task 4 will implement AI move calculation
-		// For now, just log
+		go b.calculateAndSendMove(gameID)
 	}
+}
+
+// calculateAndSendMove runs AI to find best move and sends it
+func (b *Bot) calculateAndSendMove(gameID string) {
+	b.mu.RLock()
+
+	// Create game state snapshot
+	state := &GameState{
+		Board:       b.copyBoardLocal(b.Board),
+		Rows:        b.Rows,
+		Cols:        b.Cols,
+		PlayerBases: b.PlayerBases,
+		Players:     b.GamePlayers,
+	}
+	player := b.YourPlayer
+	aiEngine := b.AIEngine
+
+	b.mu.RUnlock()
+
+	if aiEngine == nil {
+		log.Printf("[Bot %s] ERROR: AI engine not initialized!", b.Username)
+		return
+	}
+
+	// Calculate move (may take 500ms - 2s)
+	row, col, ok := aiEngine.CalculateMove(state, player)
+
+	if !ok {
+		log.Printf("[Bot %s] No valid moves available!", b.Username)
+		// TODO: Could send resign message here
+		return
+	}
+
+	// Send move
+	rowPtr := row
+	colPtr := col
+	msg := Message{
+		Type:   "move",
+		GameID: gameID,
+		Row:    &rowPtr,
+		Col:    &colPtr,
+	}
+
+	b.sendMessage(&msg)
+
+	log.Printf("[Bot %s] Sent move: (%d, %d)", b.Username, row, col)
+}
+
+func (b *Bot) copyBoardLocal(board [][]interface{}) [][]interface{} {
+	newBoard := make([][]interface{}, len(board))
+	for i := range board {
+		newBoard[i] = make([]interface{}, len(board[i]))
+		copy(newBoard[i], board[i])
+	}
+	return newBoard
 }
 
 func (b *Bot) handleGameEnd(msg *Message) {
