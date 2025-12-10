@@ -22,5 +22,5 @@ services:
 
 networks:
   virusgame-network:
-    name: virusgame-network
+    name: ${NETWORK_NAME}
     driver: bridge
