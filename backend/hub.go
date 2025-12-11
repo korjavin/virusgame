@@ -1505,7 +1505,21 @@ func (h *Hub) handleRemoveBot(user *User, msg *Message) {
 		return
 	}
 
-	// Remove bot
+	// Notify bot that it was removed from lobby
+	if player.User != nil {
+		player.User.InLobby = false
+		player.User.LobbyID = ""
+
+		kickMsg := Message{
+			Type:     "lobby_closed",
+			LobbyID:  lobby.ID,
+			Username: "You were removed from the lobby",
+		}
+		h.sendToUser(player.User, &kickMsg)
+		log.Printf("Sent lobby_closed to bot %s (removed from slot %d)", player.User.Username, slotIndex)
+	}
+
+	// Remove bot from lobby
 	lobby.Players[slotIndex] = nil
 
 	h.broadcastLobbyUpdate(lobby)
