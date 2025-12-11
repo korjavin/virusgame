@@ -772,11 +772,10 @@ func (h *Hub) cleanupBotRequestsForLobby(lobbyID string) {
 		if botRequest.LobbyID == lobbyID {
 			delete(h.botRequests, requestID)
 			cleaned++
+			log.Printf("Cleaned up bot request %s (fulfilled: %v) for lobby %s", requestID, botRequest.Fulfilled, lobbyID)
 		}
 	}
-	if cleaned > 0 {
-		log.Printf("Cleaned up %d bot requests for lobby %s", cleaned, lobbyID)
-	}
+	log.Printf("Cleaned up %d bot request(s) for lobby %s (total remaining: %d)", cleaned, lobbyID, len(h.botRequests))
 }
 
 // cleanupStaleGames removes games that are finished or have no human players
@@ -1462,6 +1461,8 @@ func (h *Hub) handleAddBot(user *User, msg *Message) {
 		CreatedAt:   time.Now(),
 	}
 
+	log.Printf("Created bot request %s for lobby %s (total requests: %d)", requestID, lobby.ID, len(h.botRequests))
+
 	botWantedMsg := Message{
 		Type:        "bot_wanted",
 		LobbyID:     lobby.ID,
@@ -1472,7 +1473,7 @@ func (h *Hub) handleAddBot(user *User, msg *Message) {
 	}
 	h.broadcast(&botWantedMsg)
 
-	log.Printf("Broadcasted bot_wanted for lobby %s (requestId: %s)", lobby.ID, requestID)
+	log.Printf("Broadcasted bot_wanted for lobby %s (requestId: %s) to %d clients", lobby.ID, requestID, len(h.clients))
 
 	// Note: We don't create a LobbyPlayer here anymore!
 	// The bot will join via regular join_lobby message
