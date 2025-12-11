@@ -443,6 +443,32 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 }
 
 func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
+	// PRIORITY 0: Check if any opponent is defeated in this position
+	// This is the most important factor - defeating opponents wins games
+	defeatedOpponents := 0
+	for p := 1; p <= 4; p++ {
+		if p != aiPlayer {
+			isActive := false
+			for _, pl := range state.Players {
+				if pl.PlayerIndex+1 == p && pl.IsActive {
+					isActive = true
+					break
+				}
+			}
+			if isActive {
+				// Check if this opponent has any pieces left
+				pieceCount := ai.countPlayerPieces(state, p)
+				if pieceCount == 0 {
+					defeatedOpponents++
+				}
+			}
+		}
+	}
+	// Massive bonus for each defeated opponent
+	if defeatedOpponents > 0 {
+		return 500000.0 * float64(defeatedOpponents)
+	}
+
 	// Single pass through board to collect all metrics
 	aiCells := 0
 	opponentCells := 0
@@ -584,6 +610,14 @@ func (ai *AIEngine) scoreMoveQuick(state *GameState, move Move, player int) floa
 	cellValue := state.Board[move.Row][move.Col]
 	cellStr := fmt.Sprintf("%v", cellValue)
 	score := 0.0
+
+	// PRIORITY 0: Check if this move defeats any opponent (kills a player)
+	// This check is very fast - just counts opponent pieces
+	defeatedPlayer := ai.checkIfMoveDefeatsOpponent(state, move, player)
+	if defeatedPlayer > 0 {
+		// MASSIVE bonus for defeating a player - this should ALWAYS be chosen
+		return 1000000.0 + score // Return immediately with overwhelming score
+	}
 
 	// 1. Capturing opponent cells (1500 points, +800 if fortified)
 	isCapture := false
@@ -870,4 +904,65 @@ func abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+// checkIfMoveDefeatsOpponent checks if making this move would eliminate any opponent
+// Returns the defeated player number (1-4) or 0 if no player is defeated
+// This is optimized to be very fast - just simulates the move and counts pieces
+func (ai *AIEngine) checkIfMoveDefeatsOpponent(state *GameState, move Move, player int) int {
+	// Get the cell we're targeting
+	cellValue := state.Board[move.Row][move.Col]
+	if cellValue == nil {
+		// Expanding into empty space - cannot defeat anyone
+		return 0
+	}
+
+	cellStr := fmt.Sprintf("%v", cellValue)
+	if len(cellStr) == 0 {
+		return 0
+	}
+
+	// Get the targeted opponent player
+	targetPlayer := ai.getCellPlayer(cellStr)
+	if targetPlayer == 0 || targetPlayer == player {
+		return 0
+	}
+
+	// Check if this opponent is active
+	isActive := false
+	for _, pl := range state.Players {
+		if pl.PlayerIndex+1 == targetPlayer && pl.IsActive {
+			isActive = true
+			break
+		}
+	}
+	if !isActive {
+		return 0
+	}
+
+	// Fast check: count how many pieces this opponent has
+	// If they only have 1 piece and we're taking it, they're defeated
+	opponentPieceCount := 0
+	for r := 0; r < state.Rows && opponentPieceCount <= 1; r++ {
+		for c := 0; c < state.Cols && opponentPieceCount <= 1; c++ {
+			cell := state.Board[r][c]
+			if cell != nil {
+				cellStr := fmt.Sprintf("%v", cell)
+				if len(cellStr) > 0 && ai.getCellPlayer(cellStr) == targetPlayer {
+					opponentPieceCount++
+					// Early exit if we find more than 1 piece
+					if opponentPieceCount > 1 {
+						return 0
+					}
+				}
+			}
+		}
+	}
+
+	// If opponent has exactly 1 piece and it's the one we're taking, they're defeated!
+	if opponentPieceCount == 1 {
+		return targetPlayer
+	}
+
+	return 0
 }
