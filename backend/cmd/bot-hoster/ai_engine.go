@@ -54,13 +54,21 @@ func (ai *AIEngine) CalculateMove(state *GameState, player int) (int, int, bool)
 		depth = 3 // default
 	}
 
-	log.Printf("[AI] Calculating move for player %d (depth: %d)", player, depth)
-
 	// Get all valid moves
 	validMoves := ai.getAllValidMoves(state, player)
 	if len(validMoves) == 0 {
 		return 0, 0, false
 	}
+
+	// Adaptive depth: reduce depth when there are many moves (mid-game)
+	moveCount := len(validMoves)
+	if moveCount > 30 {
+		depth = 2 // Shallow search for complex positions
+	} else if moveCount > 50 {
+		depth = 1 // Very shallow for highly complex positions
+	}
+
+	log.Printf("[AI] Calculating move for player %d (depth: %d, moves: %d)", player, depth, moveCount)
 
 	// Use minimax to find best move
 	bestMove := ai.findBestMoveWithMinimax(state, validMoves, player, depth)
@@ -217,8 +225,11 @@ func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, play
 		return moves[i].Score > moves[j].Score
 	})
 
-	// Limit moves to consider
-	maxMoves := 20
+	// Adaptive move limit: reduce moves considered based on game complexity
+	maxMoves := 15 // Reduced from 20
+	if len(moves) > 40 {
+		maxMoves = 10 // Even fewer for complex positions
+	}
 	if len(moves) > maxMoves {
 		moves = moves[:maxMoves]
 	}
@@ -323,9 +334,12 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 	}
 
 	// Limit number of moves to consider at deeper levels for speed
-	maxMoves := 15
+	maxMoves := 12 // Reduced from 15
 	if depth <= 2 {
-		maxMoves = 10
+		maxMoves = 8 // Reduced from 10
+	}
+	if depth == 1 {
+		maxMoves = 6 // Very aggressive pruning at deepest level
 	}
 	if len(possibleMoves) > maxMoves {
 		possibleMoves = possibleMoves[:maxMoves]
@@ -543,24 +557,9 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 	// 1. Material Score (cells + fortifications)
 	materialScore := float64(aiCells*10+aiFortified*20) - float64(opponentCells*10+opponentFortified*20)
 
-	// 2. Mobility Score (available moves)
-	aiMoves := len(ai.getAllValidMoves(state, aiPlayer))
-	opponentMoves := 0
-	for p := 1; p <= 4; p++ {
-		// Check if player is active
-		isActive := false
-		for _, player := range state.Players {
-			if player.PlayerIndex+1 == p && player.IsActive {
-				isActive = true
-				break
-			}
-		}
-
-		if p != aiPlayer && isActive {
-			opponentMoves += len(ai.getAllValidMoves(state, p))
-		}
-	}
-	mobilityScore := float64(aiMoves - opponentMoves)
+	// 2. Mobility Score (fast approximation using attack opportunities instead of full move generation)
+	// This is much faster than calling getAllValidMoves for all players
+	mobilityScore := float64(aiAttackOpportunities - opponentAttackOpportunities)
 
 	// 3. Strategic Position Score (aggression + attack opportunities)
 	positionScore := (aiAggression - opponentAggression) + float64(aiAttackOpportunities-opponentAttackOpportunities)*5.0
