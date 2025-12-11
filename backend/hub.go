@@ -16,6 +16,15 @@ type MessageWrapper struct {
 	message *Message
 }
 
+// BotRequest tracks a single bot request to prevent multiple bots from joining
+type BotRequest struct {
+	LobbyID     string
+	RequestID   string
+	BotSettings *BotSettings
+	Fulfilled   bool
+	CreatedAt   time.Time
+}
+
 // Hub maintains the set of active clients and broadcasts messages
 type Hub struct {
 	clients       map[*Client]bool
@@ -23,6 +32,7 @@ type Hub struct {
 	challenges    map[string]*Challenge
 	games         map[string]*Game
 	lobbies       map[string]*Lobby
+	botRequests   map[string]*BotRequest // requestID -> BotRequest
 	register      chan *Client
 	unregister    chan *Client
 	handleMessage chan *MessageWrapper
@@ -35,6 +45,7 @@ func newHub() *Hub {
 		challenges:    make(map[string]*Challenge),
 		games:         make(map[string]*Game),
 		lobbies:       make(map[string]*Lobby),
+		botRequests:   make(map[string]*BotRequest),
 		register:      make(chan *Client),
 		unregister:    make(chan *Client),
 		handleMessage: make(chan *MessageWrapper, 256), // Buffered to prevent deadlock when sending internal messages
@@ -760,6 +771,19 @@ func (h *Hub) cleanupStaleGames() {
 	now := time.Now()
 	cleanedCount := 0
 
+	// Clean up old bot requests (older than 5 minutes)
+	botRequestsCleaned := 0
+	for requestID, botRequest := range h.botRequests {
+		age := now.Sub(botRequest.CreatedAt)
+		if age > 5*time.Minute {
+			delete(h.botRequests, requestID)
+			botRequestsCleaned++
+		}
+	}
+	if botRequestsCleaned > 0 {
+		log.Printf("Periodic cleanup: removed %d old bot requests", botRequestsCleaned)
+	}
+
 	for gameID, game := range h.games {
 		shouldClean := false
 		reason := ""
@@ -1278,6 +1302,35 @@ func (h *Hub) handleJoinLobby(user *User, msg *Message) {
 		return
 	}
 
+	// Check if this is a response to a bot_wanted request
+	isBot := false
+	if msg.RequestID != "" {
+		botRequest, exists := h.botRequests[msg.RequestID]
+		if !exists {
+			// Request not found - ignore this join attempt
+			log.Printf("Bot %s tried to join with invalid requestID %s", user.Username, msg.RequestID)
+			return
+		}
+
+		if botRequest.Fulfilled {
+			// Request already fulfilled by another bot - ignore
+			log.Printf("Bot %s tried to join but request %s already fulfilled", user.Username, msg.RequestID)
+			return
+		}
+
+		if botRequest.LobbyID != msg.LobbyID {
+			// Request is for a different lobby - ignore
+			log.Printf("Bot %s tried to join lobby %s but request %s is for lobby %s",
+				user.Username, msg.LobbyID, msg.RequestID, botRequest.LobbyID)
+			return
+		}
+
+		// Mark request as fulfilled
+		botRequest.Fulfilled = true
+		isBot = true
+		log.Printf("Bot %s fulfilled request %s for lobby %s", user.Username, msg.RequestID, msg.LobbyID)
+	}
+
 	// Find empty slot
 	slotIndex := -1
 	for i := 0; i < lobby.MaxPlayers; i++ {
@@ -1295,7 +1348,7 @@ func (h *Hub) handleJoinLobby(user *User, msg *Message) {
 	// Add player to lobby
 	lobby.Players[slotIndex] = &LobbyPlayer{
 		User:   user,
-		IsBot:  false,
+		IsBot:  isBot,
 		Symbol: playerSymbols[slotIndex],
 		Ready:  false,
 		Index:  slotIndex,
@@ -1383,8 +1436,18 @@ func (h *Hub) handleAddBot(user *User, msg *Message) {
 		}
 	}
 
-	// NEW: Broadcast bot_wanted signal to all clients
+	// NEW: Create a bot request and broadcast bot_wanted signal to all clients
 	requestID := uuid.New().String()
+
+	// Store the bot request to track it
+	h.botRequests[requestID] = &BotRequest{
+		LobbyID:     lobby.ID,
+		RequestID:   requestID,
+		BotSettings: botSettings,
+		Fulfilled:   false,
+		CreatedAt:   time.Now(),
+	}
+
 	botWantedMsg := Message{
 		Type:        "bot_wanted",
 		LobbyID:     lobby.ID,

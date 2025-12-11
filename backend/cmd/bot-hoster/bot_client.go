@@ -408,10 +408,11 @@ func (b *Bot) handleBotWanted(msg *Message) {
 		return
 	}
 
-	log.Printf("[Bot %s] Received bot_wanted signal for lobby %s", b.Username, msg.LobbyID)
+	log.Printf("[Bot %s] Received bot_wanted signal for lobby %s (requestID: %s)",
+		b.Username, msg.LobbyID, msg.RequestID)
 
-	// Join the lobby
-	b.JoinLobby(msg.LobbyID, msg.BotSettings)
+	// Join the lobby with the requestID
+	b.JoinLobby(msg.LobbyID, msg.RequestID, msg.BotSettings)
 }
 
 func (b *Bot) handleLobbyJoined(msg *Message) {
@@ -617,18 +618,19 @@ func (b *Bot) applyMove(row, col, player int) {
 }
 
 // JoinLobby sends a join_lobby message
-func (b *Bot) JoinLobby(lobbyID string, botSettings *BotSettings) {
+func (b *Bot) JoinLobby(lobbyID string, requestID string, botSettings *BotSettings) {
 	b.mu.Lock()
 	b.BotSettings = botSettings
 	b.mu.Unlock()
 
 	msg := Message{
-		Type:    "join_lobby",
-		LobbyID: lobbyID,
+		Type:      "join_lobby",
+		LobbyID:   lobbyID,
+		RequestID: requestID,
 	}
 
 	b.sendMessage(&msg)
-	log.Printf("[Bot %s] Sent join_lobby for %s", b.Username, lobbyID)
+	log.Printf("[Bot %s] Sent join_lobby for %s (requestID: %s)", b.Username, lobbyID, requestID)
 }
 
 // sendMessage marshals and sends a message
