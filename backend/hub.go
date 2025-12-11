@@ -765,6 +765,20 @@ func (h *Hub) cleanupUserFromPreviousGame(user *User) {
 	user.GameID = ""
 }
 
+// cleanupBotRequestsForLobby removes all bot requests for a specific lobby
+func (h *Hub) cleanupBotRequestsForLobby(lobbyID string) {
+	cleaned := 0
+	for requestID, botRequest := range h.botRequests {
+		if botRequest.LobbyID == lobbyID {
+			delete(h.botRequests, requestID)
+			cleaned++
+		}
+	}
+	if cleaned > 0 {
+		log.Printf("Cleaned up %d bot requests for lobby %s", cleaned, lobbyID)
+	}
+}
+
 // cleanupStaleGames removes games that are finished or have no human players
 // This runs periodically to prevent memory leaks
 func (h *Hub) cleanupStaleGames() {
@@ -1654,6 +1668,8 @@ func (h *Hub) removeUserFromLobby(lobby *Lobby, user *User) {
 				h.sendToUser(lobby.Players[i].User, &msg)
 			}
 		}
+		// Clean up bot requests for this lobby
+		h.cleanupBotRequestsForLobby(lobby.ID)
 		delete(h.lobbies, lobby.ID)
 		log.Printf("Lobby %s closed (host left)", lobby.ID)
 	} else {
@@ -1758,6 +1774,9 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 			h.sendToUser(gamePlayers[i].User, &startMsg)
 		}
 	}
+
+	// Clean up bot requests for this lobby
+	h.cleanupBotRequestsForLobby(lobby.ID)
 
 	// Delete lobby
 	delete(h.lobbies, lobby.ID)
