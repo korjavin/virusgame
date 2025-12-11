@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -106,6 +107,29 @@ type BotSettings struct {
 	RedundancyWeight float64 `json:"redundancyWeight"`
 	CohesionWeight   float64 `json:"cohesionWeight"`
 	SearchDepth      int     `json:"searchDepth"`
+}
+
+// randomizeWeight adds ±50% randomization to a weight value
+func randomizeWeight(baseWeight float64) float64 {
+	// Generate random factor between 0.5 and 1.5 (±50%)
+	randomFactor := 0.5 + rand.Float64()
+	return baseWeight * randomFactor
+}
+
+// createRandomizedBotSettings creates bot settings with randomized weights for variety
+func createRandomizedBotSettings() *BotSettings {
+	settings := &BotSettings{
+		MaterialWeight:   randomizeWeight(30.0),
+		MobilityWeight:   randomizeWeight(150.0),
+		PositionWeight:   randomizeWeight(130.0),
+		RedundancyWeight: randomizeWeight(40.0),
+		CohesionWeight:   randomizeWeight(40.0),
+		SearchDepth:      3,
+	}
+	log.Printf("[AI] Randomized bot settings: Material=%.1f, Mobility=%.1f, Position=%.1f, Redundancy=%.1f, Cohesion=%.1f",
+		settings.MaterialWeight, settings.MobilityWeight, settings.PositionWeight,
+		settings.RedundancyWeight, settings.CohesionWeight)
+	return settings
 }
 
 type LobbyInfo struct {
@@ -382,15 +406,8 @@ func (b *Bot) handleGameStart1v1(msg *Message) {
 		{PlayerIndex: 2, Username: "Player 2", IsBot: false, IsActive: true},
 	}
 
-	// Initialize AI engine with default settings for 1v1
-	b.AIEngine = NewAIEngine(&BotSettings{
-		MaterialWeight:   30.0,
-		MobilityWeight:   150.0,
-		PositionWeight:   130.0,
-		RedundancyWeight: 40.0,
-		CohesionWeight:   40.0,
-		SearchDepth:      3,
-	})
+	// Initialize AI engine with randomized settings for varied gameplay
+	b.AIEngine = NewAIEngine(createRandomizedBotSettings())
 
 	b.mu.Unlock()
 
@@ -464,19 +481,12 @@ func (b *Bot) handleGameStart(msg *Message) {
 		}
 	}
 
-	// NEW: Initialize AI engine with bot settings
+	// Initialize AI engine with bot settings (randomized if not provided)
 	if b.BotSettings != nil {
 		b.AIEngine = NewAIEngine(b.BotSettings)
 	} else {
-		// Use defaults
-		b.AIEngine = NewAIEngine(&BotSettings{
-			MaterialWeight:   30.0,
-			MobilityWeight:   150.0,
-			PositionWeight:   130.0,
-			RedundancyWeight: 40.0,
-			CohesionWeight:   40.0,
-			SearchDepth:      3,
-		})
+		// Use randomized settings for varied gameplay
+		b.AIEngine = NewAIEngine(createRandomizedBotSettings())
 	}
 
 	b.mu.Unlock()
