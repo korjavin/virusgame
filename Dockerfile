@@ -18,18 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o virusgame-server 
 # Build the bot-hoster binary
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bot-hoster ./cmd/bot-hoster
 
-# Stage 2: Build the WASM AI module
-FROM golang:1.21-alpine AS wasm-builder
-
-WORKDIR /wasm
-
-# Copy WASM source
-COPY wasm/go.mod wasm/ai.go ./
-
-# Build WASM module
-RUN GOOS=js GOARCH=wasm go build -o ai.wasm ai.go
-
-# Stage 3: Create final image
+# Stage 2: Create final image
 FROM alpine:latest
 
 # Add ca-certificates for HTTPS
@@ -41,13 +30,9 @@ WORKDIR /app
 COPY --from=go-builder /build/virusgame-server .
 COPY --from=go-builder /build/bot-hoster .
 
-# Copy WASM module and create wasm directory
-RUN mkdir -p wasm
-COPY --from=wasm-builder /wasm/ai.wasm ./wasm/
-
 # Copy all frontend files (HTML, CSS, JS)
 COPY index.html style.css favicon.jpg ./
-COPY script.js ai.js ai-wasm.js multiplayer.js lobby.js tutorial.js translations.js wasm_exec.js ./
+COPY script.js ai.js multiplayer.js lobby.js tutorial.js translations.js ./
 COPY DOCS.md README.md ./
 
 # Add build argument for commit SHA
