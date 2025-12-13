@@ -997,14 +997,41 @@ func (h *Hub) handleMoveTimeout(msg *Message) {
 		return
 	}
 
-	log.Printf("Move timeout for player %d in game %s - auto-resigning", msg.Player, msg.GameID)
+	log.Printf("Move timeout for player %d in game %s - auto-resigning/eliminating", msg.Player, msg.GameID)
 
-	// Auto-resign the player
+	// Handle timeout for multiplayer games
 	if game.IsMultiplayer {
 		player := game.Players[msg.Player-1]
-		if player != nil && player.User != nil {
-			resignMsg := &Message{GameID: game.ID}
-			h.handleResign(player.User, resignMsg)
+		if player != nil {
+			if player.User != nil {
+				// Human player - use normal resign
+				resignMsg := &Message{GameID: game.ID}
+				h.handleResign(player.User, resignMsg)
+			} else if player.IsBot {
+				// Bot player - eliminate directly since bots don't have User objects
+				log.Printf("Bot player %d timed out - eliminating", msg.Player)
+
+				// Remove all pieces for this bot
+				for i := 0; i < game.Rows; i++ {
+					for j := 0; j < game.Cols; j++ {
+						cell := game.Board[i][j]
+						if cell != 0 && cell.Player() == msg.Player {
+							game.Board[i][j] = 0
+						}
+					}
+				}
+
+				// Send player_eliminated message
+				elimMsg := Message{
+					Type:             "player_eliminated",
+					GameID:           game.ID,
+					EliminatedPlayer: msg.Player,
+				}
+				h.broadcastToGame(game, &elimMsg)
+
+				// Check if game should end
+				h.checkMultiplayerStatus(game)
+			}
 		}
 	}
 }
@@ -1873,15 +1900,14 @@ func (h *Hub) startMoveTimer(game *Game) {
 		game.MoveTimer.Stop()
 	}
 
-	// Only start timer for multiplayer games with human players
+	// Only start timer for multiplayer games
 	if !game.IsMultiplayer || game.GameOver {
 		return
 	}
 
-	// Check if current player is a bot
-	if game.Players[game.CurrentPlayer-1] != nil && game.Players[game.CurrentPlayer-1].IsBot {
-		return // Don't set timer for bots
-	}
+	// Start timer for ALL players (including bots) as a safety mechanism
+	// Even though bots calculate moves quickly, they can get stuck with no valid moves
+	// and need the timer to auto-resign them
 
 	// Capture values for the closure (don't access game directly in timer callback)
 	gameID := game.ID
