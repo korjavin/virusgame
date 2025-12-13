@@ -173,9 +173,8 @@ function updateAIProgress() {
         progressDiv.classList.remove('hidden');
         progressText.textContent = `${aiProgressCurrent}/${aiProgressTotal}`;
         console.log('AI Progress:', aiProgressCurrent, '/', aiProgressTotal);
-    } else {
-        console.warn('AI progress elements not found:', progressDiv, progressText);
     }
+    // AI progress elements are optional - no warning needed if not found
 }
 
 function hideAIProgress() {
