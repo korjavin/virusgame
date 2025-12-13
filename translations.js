@@ -439,6 +439,10 @@ const i18n = {
             <span class="modal-close" id="rules-close">&times;</span>
             <h2>${this.t('rulesTitle')}</h2>
 
+            <div style="text-align: center; margin-bottom: 20px;">
+                <button id="start-tutorial-btn" class="primary-btn" style="width: 100%; max-width: 300px;">${this.t('startTutorial')}</button>
+            </div>
+
             <div class="modal-section">
                 <h3>${this.t('goal')}</h3>
                 <p>${this.t('goalText')}</p>
@@ -484,7 +488,6 @@ const i18n = {
             </div>
 
             <div class="modal-actions">
-                <button id="start-tutorial-btn" class="primary-btn">${this.t('startTutorial')}</button>
                 <button id="close-rules-btn" class="secondary-btn">${this.t('close')}</button>
             </div>
         `;
