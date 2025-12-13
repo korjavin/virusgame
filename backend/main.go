@@ -4,7 +4,21 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
+
+// noCacheMiddleware adds cache-busting headers for JS/CSS files
+func noCacheMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Apply no-cache headers to JS and CSS files to prevent stale code
+		if strings.HasSuffix(r.URL.Path, ".js") || strings.HasSuffix(r.URL.Path, ".css") {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func main() {
 	hub := newHub()
@@ -22,9 +36,9 @@ func main() {
 		staticDir = "/app"
 	}
 
-	// Serve static files
+	// Serve static files with no-cache headers to prevent browser caching issues
 	fs := http.FileServer(http.Dir(staticDir))
-	http.Handle("/", fs)
+	http.Handle("/", noCacheMiddleware(fs))
 
 	log.Println("Server starting on :8080")
 	log.Printf("Serving static files from: %s", staticDir)
