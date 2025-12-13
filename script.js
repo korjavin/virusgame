@@ -530,9 +530,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function initGame() {
         // Force leave multiplayer game if still connected
-        if (multiplayerClient && multiplayerClient.gameId) {
+        if (typeof mpClient !== 'undefined' && mpClient && mpClient.gameId) {
             console.log('Forcing leave from multiplayer game before starting local game');
-            multiplayerClient.leaveGame();
+            mpClient.leaveGame();
             return; // leaveGame() will call initGame() again after cleanup
         }
 
@@ -581,6 +581,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderBoard();
         updateStatus();
+
+        // Update connection trees if enabled
+        if (connectionTreeEnabled) {
+            updateAllConnectionTrees();
+        }
 
         // Show resign button for local games
         if (resignButton) {
