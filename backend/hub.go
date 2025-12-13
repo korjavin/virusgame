@@ -1855,8 +1855,9 @@ func (h *Hub) endTurn(game *Game) {
 
 	if game.IsMultiplayer {
 		log.Printf("endTurn: Starting turn rotation from player %d", game.CurrentPlayer)
-		// Find next active player
+		// Find next active player who can actually make moves
 		nextPlayer := game.CurrentPlayer
+		foundValidPlayer := false
 		for attempts := 0; attempts < 4; attempts++ {
 			nextPlayer++
 			if nextPlayer > 4 {
@@ -1865,21 +1866,56 @@ func (h *Hub) endTurn(game *Game) {
 
 			log.Printf("endTurn: Attempt %d, checking player %d", attempts, nextPlayer)
 
-			// Check if this player is active
+			// Check if this player is active and has pieces
 			if game.Players[nextPlayer-1] != nil {
 				pieceCount := h.countPlayerPieces(game, nextPlayer)
 				log.Printf("endTurn: Player %d exists, has %d pieces", nextPlayer, pieceCount)
-				// Check if player has any pieces left
+
 				if pieceCount > 0 {
+					// IMPORTANT: Also check if this player can actually make valid moves
+					// This prevents selecting a player who has pieces but is stuck
 					game.CurrentPlayer = nextPlayer
 					game.MovesLeft = 3
-					log.Printf("endTurn: Selected player %d as next player", nextPlayer)
-					break
+					canMove := h.canMakeAnyMove(game, nextPlayer)
+					log.Printf("endTurn: Player %d can make moves: %v", nextPlayer, canMove)
+
+					if canMove {
+						foundValidPlayer = true
+						log.Printf("endTurn: Selected player %d as next player (has pieces and can move)", nextPlayer)
+						break
+					} else {
+						// This player has pieces but can't move - eliminate them now
+						log.Printf("endTurn: Player %d has pieces but no valid moves, eliminating immediately", nextPlayer)
+						for i := 0; i < game.Rows; i++ {
+							for j := 0; j < game.Cols; j++ {
+								cell := game.Board[i][j]
+								if cell != nil {
+									cellStr := fmt.Sprintf("%v", cell)
+									if len(cellStr) > 0 && cellStr[0] == byte('0'+nextPlayer) {
+										game.Board[i][j] = nil
+									}
+								}
+							}
+						}
+						// Notify about elimination
+						h.checkMultiplayerStatus(game)
+						if game.GameOver {
+							return
+						}
+					}
 				}
 			} else {
 				log.Printf("endTurn: Player %d slot is nil", nextPlayer)
 			}
 		}
+
+		if !foundValidPlayer {
+			// No valid player found after checking all players - game should be over
+			log.Printf("endTurn: No valid player found, checking game status")
+			h.checkMultiplayerStatus(game)
+			return
+		}
+
 		log.Printf("endTurn: Final CurrentPlayer = %d", game.CurrentPlayer)
 	} else {
 		// 1v1 mode - switch between players
@@ -1891,40 +1927,11 @@ func (h *Hub) endTurn(game *Game) {
 		game.MovesLeft = 3
 	}
 
-	// Check if the new current player can make any moves
-	canMove := h.canMakeAnyMove(game, game.CurrentPlayer)
-	log.Printf("endTurn: Checking if player %d can make moves: %v", game.CurrentPlayer, canMove)
-	if !canMove {
-		// Current player has no valid moves
-		log.Printf("endTurn: Player %d has no valid moves", game.CurrentPlayer)
-		if game.IsMultiplayer {
-			// In multiplayer, eliminate this player and check game status
-			eliminatedPlayer := game.CurrentPlayer
-			log.Printf("endTurn: Eliminating player %d (no valid moves)", eliminatedPlayer)
-
-			// Remove all pieces for this player
-			for i := 0; i < game.Rows; i++ {
-				for j := 0; j < game.Cols; j++ {
-					cell := game.Board[i][j]
-					if cell != nil {
-						cellStr := fmt.Sprintf("%v", cell)
-						if len(cellStr) > 0 && cellStr[0] == byte('0'+eliminatedPlayer) {
-							game.Board[i][j] = nil
-						}
-					}
-				}
-			}
-
-			// Check if game should end (this will also send player_eliminated message)
-			h.checkMultiplayerStatus(game)
-			if game.GameOver {
-				return
-			}
-
-			// Skip to next player
-			h.endTurn(game)
-			return
-		} else {
+	// For 1v1 games, check if the new current player can make any moves
+	if !game.IsMultiplayer {
+		canMove := h.canMakeAnyMove(game, game.CurrentPlayer)
+		log.Printf("endTurn: Checking if 1v1 player %d can make moves: %v", game.CurrentPlayer, canMove)
+		if !canMove {
 			// In 1v1, other player wins
 			game.GameOver = true
 			game.Winner = 3 - game.CurrentPlayer
@@ -1945,6 +1952,7 @@ func (h *Hub) endTurn(game *Game) {
 			return
 		}
 	}
+	// Note: For multiplayer, the check already happened during rotation above
 
 	// Broadcast turn change with movesLeft
 	turnMsg := Message{
