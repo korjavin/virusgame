@@ -7,12 +7,17 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // AIEngine handles bot move calculations
 type AIEngine struct {
 	settings   *BotSettings
 	transTable *TranspositionTable
+	// Time management for iterative deepening
+	searchStartTime time.Time
+	timeLimit       time.Duration
+	searchAborted   bool
 }
 
 // TranspositionTable caches board evaluations
@@ -91,33 +96,58 @@ func NewTranspositionTable() *TranspositionTable {
 
 // CalculateMove returns the best move for the given game state
 // Returns (row, col, ok) where ok is false if no valid moves exist
+// Uses iterative deepening with time budget (~670ms per move, 2 seconds per turn)
 func (ai *AIEngine) CalculateMove(state *GameState, player int) (int, int, bool) {
-	depth := ai.settings.SearchDepth
-	if depth <= 0 {
-		depth = 3 // default
-	}
-
 	// Get all valid moves
 	validMoves := ai.getAllValidMoves(state, player)
 	if len(validMoves) == 0 {
 		return 0, 0, false
 	}
 
-	// Adaptive depth: reduce depth when there are many moves (mid-game)
 	moveCount := len(validMoves)
-	if moveCount > 30 {
-		depth = 2 // Shallow search for complex positions
-	} else if moveCount > 50 {
-		depth = 1 // Very shallow for highly complex positions
+
+	// Time budget: aim for ~670ms per move (2000ms / 3 moves)
+	// Give a bit more time for early moves in case there are fewer total moves
+	ai.timeLimit = 670 * time.Millisecond
+	ai.searchStartTime = time.Now()
+	ai.searchAborted = false
+
+	log.Printf("[AI] Calculating move for player %d (moves: %d, time limit: %dms)",
+		player, moveCount, ai.timeLimit.Milliseconds())
+
+	// Iterative deepening: start at depth 1 and increase until time runs out
+	var bestMove Move
+	maxDepth := 1
+
+	for depth := 1; depth <= 10; depth++ {
+		// Check if we have time for this depth
+		elapsed := time.Since(ai.searchStartTime)
+		if elapsed > ai.timeLimit * 3 / 4 && depth > 1 {
+			// If we've used 75% of time and have at least depth 1, stop
+			log.Printf("[AI] Time limit approaching (elapsed: %dms), stopping at depth %d",
+				elapsed.Milliseconds(), depth-1)
+			break
+		}
+
+		ai.searchAborted = false
+		move := ai.findBestMoveWithMinimax(state, validMoves, player, depth)
+
+		// If search completed without abort, use this result
+		if !ai.searchAborted {
+			bestMove = move
+			maxDepth = depth
+			elapsed = time.Since(ai.searchStartTime)
+			log.Printf("[AI] Completed depth %d in %dms, score: %.2f",
+				depth, elapsed.Milliseconds(), move.Score)
+		} else {
+			log.Printf("[AI] Search aborted at depth %d", depth)
+			break
+		}
 	}
 
-	log.Printf("[AI] Calculating move for player %d (depth: %d, moves: %d)", player, depth, moveCount)
-
-	// Use minimax to find best move
-	bestMove := ai.findBestMoveWithMinimax(state, validMoves, player, depth)
-
-	log.Printf("[AI] Selected move: (%d, %d) with score %.2f",
-		bestMove.Row, bestMove.Col, bestMove.Score)
+	elapsed := time.Since(ai.searchStartTime)
+	log.Printf("[AI] Selected move: (%d, %d) at depth %d, score %.2f (time: %dms)",
+		bestMove.Row, bestMove.Col, maxDepth, bestMove.Score, elapsed.Milliseconds())
 
 	return bestMove.Row, bestMove.Col, true
 }
@@ -276,6 +306,11 @@ func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, play
 	beta := math.Inf(1)
 
 	for _, move := range moves {
+		// Check if search was aborted
+		if ai.searchAborted {
+			break
+		}
+
 		newBoard := ai.copyBoard(state.Board)
 		ai.applyMoveToBoard(newBoard, move.Row, move.Col, player)
 
@@ -288,6 +323,11 @@ func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, play
 		}
 
 		result := ai.minimax(newState, depth-1, alpha, beta, false, player)
+
+		// Check if search was aborted during minimax
+		if ai.searchAborted {
+			break
+		}
 
 		if result.Score > bestScore {
 			bestScore = result.Score
@@ -305,6 +345,12 @@ func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, play
 }
 
 func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, isMaximizing bool, aiPlayer int) MinimaxResult {
+	// Check time limit periodically (every few nodes)
+	if time.Since(ai.searchStartTime) > ai.timeLimit {
+		ai.searchAborted = true
+		return MinimaxResult{Score: 0, Move: nil}
+	}
+
 	// Check transposition table
 	boardHash := ai.hashBoard(state.Board, aiPlayer)
 	if entry, exists := ai.transTable.Get(boardHash); exists && entry.Depth >= depth {
