@@ -42,21 +42,16 @@ const Tutorial = {
             {
                 title: i18n.t('tutorialMultiplayerTitle'),
                 content: i18n.t('tutorialMultiplayerContent'),
-                highlight: ".users-section"
-            },
-            {
-                title: i18n.t('tutorialNotificationsTitle'),
-                content: i18n.t('tutorialNotificationsContent'),
-                highlight: "#notifications"
+                highlight: ".users-section",
+                action: () => {
+                    // Switch back to 1v1 mode to show the online players list
+                    document.getElementById('mode-1v1').click();
+                }
             },
             {
                 title: i18n.t('tutorialAITitle'),
                 content: i18n.t('tutorialAIContent'),
-                highlight: "#ai-enabled-group",
-                action: () => {
-                    // Switch back to 1v1 mode
-                    document.getElementById('mode-1v1').click();
-                }
+                highlight: "#ai-enabled-group"
             },
             {
                 title: i18n.t('tutorialReadyTitle'),
