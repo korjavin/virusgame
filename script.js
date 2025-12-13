@@ -1,5 +1,5 @@
 // VERSION CHECK - Log immediately at script load
-console.log('[SCRIPT VERSION] script.js v2.8.2 loaded at', new Date().toISOString());
+console.log('[SCRIPT VERSION] script.js v2.8.3 loaded at', new Date().toISOString());
 
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
 let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting, resignButton;
@@ -190,7 +190,7 @@ function updateStatus() {
                 statusDisplay.classList.remove('your-turn');
             }
         }
-        return;
+        // Don't return yet - need to handle neutral button below
     }
 
     // Local mode status - remove animation
@@ -203,25 +203,9 @@ function updateStatus() {
             statusDisplay.textContent = i18n.t('playerTurn', { player: currentPlayer, moves: movesLeft });
         }
     }
-}
 
-function countNonFortifiedCells(player) {
-    return board.flat().filter(cell => cell === player).length;
-}
-
-function endTurn() {
-    currentPlayer = currentPlayer === 1 ? 2 : 1;
-    movesLeft = 3;
-    updateStatus();
-
-    // In multiplayer mode, let the server check win conditions
-    if (typeof mpClient === 'undefined' || !mpClient.multiplayerMode) {
-        checkWinCondition();
-    }
-
+    // Neutral button management (runs for both local and multiplayer modes)
     if (putNeutralsButton) {
-        // Only show button for current player's turn
-        // In multiplayer mode, only show for your turn; in local mode, show for both players (unless AI is playing)
         const isMultiplayer = typeof mpClient !== 'undefined' && mpClient.multiplayerMode;
         const yourPlayer = isMultiplayer ? mpClient.yourPlayer : null;
 
@@ -286,9 +270,22 @@ function endTurn() {
 
         putNeutralsButton.style.display = shouldShowButton ? 'inline-block' : 'none';
     }
+}
 
-    // In local mode, check for no moves condition
+function countNonFortifiedCells(player) {
+    return board.flat().filter(cell => cell === player).length;
+}
+
+function endTurn() {
+    currentPlayer = currentPlayer === 1 ? 2 : 1;
+    movesLeft = 3;
+    updateStatus(); // This now handles neutral button management for both local and multiplayer
+
+    // In multiplayer mode, let the server check win conditions
     if (typeof mpClient === 'undefined' || !mpClient.multiplayerMode) {
+        checkWinCondition();
+
+        // In local mode, check for no moves condition
         if (!gameOver && !canMakeMove(currentPlayer)) {
             const winner = currentPlayer === 1 ? 2 : 1;
             statusDisplay.textContent = i18n.t('noMoreMoves', { winner: winner, player: currentPlayer });
