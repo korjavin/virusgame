@@ -1,6 +1,3 @@
-// VERSION CHECK - Log immediately at script load
-console.log('[SCRIPT VERSION] script.js v2.8.4 loaded at', new Date().toISOString());
-
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
 let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting, resignButton;
 // Track neutral usage for all 4 players (index 0-3 for players 1-4)
@@ -62,8 +59,8 @@ function isConnectedToBase(startRow, startCol, player) {
 
 function isValidMove(row, col, player) {
     const cellValue = board[row][col];
-    if (typeof cellValue === 'string' && (cellValue.includes('fortified') || cellValue.includes('base'))) {
-        return false; // Cannot attack fortified or base cells
+    if (typeof cellValue === 'string' && (cellValue.includes('fortified') || cellValue.includes('base') || cellValue === 'killed')) {
+        return false; // Cannot attack fortified, base, or neutral (killed) cells
     }
 
     // Check if cell is empty or belongs to an opponent
@@ -209,15 +206,6 @@ function updateStatus() {
         const isMultiplayer = typeof mpClient !== 'undefined' && mpClient.multiplayerMode;
         const yourPlayer = isMultiplayer ? mpClient.yourPlayer : null;
 
-        // Debug: Always log basic info
-        console.log('[Neutral Button] updateStatus called:', {
-            mpClientExists: typeof mpClient !== 'undefined',
-            multiplayerMode: isMultiplayer,
-            currentPlayer,
-            yourPlayer,
-            mpClientYourPlayer: typeof mpClient !== 'undefined' ? mpClient.yourPlayer : 'N/A'
-        });
-
         // Reset button text if it's not the current player's turn (e.g., opponent's turn)
         if (isMultiplayer && currentPlayer !== yourPlayer && neutralMode) {
             neutralMode = false;
@@ -253,20 +241,6 @@ function updateStatus() {
             const playerCells = countNonFortifiedCells(currentPlayer);
 
             shouldShowButton = !neutralsUsed && !neutralsStarted && playerCells >= 2;
-
-            // Debug logging
-            if (isMultiplayer && isYourTurn) {
-                console.log('[Neutral Button Debug]', {
-                    currentPlayer,
-                    yourPlayer,
-                    isYourTurn,
-                    playerCells,
-                    neutralsUsed,
-                    neutralsStarted,
-                    shouldShowButton,
-                    reason: !shouldShowButton ? (playerCells < 2 ? 'Not enough cells (need 2)' : neutralsUsed ? 'Already used' : neutralsStarted ? 'Already started' : 'Unknown') : 'OK'
-                });
-            }
         }
 
         putNeutralsButton.style.display = shouldShowButton ? 'inline-block' : 'none';
@@ -489,13 +463,6 @@ document.addEventListener('DOMContentLoaded', () => {
     aiTimeSetting = document.getElementById('ai-time-setting');
     putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
     resignButton = document.getElementById('resign-button');
-
-    // Debug: Check if button was found
-    console.log('[NEUTRAL BUTTON INIT]', {
-        buttonFound: putNeutralsButton !== null,
-        buttonElement: putNeutralsButton,
-        buttonId: putNeutralsButton ? putNeutralsButton.id : 'N/A'
-    });
 
     // Show/hide AI depth setting and tuning based on AI checkbox
     aiEnabledCheckbox.addEventListener('change', () => {

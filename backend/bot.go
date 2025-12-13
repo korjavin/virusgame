@@ -604,9 +604,9 @@ func (h *Hub) isValidMoveOnBoard(game *Game, board [][]interface{}, row, col, pl
 	cell := board[row][col]
 	cellStr := fmt.Sprintf("%v", cell)
 
-	// Cannot move on fortified or base cells
+	// Cannot move on fortified, base, or neutral (killed) cells
 	if cell != nil {
-		if strings.HasSuffix(cellStr, "-fortified") || strings.HasSuffix(cellStr, "-base") {
+		if strings.HasSuffix(cellStr, "-fortified") || strings.HasSuffix(cellStr, "-base") || cellStr == "killed" {
 			return false
 		}
 	}

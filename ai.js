@@ -597,8 +597,8 @@ function isValidMoveOnBoard(boardState, row, col, player) {
     const cell = boardState[row][col];
     const opponent = player === 1 ? 2 : 1;
 
-    // Cannot move on fortified or base cells
-    if (typeof cell === 'string' && (cell.includes('fortified') || cell.includes('base'))) {
+    // Cannot move on fortified, base, or neutral (killed) cells
+    if (typeof cell === 'string' && (cell.includes('fortified') || cell.includes('base') || cell === 'killed')) {
         return false;
     }
 

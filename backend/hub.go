@@ -1141,10 +1141,10 @@ func (h *Hub) isValidMove(game *Game, row, col, player int) bool {
 
 	cellValue := game.Board[row][col]
 
-	// Can't attack fortified or base cells
+	// Can't attack fortified, base, or neutral (killed) cells
 	if cellValue != nil {
 		cellStr := fmt.Sprintf("%v", cellValue)
-		if len(cellStr) > 0 && (strings.Contains(cellStr, "fortified") || strings.Contains(cellStr, "base")) {
+		if len(cellStr) > 0 && (strings.Contains(cellStr, "fortified") || strings.Contains(cellStr, "base") || cellStr == "killed") {
 			return false
 		}
 	}
