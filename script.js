@@ -1,5 +1,5 @@
 // VERSION CHECK - Log immediately at script load
-console.log('[SCRIPT VERSION] script.js v2.8.1 loaded at', new Date().toISOString());
+console.log('[SCRIPT VERSION] script.js v2.8.2 loaded at', new Date().toISOString());
 
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
 let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting, resignButton;
@@ -491,6 +491,13 @@ document.addEventListener('DOMContentLoaded', () => {
     aiTimeSetting = document.getElementById('ai-time-setting');
     putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
     resignButton = document.getElementById('resign-button');
+
+    // Debug: Check if button was found
+    console.log('[NEUTRAL BUTTON INIT]', {
+        buttonFound: putNeutralsButton !== null,
+        buttonElement: putNeutralsButton,
+        buttonId: putNeutralsButton ? putNeutralsButton.id : 'N/A'
+    });
 
     // Show/hide AI depth setting and tuning based on AI checkbox
     aiEnabledCheckbox.addEventListener('change', () => {

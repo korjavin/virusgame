@@ -454,6 +454,11 @@ class MultiplayerClient {
 
         // Show neutral button (only if it's current player's turn, has enough cells, and hasn't started using neutrals)
         const neutralBtn = document.getElementById('put-neutrals-button');
+        console.log('[MP startMultiplayerGame] Neutral button check:', {
+            neutralBtn: neutralBtn !== null,
+            currentPlayer,
+            yourPlayer: this.yourPlayer
+        });
         if (neutralBtn) {
             neutralBtn.textContent = 'Place Neutrals';
             // Check if it's current player's turn, has at least 2 non-fortified cells, and hasn't started using neutrals
@@ -461,6 +466,12 @@ class MultiplayerClient {
             const playerCells = countNonFortifiedCells(this.yourPlayer);
             const playerIndex = this.yourPlayer - 1;
             const neutralsStarted = (playerIndex >= 0 && playerIndex < 4) ? playerNeutralsStarted[playerIndex] : false;
+            console.log('[MP startMultiplayerGame] Button display decision:', {
+                isCurrentPlayersTurn,
+                playerCells,
+                neutralsStarted,
+                willShow: isCurrentPlayersTurn && playerCells >= 2 && !neutralsStarted
+            });
             if (isCurrentPlayersTurn && playerCells >= 2 && !neutralsStarted) {
                 neutralBtn.style.display = 'inline-block';
             } else {
