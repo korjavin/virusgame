@@ -470,7 +470,7 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 	}
 	h.startMoveTimer(game)
 
-	log.Printf("Move made in game %s: player %d moved to (%d,%d), %d moves left", game.ID, playerNum, row, col, game.MovesLeft)
+	log.Printf("Move made in game %s: player %d moved to (%d,%d), %d moves left (about to check for eliminations)", game.ID, playerNum, row, col, game.MovesLeft)
 
 	// Broadcast move to all players with updated movesLeft
 	moveMsg := Message{
@@ -494,7 +494,9 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 	}
 
 	// Check if turn is over OR if current player has no more valid moves
+	log.Printf("Checking if player %d can continue turn (movesLeft: %d)", playerNum, game.MovesLeft)
 	hasValidMoves := h.canMakeAnyMove(game, playerNum)
+	log.Printf("Player %d hasValidMoves: %v", playerNum, hasValidMoves)
 	if game.MovesLeft == 0 || !hasValidMoves {
 		if !hasValidMoves && game.MovesLeft > 0 {
 			log.Printf("Player %d has no more valid moves (had %d moves left), eliminating player", playerNum, game.MovesLeft)
