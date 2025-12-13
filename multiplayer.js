@@ -453,6 +453,7 @@ class MultiplayerClient {
         // Show neutral button (only if it's current player's turn, has enough cells, and hasn't started using neutrals)
         const neutralBtn = document.getElementById('put-neutrals-button');
         if (neutralBtn) {
+            neutralBtn.textContent = 'Place Neutrals';
             // Check if it's current player's turn, has at least 2 non-fortified cells, and hasn't started using neutrals
             const isCurrentPlayersTurn = currentPlayer === this.yourPlayer;
             const playerCells = countNonFortifiedCells(this.yourPlayer);

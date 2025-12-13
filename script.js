@@ -335,15 +335,12 @@ function handleCellClick(event) {
                 } else {
                     player2NeutralsUsed = true;
                 }
-                // Ensure button stays hidden after completion
-                if (putNeutralsButton) {
-                    putNeutralsButton.style.display = 'none';
-                }
                 neutralMode = false;
                 neutralsPlaced = 0;
 
-                // Hide the neutral button after use (one-time ability)
+                // Reset button text and hide button after use (one-time ability)
                 if (putNeutralsButton) {
+                    putNeutralsButton.textContent = 'Place Neutrals';
                     putNeutralsButton.style.display = 'none';
                 }
 
@@ -548,6 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Show neutral button for local games (only if player has enough cells)
         if (putNeutralsButton) {
+            putNeutralsButton.textContent = 'Place Neutrals';
             if (countNonFortifiedCells(1) >= 2) {
                 putNeutralsButton.style.display = 'inline-block';
             } else {
