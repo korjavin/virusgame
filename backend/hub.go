@@ -621,12 +621,29 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 	}
 
 	turnMsg := Message{
-		Type:   "turn_change",
-		GameID: msg.GameID,
-		Player: game.CurrentPlayer,
+		Type:      "turn_change",
+		GameID:    msg.GameID,
+		Player:    game.CurrentPlayer,
+		MovesLeft: game.MovesLeft,
 	}
-	h.sendToUser(game.Player1, &turnMsg)
-	h.sendToUser(game.Player2, &turnMsg)
+
+	// Send turn change to all players based on game type
+	if game.IsMultiplayer {
+		// Multiplayer lobby game: send to all players
+		for _, player := range game.Players {
+			if player != nil && player.User != nil {
+				h.sendToUser(player.User, &turnMsg)
+			}
+		}
+	} else {
+		// 1v1 game: send to both players
+		if game.Player1 != nil {
+			h.sendToUser(game.Player1, &turnMsg)
+		}
+		if game.Player2 != nil {
+			h.sendToUser(game.Player2, &turnMsg)
+		}
+	}
 }
 
 func (h *Hub) handleRematch(user *User, msg *Message) {

@@ -1,5 +1,5 @@
 // VERSION CHECK - Log immediately at script load
-console.log('[SCRIPT VERSION] script.js v2.8.3 loaded at', new Date().toISOString());
+console.log('[SCRIPT VERSION] script.js v2.8.4 loaded at', new Date().toISOString());
 
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
 let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting, resignButton;
@@ -245,7 +245,8 @@ function updateStatus() {
         }
 
         // Check neutral usage for current player (support all 4 players)
-        if (isYourTurn && currentPlayer >= 1 && currentPlayer <= 4) {
+        // Only show button at start of turn (movesLeft === 3)
+        if (isYourTurn && currentPlayer >= 1 && currentPlayer <= 4 && movesLeft === 3) {
             const playerIndex = currentPlayer - 1;
             const neutralsUsed = playerNeutralsUsed[playerIndex];
             const neutralsStarted = playerNeutralsStarted[playerIndex];
