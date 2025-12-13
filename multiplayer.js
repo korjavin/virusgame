@@ -573,7 +573,15 @@ class MultiplayerClient {
             playersInfoContainer.id = 'players-info';
             playersInfoContainer.className = 'players-info';
             const gameContainer = document.getElementById('game-container');
-            gameContainer.insertBefore(playersInfoContainer, document.getElementById('game-board'));
+            // Insert before the board wrapper if it exists (new structure), otherwise before game board
+            const refElement = document.getElementById('board-wrapper') || document.getElementById('game-board');
+            if (refElement && refElement.parentNode === gameContainer) {
+                gameContainer.insertBefore(playersInfoContainer, refElement);
+            } else {
+                console.error('Could not find reference element to insert players info');
+                // Fallback: append to game container if reference element not found
+                gameContainer.appendChild(playersInfoContainer);
+            }
         }
 
         playersInfoContainer.innerHTML = '';
