@@ -122,12 +122,19 @@ const i18n = {
             tutorialFortifiedContent: 'When you attack an opponent\'s cell, it becomes FORTIFIED (solid color). Fortified cells cannot be attacked again - they\'re permanent!',
             tutorialSettingsTitle: 'Game Settings ⚙️',
             tutorialSettingsContent: 'Here you can customize the board size, enable AI opponent, and start a new game. Try adjusting these settings to match your skill level!',
+
+            // New tutorial keys
+            tutorialGameModeTitle: 'Game Mode Selection 🎮',
+            tutorialGameModeContent: 'Choose "1v1" for local play or "Multiplayer" to play online. This button switches the mode.',
+            tutorialLobbyTitle: 'Multiplayer Lobby 🏢',
+            tutorialLobbyContent: 'In multiplayer mode, you can create a new lobby or join an existing one from the list.',
+
             tutorialAITitle: 'Playing with AI 🤖',
             tutorialAIContent: 'Check \'vs AI\' to practice against the computer. Adjust the AI Depth to make it easier (1-2) or harder (4-6). The AI will play as Player 2 (O).',
             tutorialAITuningTitle: 'AI Strategy Tuning 🎛️',
             tutorialAITuningContent: 'For advanced players: you can fine-tune the AI\'s strategy by adjusting these weights. Material controls how the AI values cells, Mobility affects positioning, etc.',
-            tutorialMultiplayerTitle: 'Multiplayer Mode 👥',
-            tutorialMultiplayerContent: 'See online players here! Click \'Challenge\' next to a player\'s name to invite them to a game. Accept challenges when you receive notifications.',
+            tutorialMultiplayerTitle: 'Online Players 👥',
+            tutorialMultiplayerContent: 'See online players here! Click \'Challenge\' next to a player\'s name to invite them to a game.',
             tutorialNotificationsTitle: 'Challenge Notifications 📬',
             tutorialNotificationsContent: 'When someone challenges you, a notification will appear in the top-right corner. Click \'Accept\' to start playing or \'Decline\' to refuse.',
             tutorialTurnIndicatorTitle: 'Your Turn Indicator 💚',
@@ -266,12 +273,19 @@ const i18n = {
             tutorialFortifiedContent: 'Wenn du eine gegnerische Zelle angreifst, wird sie BEFESTIGT (Vollfarbe). Befestigte Zellen können nicht erneut angegriffen werden - sie sind permanent!',
             tutorialSettingsTitle: 'Spieleinstellungen ⚙️',
             tutorialSettingsContent: 'Hier kannst du die Spielfeldgröße anpassen, einen KI-Gegner aktivieren und ein neues Spiel starten. Passe diese Einstellungen an dein Können an!',
+
+            // New tutorial keys
+            tutorialGameModeTitle: 'Spielmodus-Auswahl 🎮',
+            tutorialGameModeContent: 'Wähle "1v1" für lokales Spiel oder "Multiplayer" für Online-Spiele. Dieser Schalter wechselt den Modus.',
+            tutorialLobbyTitle: 'Mehrspieler-Lobby 🏢',
+            tutorialLobbyContent: 'Im Mehrspielermodus kannst du eine neue Lobby erstellen oder einer bestehenden aus der Liste beitreten.',
+
             tutorialAITitle: 'Gegen die KI spielen 🤖',
             tutorialAIContent: 'Aktiviere \'gegen KI\', um gegen den Computer zu üben. Passe die KI-Tiefe an, um es einfacher (1-2) oder schwerer (4-6) zu machen. Die KI spielt als Spieler 2 (O).',
             tutorialAITuningTitle: 'KI-Strategie-Feinabstimmung 🎛️',
             tutorialAITuningContent: 'Für fortgeschrittene Spieler: Du kannst die Strategie der KI durch Anpassung dieser Gewichte feinabstimmen. Material steuert, wie die KI Zellen bewertet, Mobilität beeinflusst die Positionierung usw.',
-            tutorialMultiplayerTitle: 'Mehrspieler-Modus 👥',
-            tutorialMultiplayerContent: 'Hier siehst du Online-Spieler! Klicke auf \'Herausfordern\' neben dem Namen eines Spielers, um ihn zu einem Spiel einzuladen. Akzeptiere Herausforderungen, wenn du Benachrichtigungen erhältst.',
+            tutorialMultiplayerTitle: 'Online-Spieler 👥',
+            tutorialMultiplayerContent: 'Hier siehst du Online-Spieler! Klicke auf \'Herausfordern\' neben dem Namen eines Spielers, um ihn zu einem Spiel einzuladen.',
             tutorialNotificationsTitle: 'Herausforderungs-Benachrichtigungen 📬',
             tutorialNotificationsContent: 'Wenn dich jemand herausfordert, erscheint eine Benachrichtigung in der oberen rechten Ecke. Klicke auf \'Akzeptieren\', um zu spielen, oder auf \'Ablehnen\'.',
             tutorialTurnIndicatorTitle: 'Dein Zug-Indikator 💚',

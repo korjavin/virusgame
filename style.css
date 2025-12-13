@@ -1446,3 +1446,40 @@ body.dark-theme .move-timer-display {
         margin: 15px auto 8px auto;
     }
 }
+
+/* Fix for tutorial visibility */
+#tutorial-modal {
+    background-color: transparent;
+    pointer-events: none;
+    flex-direction: column;
+    justify-content: flex-end; /* Align to bottom */
+    padding-bottom: 20px;
+}
+
+#tutorial-modal .modal-content {
+    pointer-events: auto;
+    margin: 0 auto; /* Center horizontally */
+    position: relative;
+    max-width: 600px;
+    width: 90%;
+    /* Override the slideDown animation or adjust it */
+    animation: slideUp 0.4s;
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 2px solid #3498db;
+}
+
+body.dark-theme #tutorial-modal .modal-content {
+    background-color: rgba(42, 42, 42, 0.95);
+    border-color: #5dade2;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
