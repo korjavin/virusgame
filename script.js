@@ -214,6 +214,15 @@ function endTurn() {
         const isMultiplayer = typeof mpClient !== 'undefined' && mpClient.multiplayerMode;
         const yourPlayer = isMultiplayer ? mpClient.yourPlayer : null;
 
+        // Debug: Always log basic info
+        console.log('[Neutral Button] updateStatus called:', {
+            mpClientExists: typeof mpClient !== 'undefined',
+            multiplayerMode: isMultiplayer,
+            currentPlayer,
+            yourPlayer,
+            mpClientYourPlayer: typeof mpClient !== 'undefined' ? mpClient.yourPlayer : 'N/A'
+        });
+
         // Reset button text if it's not the current player's turn (e.g., opponent's turn)
         if (isMultiplayer && currentPlayer !== yourPlayer && neutralMode) {
             neutralMode = false;
