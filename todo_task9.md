@@ -30,7 +30,7 @@ For each game, the following information must be stored:
         *   **Player**: Who made the move.
         *   **Action Type**: Place, Attack.
         *   **Coordinates**: Row, Column.
-        *   **Timestamp**: Precise time when the move was received/processed.
+        **Duration**: Time taken for the move in centiseconds (1/100th of a second).
         *   **Time Control info**: Time remaining (if applicable).
 
 3.  **Analysis Data (Optional/Future)**
@@ -80,9 +80,9 @@ Define a JSON structure for the `pgn_content` to make it easily parsable by anal
     "turn": 1,
     "player": 1,
     "moves": [
-      { "type": "place", "row": 5, "col": 5, "ts": 1678888880 },
-      { "type": "place", "row": 5, "col": 6, "ts": 1678888881 },
-      { "type": "attack", "row": 4, "col": 5, "ts": 1678888882 }
+      { "type": "place", "row": 5, "col": 5, "duration_cs": 120 },
+      { "type": "place", "row": 5, "col": 6, "duration_cs": 85 },
+      { "type": "attack", "row": 4, "col": 5, "duration_cs": 210 }
     ]
   },
   ...
