@@ -513,12 +513,30 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 	}
 
 	var playerNum int
-	if game.Player1.ID == user.ID {
-		playerNum = 1
-	} else if game.Player2.ID == user.ID {
-		playerNum = 2
+
+	// Determine player number based on game type
+	if game.IsMultiplayer {
+		// Multiplayer lobby game (3-4 players)
+		found := false
+		for i, player := range game.Players {
+			if player != nil && player.User != nil && player.User.ID == user.ID {
+				playerNum = i + 1
+				found = true
+				break
+			}
+		}
+		if !found {
+			return
+		}
 	} else {
-		return
+		// 1v1 game
+		if game.Player1 != nil && game.Player1.ID == user.ID {
+			playerNum = 1
+		} else if game.Player2 != nil && game.Player2.ID == user.ID {
+			playerNum = 2
+		} else {
+			return
+		}
 	}
 
 	if game.CurrentPlayer != playerNum || game.GameOver {
@@ -532,31 +550,75 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		}
 	}
 
-	if playerNum == 1 {
-		game.Player1NeutralsUsed = true
+	// Mark neutrals as used
+	if game.IsMultiplayer {
+		// Multiplayer: use array (index 0-3 for players 1-4)
+		if playerNum >= 1 && playerNum <= 4 {
+			game.NeutralsUsed[playerNum-1] = true
+		}
 	} else {
-		game.Player2NeutralsUsed = true
+		// 1v1: use individual fields
+		if playerNum == 1 {
+			game.Player1NeutralsUsed = true
+		} else {
+			game.Player2NeutralsUsed = true
+		}
 	}
 
-	// Broadcast to opponent
-	var opponentUser *User
-	if playerNum == 1 {
-		opponentUser = game.Player2
-	} else {
-		opponentUser = game.Player1
-	}
-
+	// Broadcast to other players
 	neutralsMsg := Message{
 		Type:   "neutrals_placed",
 		GameID: msg.GameID,
 		Player: playerNum,
 		Cells:  msg.Cells,
 	}
-	h.sendToUser(opponentUser, &neutralsMsg)
+
+	if game.IsMultiplayer {
+		// Broadcast to all other players in the game
+		for i, player := range game.Players {
+			if player != nil && player.User != nil && (i+1) != playerNum {
+				h.sendToUser(player.User, &neutralsMsg)
+			}
+		}
+	} else {
+		// Send to opponent in 1v1
+		var opponentUser *User
+		if playerNum == 1 {
+			opponentUser = game.Player2
+		} else {
+			opponentUser = game.Player1
+		}
+		if opponentUser != nil {
+			h.sendToUser(opponentUser, &neutralsMsg)
+		}
+	}
 
 	// End turn
-	game.CurrentPlayer = 3 - playerNum
-	game.MovesLeft = 3
+	if game.IsMultiplayer {
+		// Multiplayer: advance to next active player
+		nextPlayer := game.CurrentPlayer
+		for attempts := 0; attempts < game.ActivePlayers; attempts++ {
+			nextPlayer++
+			if nextPlayer > 4 {
+				nextPlayer = 1
+			}
+
+			// Check if this player is active
+			if game.Players[nextPlayer-1] != nil {
+				pieceCount := h.countPlayerPieces(game, nextPlayer)
+				// Check if player has any pieces left
+				if pieceCount > 0 {
+					game.CurrentPlayer = nextPlayer
+					game.MovesLeft = 3
+					break
+				}
+			}
+		}
+	} else {
+		// 1v1: toggle between 1 and 2
+		game.CurrentPlayer = 3 - playerNum
+		game.MovesLeft = 3
+	}
 
 	turnMsg := Message{
 		Type:   "turn_change",

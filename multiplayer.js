@@ -459,7 +459,8 @@ class MultiplayerClient {
             // Check if it's current player's turn, has at least 2 non-fortified cells, and hasn't started using neutrals
             const isCurrentPlayersTurn = currentPlayer === this.yourPlayer;
             const playerCells = countNonFortifiedCells(this.yourPlayer);
-            const neutralsStarted = this.yourPlayer === 1 ? player1NeutralsStarted : player2NeutralsStarted;
+            const playerIndex = this.yourPlayer - 1;
+            const neutralsStarted = (playerIndex >= 0 && playerIndex < 4) ? playerNeutralsStarted[playerIndex] : false;
             if (isCurrentPlayersTurn && playerCells >= 2 && !neutralsStarted) {
                 neutralBtn.style.display = 'inline-block';
             } else {
