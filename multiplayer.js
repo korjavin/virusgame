@@ -836,6 +836,14 @@ function initGameMultiplayerMode(rowsVal, colsVal, gamePlayers, yourPlayerIndex)
     currentPlayer = 1;
     movesLeft = 3;
     gameOver = false;
+    // Reset neutral tracking for all players
+    playerNeutralsUsed = [false, false, false, false];
+    playerNeutralsStarted = [false, false, false, false];
+    // Legacy variables
+    player1NeutralsUsed = false;
+    player2NeutralsUsed = false;
+    player1NeutralsStarted = false;
+    player2NeutralsStarted = false;
     neutralMode = false;
     neutralsPlaced = 0;
 
