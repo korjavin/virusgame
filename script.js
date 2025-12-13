@@ -248,6 +248,20 @@ function endTurn() {
             const playerCells = countNonFortifiedCells(currentPlayer);
 
             shouldShowButton = !neutralsUsed && !neutralsStarted && playerCells >= 2;
+
+            // Debug logging
+            if (isMultiplayer && isYourTurn) {
+                console.log('[Neutral Button Debug]', {
+                    currentPlayer,
+                    yourPlayer,
+                    isYourTurn,
+                    playerCells,
+                    neutralsUsed,
+                    neutralsStarted,
+                    shouldShowButton,
+                    reason: !shouldShowButton ? (playerCells < 2 ? 'Not enough cells (need 2)' : neutralsUsed ? 'Already used' : neutralsStarted ? 'Already started' : 'Unknown') : 'OK'
+                });
+            }
         }
 
         putNeutralsButton.style.display = shouldShowButton ? 'inline-block' : 'none';
