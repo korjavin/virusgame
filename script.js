@@ -13,6 +13,11 @@ let player2NeutralsStarted = false;
 // Multiplayer mode variables
 let playerBases = []; // Array of {row, col} for each player
 
+// Connection Tree Visualization
+let connectionTreeEnabled = false;
+let connectionCanvas;
+let connectionCtx;
+
 function isConnectedToBase(startRow, startCol, player) {
     let base;
     if (typeof mpClient !== 'undefined' && mpClient.isMultiplayerGame) {
@@ -114,6 +119,13 @@ function renderBoard() {
     // Update CSS custom property for cell size
     document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);
     document.documentElement.style.setProperty('--cell-font-size', `${Math.max(12, Math.floor(cellSize * 0.6))}px`);
+
+    // Update canvas size
+    if (connectionCanvas) {
+        connectionCanvas.width = cols * cellSize;
+        connectionCanvas.height = rows * cellSize;
+    }
+
     for (let i = 0; i < rows; i++) {
         for (let j = 0; j < cols; j++) {
             const cell = document.createElement('div');
@@ -143,6 +155,10 @@ function renderBoard() {
 
             gameBoard.appendChild(cell);
         }
+    }
+
+    if (connectionTreeEnabled) {
+        updateAllConnectionTrees();
     }
 }
 
@@ -418,6 +434,11 @@ function handleCellClick(event) {
         movesLeft--;
         renderBoard();
 
+        // Update connection tree if enabled
+        if (connectionTreeEnabled) {
+            updateAllConnectionTrees();
+        }
+
         if (!canMakeMove(currentPlayer)) {
             const winner = currentPlayer === 1 ? 2 : 1;
             statusDisplay.textContent = i18n.t('noMoreMoves', { winner: winner, player: currentPlayer });
@@ -642,10 +663,161 @@ document.addEventListener('DOMContentLoaded', () => {
         resizeTimeout = setTimeout(() => {
             if (board && board.length > 0) {
                 renderBoard();
+                if (connectionTreeEnabled) {
+                    updateAllConnectionTrees();
+                }
             }
         }, 150); // Debounce resize events
     });
 
     // Initial game start
     initGame();
+
+    // Connection Tree Setup
+    connectionCanvas = document.getElementById('connection-canvas');
+    if (connectionCanvas) {
+        connectionCtx = connectionCanvas.getContext('2d');
+    }
+
+    const connectionToggle = document.getElementById('show-connections');
+    if (connectionToggle) {
+        // Load preference
+        const savedPref = localStorage.getItem('connectionTreeEnabled');
+        if (savedPref === 'true') {
+            connectionTreeEnabled = true;
+            connectionToggle.checked = true;
+            setTimeout(updateAllConnectionTrees, 100); // Small delay to ensure board is ready
+        }
+
+        connectionToggle.addEventListener('change', () => {
+            connectionTreeEnabled = connectionToggle.checked;
+            localStorage.setItem('connectionTreeEnabled', connectionTreeEnabled);
+            if (connectionTreeEnabled) {
+                updateAllConnectionTrees();
+            } else if (connectionCtx) {
+                connectionCtx.clearRect(0, 0, connectionCanvas.width, connectionCanvas.height);
+            }
+        });
+    }
 });
+
+// Connection Tree Functions
+function buildConnectionTree(player) {
+    let base;
+    if (typeof mpClient !== 'undefined' && mpClient.isMultiplayerGame) {
+        // Multiplayer mode
+        if (playerBases[player - 1]) {
+            base = playerBases[player - 1];
+        } else {
+            return new Map();
+        }
+    } else {
+        // 1v1 mode
+        base = player === 1 ? player1Base : player2Base;
+    }
+
+    // Check if base exists on board (it might have been overwritten if that's possible, though base shouldn't be)
+    if (!board[base.row][base.col] || !String(board[base.row][base.col]).includes('base')) {
+         // In 1v1 mode, base variable tracks position, but check board content to be safe
+         // Actually in script.js logic, base cells are marked '1-base', '2-base' etc.
+         // If base is destroyed (not currently possible in game rules but good for safety), return empty
+    }
+
+    const tree = new Map(); // key: "row,col", value: {row, col} (parent)
+    const queue = [base];
+    const visited = new Set();
+    const baseKey = `${base.row},${base.col}`;
+
+    visited.add(baseKey);
+    tree.set(baseKey, null); // Base has no parent
+
+    while (queue.length > 0) {
+        const current = queue.shift();
+
+        // Check all 8 neighbors
+        for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+                if (i === 0 && j === 0) continue;
+
+                const neighborRow = current.row + i;
+                const neighborCol = current.col + j;
+                const neighborKey = `${neighborRow},${neighborCol}`;
+
+                if (neighborRow >= 0 && neighborRow < rows && neighborCol >= 0 && neighborCol < cols) {
+                    if (!visited.has(neighborKey)) {
+                        const cellValue = board[neighborRow][neighborCol];
+                        // Check if cell belongs to player
+                        if (cellValue && String(cellValue).startsWith(player)) {
+                            visited.add(neighborKey);
+                            tree.set(neighborKey, current); // Parent is current
+                            queue.push({ row: neighborRow, col: neighborCol });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return tree;
+}
+
+function updateAllConnectionTrees() {
+    if (!connectionCtx || !connectionCanvas) return;
+
+    // Clear canvas
+    connectionCtx.clearRect(0, 0, connectionCanvas.width, connectionCanvas.height);
+
+    // Update for all players (1-4)
+    for (let p = 1; p <= 4; p++) {
+        // Only process if player has presence on board
+        const hasPresence = board.flat().some(cell => cell && String(cell).startsWith(p));
+        if (hasPresence) {
+            const tree = buildConnectionTree(p);
+            drawConnectionTree(p, tree);
+        }
+    }
+}
+
+function drawConnectionTree(player, tree) {
+    if (!connectionCtx) return;
+
+    const cellSize = calculateCellSize();
+    const halfCell = cellSize / 2;
+
+    connectionCtx.save();
+
+    // Set style based on player
+    let color;
+    switch(player) {
+        case 1: color = 'rgba(0, 0, 255, 0.5)'; break; // Blue
+        case 2: color = 'rgba(255, 0, 0, 0.5)'; break;  // Red
+        case 3: color = 'rgba(46, 204, 113, 0.5)'; break; // Green
+        case 4: color = 'rgba(243, 156, 18, 0.5)'; break; // Orange
+        default: color = 'rgba(0, 0, 0, 0.5)';
+    }
+
+    connectionCtx.strokeStyle = color;
+    connectionCtx.lineWidth = Math.max(2, Math.floor(cellSize / 10)); // Responsive line width
+    connectionCtx.lineCap = 'round';
+    connectionCtx.lineJoin = 'round';
+
+    connectionCtx.beginPath();
+
+    for (const [key, parent] of tree.entries()) {
+        if (parent === null) continue; // Skip base (no parent)
+
+        const [r, c] = key.split(',').map(Number);
+
+        const startX = c * cellSize + halfCell;
+        const startY = r * cellSize + halfCell;
+
+        const endX = parent.col * cellSize + halfCell;
+        const endY = parent.row * cellSize + halfCell;
+
+        connectionCtx.moveTo(startX, startY);
+        connectionCtx.lineTo(endX, endY);
+    }
+
+    connectionCtx.stroke();
+    connectionCtx.restore();
+}

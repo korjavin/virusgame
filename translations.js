@@ -25,6 +25,7 @@ const i18n = {
             aiTimeLimit: 'AI Time Limit (ms):',
             aiDepthTitle: 'How many moves ahead AI thinks (1-6)',
             aiTimeTitle: '0 = fixed depth, >0 = iterative deepening with time limit',
+            showConnectionTrees: 'Show Connection Trees',
             newLocalGame: 'New Local Game',
 
             // AI Tuning
@@ -168,6 +169,7 @@ const i18n = {
             aiTimeLimit: 'KI-Zeitlimit (ms):',
             aiDepthTitle: 'Wie viele Züge die KI vorausdenkt (1-6)',
             aiTimeTitle: '0 = feste Tiefe, >0 = iterative Vertiefung mit Zeitlimit',
+            showConnectionTrees: 'Verbindungslinien anzeigen',
             newLocalGame: 'Neues lokales Spiel',
 
             // AI Tuning
@@ -358,6 +360,12 @@ const i18n = {
                     node.textContent = ' ' + this.t('vsAI');
                 }
             });
+        }
+
+        // Update Connection Tree checkbox label
+        const showConnectionsSpan = document.querySelector('span[data-translation-key="showConnectionTrees"]');
+        if (showConnectionsSpan) {
+            showConnectionsSpan.textContent = this.t('showConnectionTrees');
         }
 
         // Update buttons

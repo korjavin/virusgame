@@ -55,6 +55,12 @@
                         vs AI
                     </label>
                 </div>
+                <div class="settings-group">
+                    <label for="show-connections">
+                        <input type="checkbox" id="show-connections">
+                        <span data-translation-key="showConnectionTrees">Show Connection Trees</span>
+                    </label>
+                </div>
                 <div class="settings-group" id="ai-depth-setting" style="display: none;">
                     <label for="ai-depth-input">AI Depth:</label>
                     <input type="number" id="ai-depth-input" value="3" min="1" max="6" title="How many moves ahead AI thinks (1-6)">
@@ -129,7 +135,10 @@
                 <div id="ai-progress" class="hidden">
                     <small>AI thinking: <span id="ai-progress-text">0/0</span></small>
                 </div>
-                <div id="game-board"></div>
+                <div style="position: relative;">
+                    <canvas id="connection-canvas" style="position: absolute; top: 0; left: 0;"></canvas>
+                    <div id="game-board" style="position: relative; background: transparent;"></div>
+                </div>
                 <div id="status"></div>
                 <div id="game-controls">
                     <button id="resign-button" style="display: none;">Resign</button>

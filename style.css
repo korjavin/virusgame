@@ -185,6 +185,21 @@ body.dark-theme .player2-base {
     grid-template-rows: repeat(10, var(--cell-size));
     border: 2px solid black;
     max-width: 100%;
+    /* Ensure background is transparent so canvas lines are visible if behind */
+    /* But actually we want cells to cover lines where the cell content is,
+       but lines should connect centers. If canvas is behind, cells might block it if they have background.
+       The requirement says "Cells remain as colored squares", and lines connect centers.
+       If lines are behind cells, and cells are solid colors, lines won't be seen.
+       We should probably make cell backgrounds slightly transparent or put canvas ON TOP with pointer-events: none.
+
+       Approach 2 in todo_task8 says: "canvas overlay on top of the grid".
+       So let's adjust z-indices.
+    */
+}
+
+#connection-canvas {
+    pointer-events: none;
+    z-index: 10; /* Above board */
 }
 
 .cell {
@@ -197,6 +212,9 @@ body.dark-theme .player2-base {
     align-items: center;
     font-size: var(--cell-font-size);
     cursor: pointer;
+    /* Ensure cells are behind canvas if canvas is z-index 10 */
+    position: relative;
+    z-index: 1;
 }
 
 .player1 {
