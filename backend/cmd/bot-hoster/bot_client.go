@@ -61,6 +61,7 @@ type Bot struct {
 
 	// AI
 	AIEngine *AIEngine // NEW
+	NeutralsUsed bool // Track if neutrals have been used
 
 	// Communication channels
 	send chan []byte
@@ -85,6 +86,7 @@ type Message struct {
 	Player           int              `json:"player,omitempty"`
 	Row              *int             `json:"row,omitempty"`
 	Col              *int             `json:"col,omitempty"`
+	Cells            []CellPos        `json:"cells,omitempty"`
 	MovesLeft        int              `json:"movesLeft,omitempty"`
 	Winner           int              `json:"winner,omitempty"`
 	Lobby            *LobbyInfo       `json:"lobby,omitempty"`
@@ -313,6 +315,9 @@ func (b *Bot) handleMessage(msg *Message) {
 	case "move_made":
 		b.handleMoveMade(msg)
 
+	case "neutrals_placed":
+		b.handleNeutralsPlaced(msg)
+
 	case "turn_change":
 		b.handleTurnChange(msg)
 
@@ -517,6 +522,15 @@ func (b *Bot) handleMoveMade(msg *Message) {
 	}
 }
 
+func (b *Bot) handleNeutralsPlaced(msg *Message) {
+	b.mu.Lock()
+	b.applyNeutralMove(msg.Cells)
+	// Neutrals end the turn, so we don't need to check for moves left
+	b.mu.Unlock()
+
+	log.Printf("[Bot %s] Neutrals placed by player %d (%d cells)", b.Username, msg.Player, len(msg.Cells))
+}
+
 func (b *Bot) handleTurnChange(msg *Message) {
 	b.mu.RLock()
 	isMyTurn := msg.Player == b.YourPlayer
@@ -535,12 +549,14 @@ func (b *Bot) calculateAndSendMove(gameID string) {
 
 	// Create game state snapshot
 	state := &GameState{
-		Board:       b.copyBoardLocal(b.Board),
-		Rows:        b.Rows,
-		Cols:        b.Cols,
-		PlayerBases: b.PlayerBases,
-		Players:     b.GamePlayers,
+		Board:        b.copyBoardLocal(b.Board),
+		Rows:         b.Rows,
+		Cols:         b.Cols,
+		PlayerBases:  b.PlayerBases,
+		Players:      b.GamePlayers,
+		NeutralsUsed: b.NeutralsUsed,
 	}
+
 	player := b.YourPlayer
 	aiEngine := b.AIEngine
 
@@ -552,28 +568,43 @@ func (b *Bot) calculateAndSendMove(gameID string) {
 	}
 
 	// Calculate move (may take 500ms - 2s)
-	row, col, ok := aiEngine.CalculateMove(state, player)
+	move, ok := aiEngine.CalculateMove(state, player)
 
-	if !ok {
+	if !ok || move == nil {
 		log.Printf("[Bot %s] No valid moves available! Waiting for server to handle elimination.", b.Username)
 		// Don't send anything - server will detect no valid moves and eliminate this player
-		// The server checks canMakeAnyMove() after each move in handleMove()
 		return
 	}
 
-	// Send move
-	rowPtr := row
-	colPtr := col
-	msg := Message{
-		Type:   "move",
-		GameID: gameID,
-		Row:    &rowPtr,
-		Col:    &colPtr,
+	// Send move based on type
+	if move.Type == MoveTypeNeutral {
+		msg := Message{
+			Type:   "neutrals",
+			GameID: gameID,
+			Cells:  move.Cells,
+		}
+		b.sendMessage(&msg)
+
+		// Update local tracking
+		b.mu.Lock()
+		b.NeutralsUsed = true
+		b.applyNeutralMove(move.Cells)
+		b.mu.Unlock()
+
+		log.Printf("[Bot %s] Sent NEUTRAL move with %d cells", b.Username, len(move.Cells))
+	} else {
+		// Standard Move
+		rowPtr := move.Row
+		colPtr := move.Col
+		msg := Message{
+			Type:   "move",
+			GameID: gameID,
+			Row:    &rowPtr,
+			Col:    &colPtr,
+		}
+		b.sendMessage(&msg)
+		log.Printf("[Bot %s] Sent move: (%d, %d)", b.Username, move.Row, move.Col)
 	}
-
-	b.sendMessage(&msg)
-
-	log.Printf("[Bot %s] Sent move: (%d, %d)", b.Username, row, col)
 }
 
 func (b *Bot) copyBoardLocal(board [][]CellValue) [][]CellValue {
@@ -625,6 +656,13 @@ func (b *Bot) applyMove(row, col, player int) {
 		b.Board[row][col] = NewCell(player, CellFlagNormal)
 	} else {
 		b.Board[row][col] = NewCell(player, CellFlagFortified)
+	}
+}
+
+func (b *Bot) applyNeutralMove(cells []CellPos) {
+	for _, cell := range cells {
+		// Set to Killed (Neutral)
+		b.Board[cell.Row][cell.Col] = NewCell(0, CellFlagKilled)
 	}
 }
 
