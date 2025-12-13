@@ -123,6 +123,23 @@ type Game struct {
 	NeutralsUsed  [4]bool          // Track neutrals usage
 	ActivePlayers int              // Number of active players
 	MoveTimer     *time.Timer      // Timer for auto-resign after 120 seconds
+
+	// Game history and timing
+	MoveHistory    []MoveAction
+	TurnCount      int
+	StartTime      time.Time
+	EndTime        time.Time
+	LastActionTime time.Time
+}
+
+type MoveAction struct {
+	Player     int
+	Type       string // "place", "attack", "neutral"
+	Row        int
+	Col        int
+	Cells      []CellPos
+	DurationCS int
+	TurnNumber int
 }
 
 // Lobby represents a multiplayer game lobby

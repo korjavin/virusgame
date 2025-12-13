@@ -312,6 +312,10 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 		Player2NeutralsUsed: false,
 		Rows:          rows,
 		Cols:          cols,
+		StartTime:     time.Now(),
+		LastActionTime: time.Now(),
+		TurnCount:     1,
+		MoveHistory:   []MoveAction{},
 	}
 	h.games[gameID] = game
 
@@ -436,12 +440,29 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 	}
 
 	// Apply move
+	moveType := "place"
 	if cellValue == nil {
 		game.Board[row][col] = playerNum
 	} else {
 		// Attacking opponent cell - fortify it
 		game.Board[row][col] = fmt.Sprintf("%d-fortified", playerNum)
+		moveType = "attack"
 	}
+
+	// Record move
+	now := time.Now()
+	duration := int(now.Sub(game.LastActionTime).Milliseconds() / 10) // centiseconds
+	game.LastActionTime = now
+
+	moveAction := MoveAction{
+		Player:     playerNum,
+		Type:       moveType,
+		Row:        row,
+		Col:        col,
+		DurationCS: duration,
+		TurnNumber: game.TurnCount,
+	}
+	game.MoveHistory = append(game.MoveHistory, moveAction)
 
 	game.MovesLeft--
 
@@ -568,6 +589,20 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		}
 	}
 
+	// Record move
+	now := time.Now()
+	duration := int(now.Sub(game.LastActionTime).Milliseconds() / 10) // centiseconds
+	game.LastActionTime = now
+
+	moveAction := MoveAction{
+		Player:     playerNum,
+		Type:       "neutral",
+		Cells:      msg.Cells,
+		DurationCS: duration,
+		TurnNumber: game.TurnCount,
+	}
+	game.MoveHistory = append(game.MoveHistory, moveAction)
+
 	// Broadcast to other players
 	neutralsMsg := Message{
 		Type:   "neutrals_placed",
@@ -622,6 +657,9 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		game.CurrentPlayer = 3 - playerNum
 		game.MovesLeft = 3
 	}
+
+	// Increment TurnCount when turn actually changes
+	game.TurnCount++
 
 	turnMsg := Message{
 		Type:      "turn_change",
@@ -914,6 +952,11 @@ func (h *Hub) cleanupStaleGames() {
 		}
 
 		if shouldClean {
+			// Save aborted/abandoned games if not already saved
+			if !game.GameOver && len(game.MoveHistory) > 0 {
+				SaveGame(game, "abandoned")
+			}
+
 			// Cancel any timers
 			if game.MoveTimer != nil {
 				game.MoveTimer.Stop()
@@ -1004,6 +1047,8 @@ func (h *Hub) checkWinCondition(game *Game) {
 
 		// Broadcast updated user list
 		h.broadcastUserList()
+
+		SaveGame(game, "normal")
 
 		log.Printf("Game ended: %s (winner: player %d)", game.ID, winner)
 	}
@@ -1712,6 +1757,10 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 		PlayerBases:   basePositions,
 		NeutralsUsed:  [4]bool{false, false, false, false},
 		ActivePlayers: activePlayers,
+		StartTime:     time.Now(),
+		LastActionTime: time.Now(),
+		TurnCount:     1,
+		MoveHistory:   []MoveAction{},
 	}
 
 	h.games[gameID] = game
@@ -1934,6 +1983,9 @@ func (h *Hub) endTurn(game *Game) {
 		game.MovesLeft = 3
 	}
 
+	// Increment TurnCount
+	game.TurnCount++
+
 	// For 1v1 games, check if the new current player can make any moves
 	if !game.IsMultiplayer {
 		canMove := h.canMakeAnyMove(game, game.CurrentPlayer)
@@ -1955,6 +2007,9 @@ func (h *Hub) endTurn(game *Game) {
 			game.Player2.InGame = false
 
 			h.broadcastUserList()
+
+			SaveGame(game, "no_moves")
+
 			log.Printf("Game ended: %s (winner: player %d, opponent had no moves)", game.ID, game.Winner)
 			return
 		}
@@ -2051,6 +2106,9 @@ func (h *Hub) checkMultiplayerStatus(game *Game) {
 		}
 
 		h.broadcastUserList()
+
+		SaveGame(game, "normal")
+
 		log.Printf("Multiplayer game ended: %s (winner: player %d)", game.ID, game.Winner)
 
 		// Schedule game cleanup after a delay to allow final messages to be delivered
@@ -2154,6 +2212,9 @@ func (h *Hub) eliminateDisconnectedPlayers(game *Game) {
 					}
 
 					h.broadcastUserList()
+
+					SaveGame(game, "no_moves")
+
 					log.Printf("Game ended: %s (winner: player %d, opponent had no valid moves)", game.ID, game.Winner)
 					return
 				}

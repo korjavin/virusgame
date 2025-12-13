@@ -4,3 +4,5 @@ backend/bot-hoster
 *.exe
 *.out
 *.bin
+backend/virusgame-server
+*.db

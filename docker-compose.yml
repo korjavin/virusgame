@@ -18,6 +18,8 @@ services:
       - "traefik.http.middlewares.virusgame-ws.headers.customrequestheaders.Connection=upgrade"
       - "traefik.http.middlewares.virusgame-ws.headers.customrequestheaders.Upgrade=websocket"
       - "traefik.http.routers.virusgame.middlewares=virusgame-ws"
+    volumes:
+      - ./backend/games.db:/app/backend/games.db
     restart: unless-stopped
 
 networks:

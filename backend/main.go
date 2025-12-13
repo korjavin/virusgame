@@ -21,6 +21,10 @@ func noCacheMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
+	// Initialize database
+	// We rely on volume mounts to persist this file
+	InitDB("games.db")
+
 	hub := newHub()
 	go hub.run()
 
