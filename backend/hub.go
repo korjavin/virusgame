@@ -511,6 +511,14 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 					}
 				}
 
+				// Send player_eliminated message
+				elimMsg := Message{
+					Type:             "player_eliminated",
+					GameID:           game.ID,
+					EliminatedPlayer: playerNum,
+				}
+				h.broadcastToGame(game, &elimMsg)
+
 				// Check if game should end
 				h.checkMultiplayerStatus(game)
 				if game.GameOver {
@@ -1944,6 +1952,15 @@ func (h *Hub) endTurn(game *Game) {
 								}
 							}
 						}
+
+						// Send player_eliminated message
+						elimMsg := Message{
+							Type:             "player_eliminated",
+							GameID:           game.ID,
+							EliminatedPlayer: nextPlayer,
+						}
+						h.broadcastToGame(game, &elimMsg)
+
 						// Notify about elimination
 						h.checkMultiplayerStatus(game)
 						if game.GameOver {
@@ -2162,6 +2179,14 @@ func (h *Hub) eliminateDisconnectedPlayers(game *Game) {
 								}
 							}
 						}
+
+						// Send player_eliminated message
+						elimMsg := Message{
+							Type:             "player_eliminated",
+							GameID:           game.ID,
+							EliminatedPlayer: i,
+						}
+						h.broadcastToGame(game, &elimMsg)
 
 						// Check if game should end after elimination
 						h.checkMultiplayerStatus(game)
