@@ -465,7 +465,17 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 	}
 	h.broadcastToGame(game, &moveMsg)
 
-	// Check if turn is over OR if player has no more valid moves
+	// IMPORTANT: Check for eliminations after EVERY move
+	// This ensures that if a player's move disconnected an opponent from their base,
+	// the opponent is eliminated immediately
+	h.eliminateDisconnectedPlayers(game)
+
+	// Check if game is over after potential eliminations
+	if game.GameOver {
+		return
+	}
+
+	// Check if turn is over OR if current player has no more valid moves
 	hasValidMoves := h.canMakeAnyMove(game, playerNum)
 	if game.MovesLeft == 0 || !hasValidMoves {
 		if !hasValidMoves && game.MovesLeft > 0 {
@@ -497,9 +507,6 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		log.Printf("Turn ending for game %s, calling endTurn()", game.ID)
 		h.endTurn(game)
 	}
-
-	// Check win condition and elimination
-	h.checkMultiplayerStatus(game)
 }
 
 func (h *Hub) handleNeutrals(user *User, msg *Message) {
@@ -2075,4 +2082,82 @@ func (h *Hub) countPlayerPieces(game *Game, player int) int {
 		}
 	}
 	return count
+}
+
+// eliminateDisconnectedPlayers checks all players and eliminates those who have pieces
+// but cannot make any valid moves (disconnected from base or completely surrounded)
+// This should be called after every move to ensure immediate elimination
+func (h *Hub) eliminateDisconnectedPlayers(game *Game) {
+	if game.GameOver {
+		return
+	}
+
+	if game.IsMultiplayer {
+		// Check all players in multiplayer game
+		for i := 1; i <= 4; i++ {
+			if game.Players[i-1] != nil {
+				pieceCount := h.countPlayerPieces(game, i)
+				if pieceCount > 0 {
+					// Player has pieces, check if they can make any valid moves
+					canMove := h.canMakeAnyMove(game, i)
+					if !canMove {
+						log.Printf("Player %d has %d pieces but no valid moves - eliminating", i, pieceCount)
+
+						// Remove all pieces for this player
+						for row := 0; row < game.Rows; row++ {
+							for col := 0; col < game.Cols; col++ {
+								cell := game.Board[row][col]
+								if cell != nil {
+									cellStr := fmt.Sprintf("%v", cell)
+									if len(cellStr) > 0 && cellStr[0] == byte('0'+i) {
+										game.Board[row][col] = nil
+									}
+								}
+							}
+						}
+
+						// Check if game should end after elimination
+						h.checkMultiplayerStatus(game)
+						if game.GameOver {
+							return
+						}
+					}
+				}
+			}
+		}
+	} else {
+		// For 1v1 games, check both players
+		for _, playerNum := range []int{1, 2} {
+			pieceCount := h.countPlayerPieces(game, playerNum)
+			if pieceCount > 0 {
+				canMove := h.canMakeAnyMove(game, playerNum)
+				if !canMove {
+					log.Printf("1v1 Player %d has %d pieces but no valid moves - other player wins", playerNum, pieceCount)
+
+					// In 1v1, if a player can't move, the other player wins
+					game.GameOver = true
+					game.Winner = 3 - playerNum // The other player
+
+					endMsg := Message{
+						Type:   "game_end",
+						GameID: game.ID,
+						Winner: game.Winner,
+					}
+					h.broadcastToGame(game, &endMsg)
+
+					// Mark users as not in game
+					if game.Player1 != nil {
+						game.Player1.InGame = false
+					}
+					if game.Player2 != nil {
+						game.Player2.InGame = false
+					}
+
+					h.broadcastUserList()
+					log.Printf("Game ended: %s (winner: player %d, opponent had no valid moves)", game.ID, game.Winner)
+					return
+				}
+			}
+		}
+	}
 }
