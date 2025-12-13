@@ -61,14 +61,6 @@
                         <span data-translation-key="showConnectionTrees">Show Connection Trees</span>
                     </label>
                 </div>
-                <div class="settings-group" id="ai-depth-setting" style="display: none;">
-                    <label for="ai-depth-input">AI Depth:</label>
-                    <input type="number" id="ai-depth-input" value="3" min="1" max="6" title="How many moves ahead AI thinks (1-6)">
-                </div>
-                <div class="settings-group" id="ai-time-setting" style="display: none;">
-                    <label for="ai-time-input">AI Time Limit (ms):</label>
-                    <input type="number" id="ai-time-input" value="5000" min="0" max="60000" step="1000" title="0 = fixed depth, >0 = iterative deepening with time limit">
-                </div>
                 <button id="new-game-button" class="sidebar-button">New Local Game</button>
             </div>
 
@@ -90,35 +82,6 @@
                 <button id="start-game-button" class="sidebar-button" style="display: none;">Start Game</button>
             </div>
 
-            <!-- AI Tuning (collapsible) -->
-            <div class="sidebar-section" id="ai-tuning-section" style="display: none;">
-                <h3 style="cursor: pointer;" id="ai-tuning-header">⚙️ AI Strategy Weights <span style="float: right;">▼</span></h3>
-                <div id="ai-tuning-controls" style="display: none;">
-                    <p style="font-size: 11px; color: #666; margin: 5px 0;">Optimized AI with 5 balanced parameters (all O(n)):</p>
-                    <div class="settings-group">
-                        <label for="coeff-material" title="Cells and fortifications">Material:</label>
-                        <input type="number" id="coeff-material" value="100" min="0" max="200" step="10">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-mobility" title="Number of available moves">Mobility:</label>
-                        <input type="number" id="coeff-mobility" value="50" min="0" max="200" step="10">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-position" title="Aggression + attack opportunities">Position:</label>
-                        <input type="number" id="coeff-position" value="30" min="0" max="200" step="10">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-redundancy" title="Network resilience (cells with 2+ connections)">Redundancy:</label>
-                        <input type="number" id="coeff-redundancy" value="40" min="0" max="200" step="10">
-                    </div>
-                    <div class="settings-group">
-                        <label for="coeff-cohesion" title="Territory cohesion (penalize gaps/holes)">Cohesion:</label>
-                        <input type="number" id="coeff-cohesion" value="25" min="0" max="200" step="10">
-                    </div>
-                    <button id="reset-coeffs-button" class="sidebar-button" style="font-size: 11px;">Reset to Defaults</button>
-                </div>
-            </div>
-
             <!-- Online users -->
             <div class="sidebar-section users-section">
                 <h3>Online Players</h3>
@@ -132,9 +95,6 @@
         <div id="main-content">
             <div id="game-container">
                 <h1>Virus Game</h1>
-                <div id="ai-progress" class="hidden">
-                    <small>AI thinking: <span id="ai-progress-text">0/0</span></small>
-                </div>
                 <div id="board-wrapper" style="position: relative;">
                     <canvas id="connection-canvas" style="position: absolute; top: 0; left: 0;"></canvas>
                     <div id="game-board" style="position: relative; background: transparent;"></div>
@@ -184,9 +144,7 @@
                 <h3>🤖 Playing with AI</h3>
                 <ul>
                     <li>Check "vs AI" in Game Settings to play against the computer</li>
-                    <li>Adjust AI Depth (1-6) to control difficulty</li>
-                    <li>Higher depth = smarter AI but slower moves</li>
-                    <li>Fine-tune AI strategy with AI Strategy Weights (for advanced players)</li>
+                    <li>Start a new local game to play against the AI</li>
                 </ul>
             </div>
 
