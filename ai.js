@@ -597,14 +597,21 @@ function isValidMoveOnBoard(boardState, row, col, player) {
     const cell = boardState[row][col];
     const opponent = player === 1 ? 2 : 1;
 
-    // Cannot move on fortified, base, or neutral (killed) cells
-    if (typeof cell === 'string' && (cell.includes('fortified') || cell.includes('base') || cell === 'killed')) {
-        return false;
-    }
+    // Quick checks for unmovable cells using constants (if defined in script.js)
+    if (cell === 'killed') return false;
 
-    // Can only attack opponent's non-fortified cells or expand to empty cells
-    if (cell !== null && !String(cell).startsWith(opponent.toString())) {
-        return false;
+    // Cannot move on fortified, base, or neutral (killed) cells
+    if (cell !== null) {
+        const str = String(cell);
+        if (str.endsWith('-fortified') || str.endsWith('-base')) {
+            return false;
+        }
+
+        // Can only attack opponent's non-fortified cells or expand to empty cells
+        // Cannot place on own cell
+        if (str.startsWith(player.toString())) {
+            return false;
+        }
     }
 
     // Check if adjacent to own territory
@@ -732,7 +739,7 @@ function applyMove(boardState, row, col, player) {
         newBoard[row][col] = player;
     } else if (cell === opponent) {
         // Attack opponent's cell (fortify it)
-        newBoard[row][col] = `${player}-fortified`;
+        newBoard[row][col] = player + '-fortified';
     }
 
     return newBoard;
@@ -758,7 +765,7 @@ function playAITurn() {
                 if (cellValue === null) {
                     board[move.row][move.col] = 2;
                 } else if (cellValue === 1 || String(cellValue).startsWith('1')) {
-                    board[move.row][move.col] = '2-fortified';
+                    board[move.row][move.col] = '2-fortified'; // Use consistent string format
                 }
 
                 movesLeft--;

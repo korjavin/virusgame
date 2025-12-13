@@ -371,7 +371,7 @@ func (h *Hub) evaluateBoard(game *Game, board [][]interface{}, aiPlayer int, bot
 				if cellStr[0] == byte('0'+aiPlayer) {
 					// AI cell
 					aiCells++
-					if strings.HasSuffix(cellStr, "-fortified") {
+					if strings.HasSuffix(cellStr, SuffixFortified) {
 						aiFortified++
 					}
 
@@ -402,7 +402,7 @@ func (h *Hub) evaluateBoard(game *Game, board [][]interface{}, aiPlayer int, bot
 				} else {
 					// Opponent cell
 					opponentCells++
-					if strings.HasSuffix(cellStr, "-fortified") {
+					if strings.HasSuffix(cellStr, SuffixFortified) {
 						opponentFortified++
 					}
 
@@ -492,7 +492,7 @@ func (h *Hub) scoreMoveQuick(game *Game, move BotMove, player int) float64 {
 			if p != player && game.Players[p-1] != nil && cellStr[0] == byte('0'+p) {
 				isCapture = true
 				score += 1500.0
-				if strings.HasSuffix(cellStr, "-fortified") {
+				if strings.HasSuffix(cellStr, SuffixFortified) {
 					score += 800.0
 				}
 				// Bonus for capturing cells near their base (aggressive play)
@@ -522,7 +522,7 @@ func (h *Hub) scoreMoveQuick(game *Game, move BotMove, player int) float64 {
 			if neighbor != nil && len(neighborStr) > 0 {
 				if neighborStr[0] == byte('0'+player) {
 					friendlyNeighbors++
-					if strings.HasSuffix(neighborStr, "-fortified") {
+					if strings.HasSuffix(neighborStr, SuffixFortified) {
 						fortifiedNeighbors++
 					}
 				} else {
@@ -606,7 +606,7 @@ func (h *Hub) isValidMoveOnBoard(game *Game, board [][]interface{}, row, col, pl
 
 	// Cannot move on fortified, base, or neutral (killed) cells
 	if cell != nil {
-		if strings.HasSuffix(cellStr, "-fortified") || strings.HasSuffix(cellStr, "-base") || cellStr == "killed" {
+		if strings.HasSuffix(cellStr, SuffixFortified) || strings.HasSuffix(cellStr, SuffixBase) || cellStr == CellKilled {
 			return false
 		}
 	}
@@ -704,7 +704,7 @@ func (h *Hub) applyMoveToBoard(board [][]interface{}, row, col, player int) {
 	if cell == nil {
 		board[row][col] = player
 	} else {
-		board[row][col] = fmt.Sprintf("%d-fortified", player)
+		board[row][col] = fmt.Sprintf("%d%s", player, SuffixFortified)
 	}
 }
 
@@ -839,7 +839,7 @@ func (h *Hub) applyBotMove(game *Game, row, col, player int) {
 	if cellValue == nil {
 		game.Board[row][col] = player
 	} else {
-		game.Board[row][col] = fmt.Sprintf("%d-fortified", player)
+		game.Board[row][col] = fmt.Sprintf("%d%s", player, SuffixFortified)
 	}
 
 	game.MovesLeft--

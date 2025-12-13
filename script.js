@@ -13,6 +13,27 @@ let player2NeutralsStarted = false;
 // Multiplayer mode variables
 let playerBases = []; // Array of {row, col} for each player
 
+// Cell type constants for better readability and performance
+const CellType = {
+    EMPTY: null,
+    KILLED: 'killed',
+};
+
+const CellSuffix = {
+    BASE: '-base',
+    FORTIFIED: '-fortified'
+};
+
+function getCellType(cellValue) {
+    if (cellValue === null) return 'empty';
+    if (cellValue === CellType.KILLED) return 'killed';
+
+    const str = String(cellValue);
+    if (str.endsWith(CellSuffix.BASE)) return 'base';
+    if (str.endsWith(CellSuffix.FORTIFIED)) return 'fortified';
+    return 'normal'; // Regular player cell
+}
+
 function isConnectedToBase(startRow, startCol, player) {
     let base;
     if (typeof mpClient !== 'undefined' && mpClient.isMultiplayerGame) {
@@ -59,15 +80,20 @@ function isConnectedToBase(startRow, startCol, player) {
 
 function isValidMove(row, col, player) {
     const cellValue = board[row][col];
-    if (typeof cellValue === 'string' && (cellValue.includes('fortified') || cellValue.includes('base') || cellValue === 'killed')) {
-        return false; // Cannot attack fortified, base, or neutral (killed) cells
-    }
 
-    // Check if cell is empty or belongs to an opponent
+    // Quick checks for unmovable cells using constants
+    if (cellValue === CellType.KILLED) return false;
+
     if (cellValue !== null) {
+        // Use string operations only when necessary and optimize with endsWith/startsWith
         const cellStr = String(cellValue);
+        if (cellStr.endsWith(CellSuffix.BASE) || cellStr.endsWith(CellSuffix.FORTIFIED)) {
+            return false;
+        }
+
+        // Cannot place on own cell
         if (cellStr.startsWith(player.toString())) {
-            return false; // Cannot place on own cell
+            return false;
         }
     }
 
@@ -329,7 +355,7 @@ function handleCellClick(event) {
     if (neutralMode) {
         const cellValue = board[row][col];
         if (cellValue === currentPlayer) {
-            board[row][col] = 'killed';
+            board[row][col] = CellType.KILLED;
             neutralsPlaced++;
 
             // Store cells for multiplayer
@@ -405,10 +431,10 @@ function handleCellClick(event) {
             const cellStr = String(cellValue);
 
             // Check it's opponent's non-fortified cell
-            if (!cellStr.includes('fortified') && !cellStr.includes('base') &&
+            if (!cellStr.endsWith(CellSuffix.FORTIFIED) && !cellStr.endsWith(CellSuffix.BASE) &&
                 !cellStr.startsWith(currentPlayer.toString())) {
                 // Capture it and make it fortified
-                board[row][col] = `${currentPlayer}-fortified`;
+                board[row][col] = currentPlayer + CellSuffix.FORTIFIED;
             } else {
                 return; // Invalid attack
             }
@@ -560,8 +586,8 @@ document.addEventListener('DOMContentLoaded', () => {
         player1Base = { row: 0, col: 0 };
         player2Base = { row: rows - 1, col: cols - 1 };
 
-        board[player1Base.row][player1Base.col] = '1-base';
-        board[player2Base.row][player2Base.col] = '2-base';
+        board[player1Base.row][player1Base.col] = '1' + CellSuffix.BASE;
+        board[player2Base.row][player2Base.col] = '2' + CellSuffix.BASE;
 
         renderBoard();
         updateStatus();

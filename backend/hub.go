@@ -10,6 +10,12 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	CellKilled      = "killed"
+	SuffixBase      = "-base"
+	SuffixFortified = "-fortified"
+)
+
 // MessageWrapper wraps a message with its client
 type MessageWrapper struct {
 	client  *Client
@@ -298,8 +304,8 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 	}
 
 	// Set base positions
-	board[0][0] = "1-base"
-	board[rows-1][cols-1] = "2-base"
+	board[0][0] = "1" + SuffixBase
+	board[rows-1][cols-1] = "2" + SuffixBase
 
 	game := &Game{
 		ID:            gameID,
@@ -430,7 +436,7 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		cellStr := fmt.Sprintf("%v", cellValue)
 		// Can attack opponent's non-fortified, non-base, non-killed cells
 		if len(cellStr) > 0 && cellStr[0] != byte('0'+playerNum) &&
-		   !strings.Contains(cellStr, "fortified") && !strings.Contains(cellStr, "base") && cellStr != "killed" {
+		   !strings.HasSuffix(cellStr, SuffixFortified) && !strings.HasSuffix(cellStr, SuffixBase) && cellStr != CellKilled {
 			isValidTarget = true
 		}
 	}
@@ -444,7 +450,7 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		game.Board[row][col] = playerNum
 	} else {
 		// Attacking opponent cell - fortify it
-		game.Board[row][col] = fmt.Sprintf("%d-fortified", playerNum)
+		game.Board[row][col] = fmt.Sprintf("%d%s", playerNum, SuffixFortified)
 	}
 
 	game.MovesLeft--
@@ -546,7 +552,7 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 	// Mark cells as killed
 	for _, cell := range msg.Cells {
 		if game.Board[cell.Row][cell.Col] == playerNum {
-			game.Board[cell.Row][cell.Col] = "killed"
+			game.Board[cell.Row][cell.Col] = CellKilled
 		}
 	}
 
@@ -708,7 +714,7 @@ func (h *Hub) handleResign(user *User, msg *Message) {
 				if cell != nil {
 					cellStr := fmt.Sprintf("%v", cell)
 					if len(cellStr) > 0 && cellStr[0] == byte('0'+resignedPlayer) {
-						game.Board[i][j] = "killed"
+						game.Board[i][j] = CellKilled
 					}
 				}
 			}
@@ -1144,7 +1150,7 @@ func (h *Hub) isValidMove(game *Game, row, col, player int) bool {
 	// Can't attack fortified, base, or neutral (killed) cells
 	if cellValue != nil {
 		cellStr := fmt.Sprintf("%v", cellValue)
-		if len(cellStr) > 0 && (strings.Contains(cellStr, "fortified") || strings.Contains(cellStr, "base") || cellStr == "killed") {
+		if len(cellStr) > 0 && (strings.HasSuffix(cellStr, SuffixFortified) || strings.HasSuffix(cellStr, SuffixBase) || cellStr == CellKilled) {
 			return false
 		}
 	}
@@ -1803,7 +1809,7 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 	for i := 0; i < lobby.MaxPlayers; i++ {
 		if lobby.Players[i] != nil {
 			gamePlayers[i] = lobby.Players[i]
-			board[basePositions[i].Row][basePositions[i].Col] = fmt.Sprintf("%d-base", i+1)
+			board[basePositions[i].Row][basePositions[i].Col] = fmt.Sprintf("%d%s", i+1, SuffixBase)
 			activePlayers++
 		}
 	}
