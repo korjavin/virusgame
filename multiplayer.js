@@ -760,7 +760,7 @@ const mpClient = new MultiplayerClient();
 function initGameMultiplayer(rowsVal, colsVal) {
     rows = rowsVal;
     cols = colsVal;
-    board = Array(rows).fill(null).map(() => Array(cols).fill(null));
+    board = Array(rows).fill(EMPTY).map(() => Array(cols).fill(EMPTY));
     currentPlayer = 1;
     movesLeft = 3;
     gameOver = false;
@@ -790,7 +790,7 @@ function initGameMultiplayer(rowsVal, colsVal) {
 function initGameMultiplayerMode(rowsVal, colsVal, gamePlayers, yourPlayerIndex) {
     rows = rowsVal;
     cols = colsVal;
-    board = Array(rows).fill(null).map(() => Array(cols).fill(null));
+    board = Array(rows).fill(EMPTY).map(() => Array(cols).fill(EMPTY));
     currentPlayer = 1;
     movesLeft = 3;
     gameOver = false;
