@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 		log.Fatalf("Database not found at %s", *dbPath)
 	}
 
-	db, err := sql.Open("sqlite3", *dbPath)
+	db, err := sql.Open("sqlite", *dbPath)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
