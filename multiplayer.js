@@ -245,14 +245,16 @@ class MultiplayerClient {
         for (const cell of msg.cells) {
             board[cell.row][cell.col] = 'killed';
         }
-        
-        // Track that the opponent used their neutrals
-        if (msg.player === 1) {
-            player1NeutralsUsed = true;
-        } else if (msg.player === 2) {
-            player2NeutralsUsed = true;
+
+        // Track that the player used their neutrals (support all 4 players)
+        if (msg.player >= 1 && msg.player <= 4) {
+            const playerIndex = msg.player - 1;
+            playerNeutralsUsed[playerIndex] = true;
+            // Update legacy variables
+            if (msg.player === 1) player1NeutralsUsed = true;
+            if (msg.player === 2) player2NeutralsUsed = true;
         }
-        
+
         renderBoard();
     }
 
@@ -804,6 +806,10 @@ function initGameMultiplayer(rowsVal, colsVal) {
     currentPlayer = 1;
     movesLeft = 3;
     gameOver = false;
+    // Reset neutral tracking for all players
+    playerNeutralsUsed = [false, false, false, false];
+    playerNeutralsStarted = [false, false, false, false];
+    // Legacy variables
     player1NeutralsUsed = false;
     player2NeutralsUsed = false;
     player1NeutralsStarted = false;
