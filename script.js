@@ -484,6 +484,13 @@ document.addEventListener('DOMContentLoaded', () => {
     resignButton = document.getElementById('resign-button');
 
     function initGame() {
+        // Force leave multiplayer game if still connected
+        if (multiplayerClient && multiplayerClient.gameId) {
+            console.log('Forcing leave from multiplayer game before starting local game');
+            multiplayerClient.leaveGame();
+            return; // leaveGame() will call initGame() again after cleanup
+        }
+
         rows = parseInt(rowsInput.value);
         cols = parseInt(colsInput.value);
         aiEnabled = aiEnabledCheckbox.checked;
