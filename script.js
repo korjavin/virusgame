@@ -1,3 +1,6 @@
+// VERSION CHECK - Log immediately at script load
+console.log('[SCRIPT VERSION] script.js v2.8.1 loaded at', new Date().toISOString());
+
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
 let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting, resignButton;
 // Track neutral usage for all 4 players (index 0-3 for players 1-4)
