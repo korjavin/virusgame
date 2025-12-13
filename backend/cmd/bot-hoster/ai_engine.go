@@ -113,9 +113,9 @@ func NewTranspositionTable() *TranspositionTable {
 }
 
 // CalculateMove returns the best move for the given game state
-// Returns (row, col, ok) where ok is false if no valid moves exist
+// Returns the move object and boolean indicating success
 // Uses iterative deepening with time budget (~670ms per move, 2 seconds per turn)
-func (ai *AIEngine) CalculateMove(state *GameState, player int) (int, int, bool) {
+func (ai *AIEngine) CalculateMove(state *GameState, player int) (*Move, bool) {
 	// Initialize hash if not present
 	if state.Hash == 0 {
 		state.Hash = ai.computeHash(state.Board, player)
@@ -124,7 +124,7 @@ func (ai *AIEngine) CalculateMove(state *GameState, player int) (int, int, bool)
 	// Get all valid moves
 	validMoves := ai.getAllValidMoves(state, player)
 	if len(validMoves) == 0 {
-		return 0, 0, false
+		return nil, false
 	}
 
 	moveCount := len(validMoves)
@@ -169,25 +169,33 @@ func (ai *AIEngine) CalculateMove(state *GameState, player int) (int, int, bool)
 	}
 
 	elapsed := time.Since(ai.searchStartTime)
-	log.Printf("[AI] Selected move: (%d, %d) at depth %d, score %.2f (time: %dms)",
-		bestMove.Row, bestMove.Col, maxDepth, bestMove.Score, elapsed.Milliseconds())
+	log.Printf("[AI] Selected move: Type=%d at depth %d, score %.2f (time: %dms)",
+		bestMove.Type, maxDepth, bestMove.Score, elapsed.Milliseconds())
 
-	return bestMove.Row, bestMove.Col, true
+	return &bestMove, true
 }
 
 // GameState represents the current state of the game
 type GameState struct {
-	Board       [][]CellValue
-	Rows        int
-	Cols        int
-	PlayerBases [4]CellPos
-	Players     []GamePlayerInfo
-	Hash        uint64
+	Board        [][]CellValue
+	Rows         int
+	Cols         int
+	PlayerBases  [4]CellPos
+	Players      []GamePlayerInfo
+	Hash         uint64
+	NeutralsUsed bool
 }
 
+const (
+	MoveTypeStandard = 0
+	MoveTypeNeutral  = 1
+)
+
 type Move struct {
+	Type  int // 0 = Standard, 1 = Neutral
 	Row   int
 	Col   int
+	Cells []CellPos
 	Score float64
 }
 
@@ -199,13 +207,126 @@ type MinimaxResult struct {
 
 func (ai *AIEngine) getAllValidMoves(state *GameState, player int) []Move {
 	var moves []Move
+
+	// 1. Standard moves (place/attack)
 	for row := 0; row < state.Rows; row++ {
 		for col := 0; col < state.Cols; col++ {
 			if ai.isValidMove(state, row, col, player) {
-				moves = append(moves, Move{Row: row, Col: col})
+				moves = append(moves, Move{Type: MoveTypeStandard, Row: row, Col: col})
 			}
 		}
 	}
+
+	// 2. Neutral moves (if not used yet)
+	if !state.NeutralsUsed {
+		neutralMoves := ai.getNeutralMoves(state, player)
+		moves = append(moves, neutralMoves...)
+	}
+
+	return moves
+}
+
+func (ai *AIEngine) getNeutralMoves(state *GameState, player int) []Move {
+	// Pruning: Only consider own cells that are "threatened" (adjacent to opponent)
+	// This avoids combinatorial explosion
+	var threatenedCells []CellPos
+
+	for r := 0; r < state.Rows; r++ {
+		for c := 0; c < state.Cols; c++ {
+			cell := state.Board[r][c]
+			if cell != 0 && cell.Player() == player {
+				// Check neighbors for opponents
+				hasOpponentNeighbor := false
+				for i := -1; i <= 1; i++ {
+					for j := -1; j <= 1; j++ {
+						if i == 0 && j == 0 { continue }
+						nr, nc := r+i, c+j
+						if nr >= 0 && nr < state.Rows && nc >= 0 && nc < state.Cols {
+							nCell := state.Board[nr][nc]
+							if nCell != 0 && nCell.Player() != player && nCell.Player() != 0 {
+								hasOpponentNeighbor = true
+								break
+							}
+						}
+					}
+					if hasOpponentNeighbor { break }
+				}
+
+				if hasOpponentNeighbor {
+					threatenedCells = append(threatenedCells, CellPos{Row: r, Col: c})
+				}
+			}
+		}
+	}
+
+	// If no threatened cells, maybe don't use neutral move at all
+	// Strategy: "usually it need to protect own position"
+	if len(threatenedCells) < 1 {
+		return nil
+	}
+
+	var moves []Move
+
+	// If we have threatened cells, generate pairs from them
+	// If only 1 threatened cell, pair it with any other cell (preferably close to it)
+	// To keep it simple and fast:
+	// 1. If >= 2 threatened cells, generate pairs from top 5 (closest to base/most vulnerable)
+	// 2. If 1 threatened cell, pair with closest friendly cell
+
+	candidates := threatenedCells
+
+	// Sort candidates by distance to base (closest to base are more critical to defend)
+	base := state.PlayerBases[player-1]
+	sort.Slice(candidates, func(i, j int) bool {
+		distI := abs(candidates[i].Row-base.Row) + abs(candidates[i].Col-base.Col)
+		distJ := abs(candidates[j].Row-base.Row) + abs(candidates[j].Col-base.Col)
+		return distI < distJ
+	})
+
+	// Limit candidates to avoid explosion
+	if len(candidates) > 6 {
+		candidates = candidates[:6]
+	}
+
+	// Generate pairs
+	// If only 1 candidate, we need to find a partner
+	if len(candidates) == 1 {
+		// Find closest friendly neighbor
+		bestPartner := CellPos{Row: -1}
+		minDist := 999
+		c1 := candidates[0]
+
+		for r := 0; r < state.Rows; r++ {
+			for c := 0; c < state.Cols; c++ {
+				if r == c1.Row && c == c1.Col { continue }
+				cell := state.Board[r][c]
+				if cell != 0 && cell.Player() == player {
+					dist := abs(r-c1.Row) + abs(c-c1.Col)
+					if dist < minDist {
+						minDist = dist
+						bestPartner = CellPos{Row: r, Col: c}
+					}
+				}
+			}
+		}
+		if bestPartner.Row != -1 {
+			moves = append(moves, Move{
+				Type: MoveTypeNeutral,
+				Cells: []CellPos{c1, bestPartner},
+			})
+		}
+	} else {
+		// Generate pairs from candidates
+		for i := 0; i < len(candidates); i++ {
+			for j := i + 1; j < len(candidates); j++ {
+				moves = append(moves, Move{
+					Type: MoveTypeNeutral,
+					Cells: []CellPos{candidates[i], candidates[j]},
+				})
+			}
+		}
+	}
+
 	return moves
 }
 
@@ -336,7 +457,7 @@ func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, play
 		}
 
 		newBoard := ai.copyBoard(state.Board)
-		newHash := ai.applyMoveToBoard(newBoard, move.Row, move.Col, player, state.Hash)
+		newHash := ai.applyMove(newBoard, move, player, state.Hash)
 
 		// Update turn hash: remove current player, add next player
 		if player >= 1 && player <= 4 {
@@ -344,12 +465,13 @@ func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, play
 		}
 
 		newState := &GameState{
-			Board:       newBoard,
-			Rows:        state.Rows,
-			Cols:        state.Cols,
-			PlayerBases: state.PlayerBases,
-			Players:     state.Players,
-			Hash:        0, // Set momentarily
+			Board:        newBoard,
+			Rows:         state.Rows,
+			Cols:         state.Cols,
+			PlayerBases:  state.PlayerBases,
+			Players:      state.Players,
+			Hash:         0, // Set momentarily
+			NeutralsUsed: state.NeutralsUsed || (move.Type == MoveTypeNeutral),
 		}
 
 		// Determine next player to correctly update hash
@@ -472,7 +594,7 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 		for _, move := range possibleMoves {
 			// Try this move
 			newBoard := ai.copyBoard(state.Board)
-			newHash := ai.applyMoveToBoard(newBoard, move.Row, move.Col, player, state.Hash)
+			newHash := ai.applyMove(newBoard, move, player, state.Hash)
 
 			// Update turn hash: remove current player, add next player
 			if player >= 1 && player <= 4 {
@@ -480,12 +602,13 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 			}
 
 			newState := &GameState{
-				Board:       newBoard,
-				Rows:        state.Rows,
-				Cols:        state.Cols,
-				PlayerBases: state.PlayerBases,
-				Players:     state.Players,
-				Hash:        0,
+				Board:        newBoard,
+				Rows:         state.Rows,
+				Cols:         state.Cols,
+				PlayerBases:  state.PlayerBases,
+				Players:      state.Players,
+				Hash:         0,
+				NeutralsUsed: state.NeutralsUsed || (move.Type == MoveTypeNeutral),
 			}
 
 			// Next is opponent (minimizing)
@@ -532,7 +655,7 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 		for _, move := range possibleMoves {
 			// Try this move
 			newBoard := ai.copyBoard(state.Board)
-			newHash := ai.applyMoveToBoard(newBoard, move.Row, move.Col, player, state.Hash)
+			newHash := ai.applyMove(newBoard, move, player, state.Hash)
 
 			// Update turn hash: remove current player
 			if player >= 1 && player <= 4 {
@@ -545,12 +668,13 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 			}
 
 			newState := &GameState{
-				Board:       newBoard,
-				Rows:        state.Rows,
-				Cols:        state.Cols,
-				PlayerBases: state.PlayerBases,
-				Players:     state.Players,
-				Hash:        newHash,
+				Board:        newBoard,
+				Rows:         state.Rows,
+				Cols:         state.Cols,
+				PlayerBases:  state.PlayerBases,
+				Players:      state.Players,
+				Hash:         newHash,
+				NeutralsUsed: state.NeutralsUsed || (move.Type == MoveTypeNeutral),
 			}
 
 			// Recursively evaluate
@@ -783,6 +907,31 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 }
 
 func (ai *AIEngine) scoreMoveQuick(state *GameState, move Move, player int) float64 {
+	if move.Type == MoveTypeNeutral {
+		// Evaluation for Neutral Move
+		// Cost: Lose 3 moves (initiative) + Lose 2 cells
+		// Benefit: Block opponent
+
+		score := -1500.0 // Base penalty for skipping turn and losing cells
+
+		// Check value of blocking
+		for _, cellPos := range move.Cells {
+			// Reward based on opponent adjacency (blocking potential)
+			oppNeighbors := ai.countOpponentNeighborsOnBoard(state.Board, cellPos.Row, cellPos.Col, player, state.Rows, state.Cols)
+			score += float64(oppNeighbors * 1000) // High value for blocking active fronts
+
+			// Bonus for protecting base (distance to base)
+			base := state.PlayerBases[player-1]
+			dist := abs(cellPos.Row-base.Row) + abs(cellPos.Col-base.Col)
+			if dist < 4 {
+				score += 2000.0 // Critical defense
+			}
+		}
+
+		// Only use if really threatened (heuristic score must be > standard moves ~2000-3000)
+		return score
+	}
+
 	cellValue := state.Board[move.Row][move.Col]
 	score := 0.0
 
@@ -912,9 +1061,33 @@ func (ai *AIEngine) copyBoard(board [][]CellValue) [][]CellValue {
 // applyMoveToBoard updates the board and returns the new Zobrist hash
 // Uses incremental update: XOR out old value, XOR in new value
 func (ai *AIEngine) applyMoveToBoard(board [][]CellValue, row, col, player int, currentHash uint64) uint64 {
-	// XOR out the old value
+	return ai.applyMove(board, Move{Type: MoveTypeStandard, Row: row, Col: col}, player, currentHash)
+}
+
+func (ai *AIEngine) applyMove(board [][]CellValue, move Move, player int, currentHash uint64) uint64 {
+	if move.Type == MoveTypeNeutral {
+		for _, cell := range move.Cells {
+			r, c := cell.Row, cell.Col
+			oldCell := board[r][c]
+			if r < 100 && c < 100 {
+				currentHash ^= ai.zobristTable[r][c][oldCell]
+			}
+
+			// Convert to Killed (Neutral)
+			// Killed cell has no player? The backend used NewCell(0, CellFlagKilled)
+			board[r][c] = NewCell(0, CellFlagKilled)
+			newCell := board[r][c]
+
+			if r < 100 && c < 100 {
+				currentHash ^= ai.zobristTable[r][c][newCell]
+			}
+		}
+		return currentHash
+	}
+
+	// Standard Move
+	row, col := move.Row, move.Col
 	oldCell := board[row][col]
-	// Use 100 as safe max dimension if board is smaller, but here we access table by [row][col]
 	if row < 100 && col < 100 {
 		currentHash ^= ai.zobristTable[row][col][oldCell]
 	}
@@ -925,7 +1098,6 @@ func (ai *AIEngine) applyMoveToBoard(board [][]CellValue, row, col, player int, 
 		board[row][col] = NewCell(player, CellFlagFortified)
 	}
 
-	// XOR in the new value
 	newCell := board[row][col]
 	if row < 100 && col < 100 {
 		currentHash ^= ai.zobristTable[row][col][newCell]
@@ -1102,6 +1274,10 @@ func abs(x int) int {
 // Returns the defeated player number (1-4) or 0 if no player is defeated
 // This is optimized to be very fast - just simulates the move and counts pieces
 func (ai *AIEngine) checkIfMoveDefeatsOpponent(state *GameState, move Move, player int) int {
+	if move.Type == MoveTypeNeutral {
+		return 0 // Neutral moves don't defeat opponents directly
+	}
+
 	// Get the cell we're targeting
 	cellValue := state.Board[move.Row][move.Col]
 	if cellValue == 0 {
