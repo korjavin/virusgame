@@ -428,9 +428,9 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		isValidTarget = true
 	} else {
 		cellStr := fmt.Sprintf("%v", cellValue)
-		// Can attack opponent's non-fortified, non-base cells
+		// Can attack opponent's non-fortified, non-base, non-killed cells
 		if len(cellStr) > 0 && cellStr[0] != byte('0'+playerNum) &&
-		   !strings.Contains(cellStr, "fortified") && !strings.Contains(cellStr, "base") {
+		   !strings.Contains(cellStr, "fortified") && !strings.Contains(cellStr, "base") && cellStr != "killed" {
 			isValidTarget = true
 		}
 	}
