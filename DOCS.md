@@ -41,9 +41,12 @@ Crucially, you can only Grow or Attack from a cell that is "live" — meaning it
 
 Once per game, each player has the ability to place **two neutral fields** on their own, non-fortified cells. This action replaces your entire turn (all three moves).
 
--   **How to use**: Click the "Put Neutrals" button and select two of your own cells.
+-   **How to use**: Click the "Place Neutrals" button and select two of your own cells.
 -   **Effect**: These cells become permanent neutral blocks that no one can enter or attack. This is a strategic defensive move to block an opponent's advance.
 -   **Requirement**: You must have at least two non-fortified cells to use this ability.
+-   **Cancellation**: After clicking "Place Neutrals", the button changes to "Cancel Neutral Placement". Click again to cancel before placing any cells.
+-   **One-time use**: Once you've placed both neutral cells, the button disappears for the rest of the game.
+-   **Multiplayer**: The button only appears during your turn, not during your opponent's turn.
 
 ## Winning the Game
 

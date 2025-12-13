@@ -155,6 +155,9 @@ class MultiplayerClient {
         // Hide resign button
         const resignBtn = document.getElementById('resign-button');
         if (resignBtn) resignBtn.style.display = 'none';
+        
+        const neutralBtn = document.getElementById('put-neutrals-button');
+        if (neutralBtn) neutralBtn.style.display = 'none';
 
         if (this.isMultiplayerGame) {
             // Multiplayer mode (3-4 players) - show leave game button
@@ -242,6 +245,14 @@ class MultiplayerClient {
         for (const cell of msg.cells) {
             board[cell.row][cell.col] = 'killed';
         }
+        
+        // Track that the opponent used their neutrals
+        if (msg.player === 1) {
+            player1NeutralsUsed = true;
+        } else if (msg.player === 2) {
+            player2NeutralsUsed = true;
+        }
+        
         renderBoard();
     }
 
@@ -396,6 +407,11 @@ class MultiplayerClient {
         // Hide resign button
         const resignBtn = document.getElementById('resign-button');
         if (resignBtn) resignBtn.style.display = 'none';
+        
+        // Hide neutral button
+        const neutralBtn = document.getElementById('put-neutrals-button');
+        if (neutralBtn) neutralBtn.style.display = 'none';
+        
         // Show rematch button
         this.showRematchButton();
     }
@@ -433,6 +449,20 @@ class MultiplayerClient {
         // Show resign button
         const resignBtn = document.getElementById('resign-button');
         if (resignBtn) resignBtn.style.display = 'inline-block';
+
+        // Show neutral button (only if it's current player's turn, has enough cells, and hasn't started using neutrals)
+        const neutralBtn = document.getElementById('put-neutrals-button');
+        if (neutralBtn) {
+            // Check if it's current player's turn, has at least 2 non-fortified cells, and hasn't started using neutrals
+            const isCurrentPlayersTurn = currentPlayer === this.yourPlayer;
+            const playerCells = countNonFortifiedCells(this.yourPlayer);
+            const neutralsStarted = this.yourPlayer === 1 ? player1NeutralsStarted : player2NeutralsStarted;
+            if (isCurrentPlayersTurn && playerCells >= 2 && !neutralsStarted) {
+                neutralBtn.style.display = 'inline-block';
+            } else {
+                neutralBtn.style.display = 'none';
+            }
+        }
 
         // Start move timer
         this.resetMoveTimer();
@@ -498,6 +528,10 @@ class MultiplayerClient {
         const leaveGameBtn = document.getElementById('leave-game-button');
 
         if (resignBtn) resignBtn.style.display = 'none';
+        
+        const neutralBtn = document.getElementById('put-neutrals-button');
+        if (neutralBtn) neutralBtn.style.display = 'none';
+        
         if (leaveGameBtn) leaveGameBtn.style.display = 'inline-block';
     }
 
@@ -521,6 +555,10 @@ class MultiplayerClient {
         const playersInfo = document.getElementById('players-info');
 
         if (resignBtn) resignBtn.style.display = 'none';
+        
+        const neutralBtn = document.getElementById('put-neutrals-button');
+        if (neutralBtn) neutralBtn.style.display = 'none';
+        
         if (leaveGameBtn) leaveGameBtn.style.display = 'none';
         if (playersInfo) playersInfo.remove();
 
@@ -767,6 +805,8 @@ function initGameMultiplayer(rowsVal, colsVal) {
     gameOver = false;
     player1NeutralsUsed = false;
     player2NeutralsUsed = false;
+    player1NeutralsStarted = false;
+    player2NeutralsStarted = false;
     neutralMode = false;
     neutralsPlaced = 0;
 

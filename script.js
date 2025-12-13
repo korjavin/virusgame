@@ -4,6 +4,8 @@ let player1NeutralsUsed = false;
 let player2NeutralsUsed = false;
 let neutralMode = false;
 let neutralsPlaced = 0;
+let player1NeutralsStarted = false;
+let player2NeutralsStarted = false;
 // Multiplayer mode variables
 let playerBases = []; // Array of {row, col} for each player
 
@@ -203,11 +205,35 @@ function endTurn() {
     }
 
     if (putNeutralsButton) {
-        if (currentPlayer === 1) {
-            putNeutralsButton.disabled = player1NeutralsUsed || countNonFortifiedCells(1) < 2;
-        } else {
-            putNeutralsButton.disabled = player2NeutralsUsed || countNonFortifiedCells(2) < 2;
+        // Only show button for current player's turn
+        // In multiplayer mode, only show for your turn; in local mode, show for both players
+        const isMultiplayer = typeof mpClient !== 'undefined' && mpClient.multiplayerMode;
+        const yourPlayer = isMultiplayer ? mpClient.yourPlayer : null;
+
+        // Reset button text if it's not the current player's turn (e.g., opponent's turn)
+        if (isMultiplayer && currentPlayer !== yourPlayer && neutralMode) {
+            neutralMode = false;
+            neutralsPlaced = 0;
+            if (window.neutralCells) window.neutralCells = [];
+            putNeutralsButton.textContent = 'Place Neutrals';
         }
+
+        // Determine if we should show the button
+        let shouldShowButton = false;
+
+        if (currentPlayer === 1) {
+            // Check if it's this player's turn (local mode or multiplayer where you're player 1)
+            const isYourTurn = !isMultiplayer || yourPlayer === 1;
+            // Hide button if not your turn, player used neutrals, started using neutrals, or doesn't have enough cells
+            shouldShowButton = isYourTurn && !player1NeutralsUsed && !player1NeutralsStarted && countNonFortifiedCells(1) >= 2;
+        } else if (currentPlayer === 2) {
+            // Check if it's this player's turn (local mode or multiplayer where you're player 2)
+            const isYourTurn = !isMultiplayer || yourPlayer === 2;
+            // Hide button if not your turn, player used neutrals, started using neutrals, or doesn't have enough cells
+            shouldShowButton = isYourTurn && !player2NeutralsUsed && !player2NeutralsStarted && countNonFortifiedCells(2) >= 2;
+        }
+
+        putNeutralsButton.style.display = shouldShowButton ? 'inline-block' : 'none';
     }
 
     // In local mode, check for no moves condition
@@ -290,14 +316,36 @@ function handleCellClick(event) {
 
             renderBoard();
             updateStatus();
+            
+            // Mark that player started using neutrals (hide button for rest of game)
+            if (neutralsPlaced === 1) {
+                if (currentPlayer === 1) {
+                    player1NeutralsStarted = true;
+                } else {
+                    player2NeutralsStarted = true;
+                }
+                if (putNeutralsButton) {
+                    putNeutralsButton.style.display = 'none';
+                }
+            }
+            
             if (neutralsPlaced === 2) {
                 if (currentPlayer === 1) {
                     player1NeutralsUsed = true;
                 } else {
                     player2NeutralsUsed = true;
                 }
+                // Ensure button stays hidden after completion
+                if (putNeutralsButton) {
+                    putNeutralsButton.style.display = 'none';
+                }
                 neutralMode = false;
                 neutralsPlaced = 0;
+
+                // Hide the neutral button after use (one-time ability)
+                if (putNeutralsButton) {
+                    putNeutralsButton.style.display = 'none';
+                }
 
                 // Send neutrals to server in multiplayer
                 if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
@@ -479,9 +527,10 @@ document.addEventListener('DOMContentLoaded', () => {
         gameOver = false;
         player1NeutralsUsed = false;
         player2NeutralsUsed = false;
+        player1NeutralsStarted = false;
+        player2NeutralsStarted = false;
         neutralMode = false;
         neutralsPlaced = 0;
-        if (putNeutralsButton) putNeutralsButton.disabled = false;
 
         player1Base = { row: 0, col: 0 };
         player2Base = { row: rows - 1, col: cols - 1 };
@@ -492,13 +541,18 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBoard();
         updateStatus();
 
-        if (putNeutralsButton && countNonFortifiedCells(1) < 2) {
-            putNeutralsButton.disabled = true;
-        }
-
         // Show resign button for local games
         if (resignButton) {
             resignButton.style.display = 'inline-block';
+        }
+        
+        // Show neutral button for local games (only if player has enough cells)
+        if (putNeutralsButton) {
+            if (countNonFortifiedCells(1) >= 2) {
+                putNeutralsButton.style.display = 'inline-block';
+            } else {
+                putNeutralsButton.style.display = 'none';
+            }
         }
     }
 
@@ -508,12 +562,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (putNeutralsButton) {
         putNeutralsButton.addEventListener('click', () => {
+            // If already in neutral mode, clicking again cancels it (only if no cells placed yet)
+            if (neutralMode && neutralsPlaced === 0) {
+                // Reset neutral placement state
+                neutralMode = false;
+                if (window.neutralCells) window.neutralCells = [];
+                if (putNeutralsButton) {
+                    putNeutralsButton.textContent = 'Place Neutrals';
+                }
+                updateStatus();
+                return;
+            }
+            
+            // Otherwise, start neutral placement if conditions are met
             if (currentPlayer === 1 && !player1NeutralsUsed && countNonFortifiedCells(1) >= 2) {
                 neutralMode = true;
+                if (putNeutralsButton) {
+                    putNeutralsButton.textContent = 'Cancel Neutral Placement';
+                }
                 updateStatus();
             } else if (currentPlayer === 2 && !player2NeutralsUsed && countNonFortifiedCells(2) >= 2) {
                 neutralMode = true;
+                if (putNeutralsButton) {
+                    putNeutralsButton.textContent = 'Cancel Neutral Placement';
+                }
                 updateStatus();
+            } else {
+                console.log('Neutral placement conditions not met. Player:', currentPlayer, 'Used:', currentPlayer === 1 ? player1NeutralsUsed : player2NeutralsUsed, 'Cells:', countNonFortifiedCells(currentPlayer));
             }
         });
     }
