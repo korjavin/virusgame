@@ -89,9 +89,9 @@ Define a JSON structure for the `pgn_content` to make it easily parsable by anal
 ]
 ```
 
-### Phase 4: API for Retrieval (Optional for now)
-*   Endpoint to list past games: `GET /api/games`
-*   Endpoint to get specific game PGN: `GET /api/games/{id}`
+### Phase 4: Docker Configuration
+*   Update `docker-compose.yml` to ensure `games.db` persists.
+*   Mount a volume for the backend database: `./backend/games.db:/app/backend/games.db` (or a dedicated data volume).
 
 ## Success Criteria
 *   Every completed multiplayer game is saved to `backend/games.db`.
