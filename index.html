@@ -134,7 +134,6 @@
                 <div id="game-controls">
                     <button id="resign-button" style="display: none;">Resign</button>
                     <button id="leave-game-button" style="display: none;">Leave Game</button>
-                    <button id="rematch-button">Request Rematch</button>
                     <button id="put-neutrals-button" style="display: none;">Place Neutrals</button>
                 </div>
             </div>
@@ -188,7 +187,6 @@
                     <li><strong>Challenge:</strong> Click "Challenge" next to an online player's name</li>
                     <li><strong>Accept:</strong> When challenged, a notification will appear - click "Accept" to start</li>
                     <li><strong>Your turn:</strong> The status will glow green when it's your turn</li>
-                    <li><strong>Rematch:</strong> After the game ends, click "Request Rematch" to play again</li>
                 </ul>
             </div>
 
@@ -284,11 +282,6 @@
             mpClient.connect();
             // Initialize lobby manager
             lobbyManager = new LobbyManager(mpClient);
-        });
-
-        // Handle rematch button
-        document.getElementById('rematch-button').addEventListener('click', () => {
-            mpClient.requestRematch();
         });
     </script>
 </body>

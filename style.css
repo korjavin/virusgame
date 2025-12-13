@@ -352,11 +352,6 @@ body.dark-theme .challenge-notification {
     background-color: #c0392b;
 }
 
-#rematch-button {
-    display: none;
-    margin-top: 10px;
-}
-
 #lobby, #game-container {
     width: 100%;
 }

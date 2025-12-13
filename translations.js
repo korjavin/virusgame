@@ -62,9 +62,6 @@ const i18n = {
             // AI progress
             aiThinking: 'AI thinking: {progress}',
 
-            // Rematch
-            requestRematch: 'Request Rematch',
-
             // Footer
             commit: 'Commit:',
             multiplayerVersion: 'Multiplayer v1.6',
@@ -108,8 +105,6 @@ const i18n = {
             multiplayerAcceptText: 'When challenged, a notification will appear - click "Accept" to start',
             multiplayerYourTurn: 'Your turn:',
             multiplayerYourTurnText: 'The status will glow green when it\'s your turn',
-            multiplayerRematch: 'Rematch:',
-            multiplayerRematchText: 'After the game ends, click "Request Rematch" to play again',
             startTutorial: '📚 Start Interactive Tutorial',
             close: 'Close',
 
@@ -210,9 +205,6 @@ const i18n = {
             // AI progress
             aiThinking: 'KI denkt nach: {progress}',
 
-            // Rematch
-            requestRematch: 'Revanche anfordern',
-
             // Footer
             commit: 'Commit:',
             multiplayerVersion: 'Multiplayer v1.6',
@@ -256,8 +248,6 @@ const i18n = {
             multiplayerAcceptText: 'Wenn du herausgefordert wirst, erscheint eine Benachrichtigung - klicke auf "Akzeptieren" um zu starten',
             multiplayerYourTurn: 'Dein Zug:',
             multiplayerYourTurnText: 'Der Status leuchtet grün, wenn du an der Reihe bist',
-            multiplayerRematch: 'Revanche:',
-            multiplayerRematchText: 'Wenn das Spiel endet, klicke auf "Revanche anfordern" um erneut zu spielen',
             startTutorial: '📚 Interaktives Tutorial starten',
             close: 'Schließen',
 
@@ -374,9 +364,6 @@ const i18n = {
         const newGameBtn = document.getElementById('new-game-button');
         if (newGameBtn) newGameBtn.textContent = this.t('newLocalGame');
 
-        const rematchBtn = document.getElementById('rematch-button');
-        if (rematchBtn) rematchBtn.textContent = this.t('requestRematch');
-
         const resetCoeffsBtn = document.getElementById('reset-coeffs-button');
         if (resetCoeffsBtn) resetCoeffsBtn.textContent = this.t('resetToDefaults');
 
@@ -471,7 +458,6 @@ const i18n = {
                     <li><strong>${this.t('multiplayerChallenge')}</strong> ${this.t('multiplayerChallengeText')}</li>
                     <li><strong>${this.t('multiplayerAccept')}</strong> ${this.t('multiplayerAcceptText')}</li>
                     <li><strong>${this.t('multiplayerYourTurn')}</strong> ${this.t('multiplayerYourTurnText')}</li>
-                    <li><strong>${this.t('multiplayerRematch')}</strong> ${this.t('multiplayerRematchText')}</li>
                 </ul>
             </div>
 
