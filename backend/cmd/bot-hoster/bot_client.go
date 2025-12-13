@@ -555,8 +555,9 @@ func (b *Bot) calculateAndSendMove(gameID string) {
 	row, col, ok := aiEngine.CalculateMove(state, player)
 
 	if !ok {
-		log.Printf("[Bot %s] No valid moves available!", b.Username)
-		// TODO: Could send resign message here
+		log.Printf("[Bot %s] No valid moves available! Waiting for server to handle elimination.", b.Username)
+		// Don't send anything - server will detect no valid moves and eliminate this player
+		// The server checks canMakeAnyMove() after each move in handleMove()
 		return
 	}
 
