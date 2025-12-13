@@ -57,7 +57,7 @@ For each game, the following information must be stored:
         player2_name TEXT,
         player3_name TEXT,
         player4_name TEXT,
-        result TEXT, -- e.g., "1-0", "0-1", "1/2-1/2"
+        result INTEGER, -- Winner Player ID (1-4), or 0 for a draw
         termination TEXT, -- "checkmate", "resign", "timeout"
         pgn_content TEXT -- JSON or standard string format of moves
     );
