@@ -32,14 +32,14 @@
    - But uses exact match `===` for "killed"
    - Inconsistent approach creates confusion
 
-2. **Backend (hub.go, bot.go)**
+2. **Backend (bot-hoster/ai_engine.go)**
    ```go
-   if strings.Contains(cellStr, "fortified") ||
-      strings.Contains(cellStr, "base") ||
+   if strings.HasSuffix(cellStr, "-fortified") ||
+      strings.HasSuffix(cellStr, "-base") ||
       cellStr == "killed"
    ```
-   - Same inconsistency: `Contains()` for some, exact match for others
-   - String operations on every move validation call
+   - Uses `HasSuffix()` for compound values, exact match for "killed"
+   - String operations on every move validation call in AI engine
 
 ## Root Cause Analysis
 
@@ -345,11 +345,11 @@ Frontend (JavaScript):
 - [ ] Test all game modes (local, AI, 1v1, lobby)
 
 Backend (Go):
-- [ ] Add constants to appropriate package
-- [ ] Update `isValidMove()` in hub.go
-- [ ] Update `isValidMoveOnBoard()` in bot.go
-- [ ] Ensure consistent string handling
-- [ ] Test with bot games
+- [ ] Add constants to types.go (shared between backend and bot-hoster)
+- [ ] Update `isValidMove()` in hub.go (main backend)
+- [ ] Update `isValidMove()` in bot-hoster/ai_engine.go (bot AI)
+- [ ] Ensure consistent string handling across both services
+- [ ] Test with bot games (requires bot-hoster service running)
 
 Testing:
 - [ ] Test neutral cells cannot be attacked
@@ -360,10 +360,17 @@ Testing:
 
 ## Files to Modify
 
+### Frontend
 1. `/Users/iv/Projects/virusgame/script.js` - Add constants, update isValidMove()
 2. `/Users/iv/Projects/virusgame/ai.js` - Update isValidMoveOnBoard()
-3. `/Users/iv/Projects/virusgame/backend/hub.go` - Add constants, update isValidMove()
-4. `/Users/iv/Projects/virusgame/backend/bot.go` - Update isValidMoveOnBoard()
+
+### Backend (Main Server)
+3. `/Users/iv/Projects/virusgame/backend/types.go` - Add shared constants
+4. `/Users/iv/Projects/virusgame/backend/hub.go` - Update isValidMove() to use constants
+
+### Bot-Hoster Service (Separate Process)
+5. `/Users/iv/Projects/virusgame/backend/cmd/bot-hoster/ai_engine.go` - Update isValidMove() for bot AI
+6. Consider sharing constants between backend and bot-hoster (import from types.go or create shared package)
 
 ## Expected Performance Gain
 
@@ -375,9 +382,34 @@ In AI minimax with 1000 move evaluations:
 - After: ~3,000 string ops
 - **~75% reduction in string operations**
 
-## Notes
+## Architecture Notes (Updated After Legacy Code Removal)
+
+**IMPORTANT:** The bot logic has been moved to a separate microservice:
+- **Main Backend** (`backend/`) - Game server, no AI logic
+- **Bot-Hoster** (`backend/cmd/bot-hoster/`) - Separate process with AI engine
+- Both services need to be updated to use the same cell constants
+
+**Why This Matters for Task 7:**
+1. Constants must be **shared** between backend and bot-hoster
+   - Option A: Put constants in `backend/types.go` and import in bot-hoster
+   - Option B: Create shared package that both import
+   - Option C: Duplicate constants (NOT RECOMMENDED - will cause bugs)
+
+2. Bot-hoster connects via WebSocket like a normal player
+   - Cell values are serialized to JSON when sent over WebSocket
+   - If we use numeric enums (Option 2), JSON format changes
+   - Frontend must understand the same encoding
+
+3. Performance improvement is NOW EVEN MORE CRITICAL
+   - Bot AI runs in separate process (bot-hoster)
+   - String operations waste CPU cycles in the AI service
+   - Bit-packed enums (Option 2) would make bots calculate moves ~20x faster
+
+## General Notes
 
 - The current code WORKS correctly; this is purely an optimization
 - Prioritize correctness over premature optimization
 - Add benchmark tests to measure actual impact
 - Consider profiling AI performance before/after changes
+- **NEW:** Test both backend and bot-hoster services after changes
+- **NEW:** Ensure WebSocket messages use consistent cell encoding

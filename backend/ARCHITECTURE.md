@@ -12,8 +12,14 @@ backend/
 ├── hub.go       # Central event loop, game logic, message handlers
 ├── client.go    # WebSocket client, read/write pumps
 ├── types.go     # Data structures (Game, User, Lobby, Message, etc.)
-├── bot.go       # AI bot implementation (minimax algorithm)
-└── names.go     # Random username generator
+├── names.go     # Random username generator
+└── cmd/
+    └── bot-hoster/  # Standalone bot service (separate process)
+        ├── main.go        # Bot pool manager
+        ├── bot_client.go  # WebSocket bot clients
+        ├── ai_engine.go   # Minimax AI implementation
+        ├── manager.go     # Bot pool management
+        └── config.go      # Configuration
 ```
 
 ## Core Architecture
@@ -138,33 +144,37 @@ These messages are sent through `handleMessage` for internal coordination:
 
 | Type | Purpose | Sender |
 |------|---------|--------|
-| `bot_move` | Request bot move calculation | Hub (triggers async goroutine) |
-| `bot_move_result` | Apply calculated bot move | Bot goroutine (after minimax) |
 | `move_timeout` | Player ran out of time | Timer callback (via Hub channel) |
 | `cleanup_game` | Delete finished game | Cleanup timer (via Hub channel) |
 
-## Bot Move Architecture
+## Bot Architecture
 
-Bot moves use an async pattern to avoid blocking the Hub's event loop:
+Bots are handled by a separate `bot-hoster` microservice:
 
 ```
-┌─────────────────┐     1. bot_move           ┌─────────────────┐
-│   Hub (main)    │ ─────────────────────────▶│  Goroutine      │
-│   event loop    │   (spawn goroutine)       │                 │
-│                 │                           │  copyBoard()    │
-│  (continues     │                           │  minimax()      │
-│   processing)   │  2. bot_move_result       │  (CPU heavy)    │
-│                 │ ◀─────────────────────────│                 │
-└─────────────────┘     {row, col}            └─────────────────┘
-        │
-        ▼
-   3. Validate & apply move (fast)
+┌─────────────────┐                          ┌─────────────────┐
+│   Bot-Hoster    │    WebSocket (like a     │   Backend Hub   │
+│   Service       │◀──── normal player ─────▶│                 │
+│                 │                          │                 │
+│  ┌───────────┐  │    "your_turn" msg       │  Game state     │
+│  │ Bot Pool  │  │ ◀────────────────────    │  management     │
+│  │ (10 bots) │  │                          │                 │
+│  └───────────┘  │    "move" msg            │                 │
+│       │         │ ─────────────────────▶   │                 │
+│       ▼         │                          │                 │
+│  ┌───────────┐  │                          │                 │
+│  │ AI Engine │  │                          │                 │
+│  │ (minimax) │  │                          │                 │
+│  └───────────┘  │                          │                 │
+└─────────────────┘                          └─────────────────┘
 ```
 
 Key points:
-- `handleBotMoveRequest`: Copies board, spawns goroutine for calculation
-- Goroutine: Runs minimax on board copy (safe, read-only)
-- `handleBotMoveResult`: Validates move is still valid, applies to game state
+- Bot-hoster runs as a **separate process** (can be scaled independently)
+- Each bot connects via WebSocket like a human player
+- Bots receive `"your_turn"` messages and respond with `"move"` messages
+- CPU-intensive AI calculations run in bot-hoster, not in the main backend
+- Bots maintain their own local game state (board copy) for fast move calculation
 
 ## Cleanup Mechanisms
 
@@ -177,14 +187,14 @@ Key points:
 ```
 ┌─────────────┐
 │   Lobby     │  Player creates lobby, others join
-│   Created   │
+│   Created   │  - Humans and bots (from bot-hoster)
 └──────┬──────┘
        │ start_multiplayer_game
        ▼
 ┌─────────────┐
 │   Game      │  Game in progress
 │   Active    │  - Players make moves
-└──────┬──────┘  - Bots make moves (via bot_move message)
+└──────┬──────┘  - Bots make moves (via WebSocket)
        │         - Turn timer runs
        │
        ├─────────────────────────────────────┐
@@ -209,30 +219,33 @@ Key points:
 └─────────────┘
 ```
 
-## Bot AI Architecture
+## Bot AI Architecture (bot-hoster service)
+
+The bot-hoster service implements the AI logic:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Bot Move Request                             │
-│                     (via bot_move message)                          │
+│                    Bot receives "your_turn"                         │
+│                     (from backend via WebSocket)                    │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        makeBotMove()                                │
-│   1. Get valid moves                                                │
-│   2. Score moves with scoreMoveQuick() for ordering                 │
+│                   AIEngine.CalculateMove()                          │
+│   1. Get all valid moves from local board state                     │
+│   2. Score moves with scoreMoveQuick() for move ordering            │
 │   3. Run minimax with alpha-beta pruning                            │
-│   4. Apply best move                                                │
+│   4. Return best move (row, col)                                    │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        Minimax Search                               │
-│   - Depth: 4-5 (configurable via BotSettings)                       │
+│   - Adaptive depth: 1-3 based on move count                         │
 │   - Transposition table for memoization                             │
-│   - Move pruning (top 15-20 moves per node)                         │
+│   - Move pruning (top 10-15 moves per node)                         │
 │   - Alpha-beta cutoffs                                              │
+│   - Defeats opponent detection (high priority)                      │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -240,10 +253,17 @@ Key points:
 │                      Board Evaluation                               │
 │   Weighted sum of:                                                  │
 │   - Material (cells + fortifications)                               │
-│   - Mobility (available moves)                                      │
+│   - Mobility (attack opportunities approximation)                   │
 │   - Position (aggression toward opponent bases)                     │
 │   - Redundancy (cells with multiple connections)                    │
 │   - Cohesion (penalize gaps in territory)                           │
+│   - Defeat bonus (500k points for eliminating opponent)             │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Send "move" to backend                           │
+│                   (via WebSocket, like human)                       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -272,32 +292,28 @@ Key points:
 | `pongWait` | 60s | client.go | WebSocket ping/pong timeout |
 | `pingPeriod` | 54s | client.go | WebSocket ping interval |
 | `maxMessageSize` | 512 | client.go | Max incoming message size |
-| `defaultBotDepth` | 4 | bot.go | Minimax search depth |
 
 ## Debugging
 
 ### Useful Log Patterns
 
 ```bash
-# Bot moves
-grep "Bot player" server.log
+# Backend logs
+grep "endTurn" backend.log          # Turn changes
+grep "eliminated" backend.log        # Player elimination
+grep "Game started\|Game ended\|Cleaned up" backend.log  # Game lifecycle
+grep "disconnected\|Failed to send" backend.log  # Connection issues
 
-# Turn changes
-grep "endTurn" server.log
-
-# Player elimination
-grep "eliminated" server.log
-
-# Game lifecycle
-grep "Game started\|Game ended\|Cleaned up" server.log
-
-# Connection issues
-grep "disconnected\|Failed to send" server.log
+# Bot-hoster logs
+grep "\[AI\]" bot-hoster.log        # AI move calculations
+grep "\[Bot.*\]" bot-hoster.log     # Bot activity
+grep "Pool stats" bot-hoster.log    # Bot pool status
 ```
 
 ### Common Issues
 
 1. **"Moves not shown"** - Check for race conditions, ensure all state changes go through Hub
-2. **High CPU** - Check bot depth, board size, number of concurrent games
-3. **Memory leak** - Check game cleanup, ensure games are deleted after completion
-4. **Disconnections** - Check WebSocket timeouts, network stability
+2. **Bots not moving** - Check if bot-hoster service is running and connected
+3. **High CPU in bot-hoster** - Check bot search depth, board size, number of concurrent games
+4. **Memory leak** - Check game cleanup, ensure games are deleted after completion
+5. **Disconnections** - Check WebSocket timeouts, network stability
