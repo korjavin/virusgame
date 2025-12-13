@@ -4,25 +4,27 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/rand"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
 
 // AIEngine handles bot move calculations
 type AIEngine struct {
-	settings   *BotSettings
-	transTable *TranspositionTable
+	settings        *BotSettings
+	transTable      *TranspositionTable
 	// Time management for iterative deepening
 	searchStartTime time.Time
 	timeLimit       time.Duration
 	searchAborted   bool
+	zobristTable    [100][100][256]uint64
+	zobristTurn     [5]uint64 // To hash whose turn it is
 }
 
 // TranspositionTable caches board evaluations
 type TranspositionTable struct {
-	table map[string]TranspositionEntry
+	table map[uint64]TranspositionEntry
 	mu    sync.RWMutex
 }
 
@@ -82,15 +84,31 @@ func (c CellValue) CanBeAttacked() bool {
 }
 
 func NewAIEngine(settings *BotSettings) *AIEngine {
-	return &AIEngine{
+	ai := &AIEngine{
 		settings:   settings,
 		transTable: NewTranspositionTable(),
+	}
+	ai.initZobrist()
+	return ai
+}
+
+func (ai *AIEngine) initZobrist() {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for row := 0; row < 100; row++ {
+		for col := 0; col < 100; col++ {
+			for k := 0; k < 256; k++ {
+				ai.zobristTable[row][col][k] = r.Uint64()
+			}
+		}
+	}
+	for i := 0; i < 5; i++ {
+		ai.zobristTurn[i] = r.Uint64()
 	}
 }
 
 func NewTranspositionTable() *TranspositionTable {
 	return &TranspositionTable{
-		table: make(map[string]TranspositionEntry),
+		table: make(map[uint64]TranspositionEntry),
 	}
 }
 
@@ -98,6 +116,11 @@ func NewTranspositionTable() *TranspositionTable {
 // Returns (row, col, ok) where ok is false if no valid moves exist
 // Uses iterative deepening with time budget (~670ms per move, 2 seconds per turn)
 func (ai *AIEngine) CalculateMove(state *GameState, player int) (int, int, bool) {
+	// Initialize hash if not present
+	if state.Hash == 0 {
+		state.Hash = ai.computeHash(state.Board, player)
+	}
+
 	// Get all valid moves
 	validMoves := ai.getAllValidMoves(state, player)
 	if len(validMoves) == 0 {
@@ -119,7 +142,7 @@ func (ai *AIEngine) CalculateMove(state *GameState, player int) (int, int, bool)
 	var bestMove Move
 	maxDepth := 1
 
-	for depth := 1; depth <= 10; depth++ {
+	for depth := 1; depth <= 20; depth++ { // Increased max depth limit
 		// Check if we have time for this depth
 		elapsed := time.Since(ai.searchStartTime)
 		if elapsed > ai.timeLimit * 3 / 4 && depth > 1 {
@@ -159,6 +182,7 @@ type GameState struct {
 	Cols        int
 	PlayerBases [4]CellPos
 	Players     []GamePlayerInfo
+	Hash        uint64
 }
 
 type Move struct {
@@ -292,9 +316,9 @@ func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, play
 	})
 
 	// Adaptive move limit: reduce moves considered based on game complexity
-	maxMoves := 15 // Reduced from 20
+	maxMoves := 20 // Increased from 15
 	if len(moves) > 40 {
-		maxMoves = 10 // Even fewer for complex positions
+		maxMoves = 15 // Increased from 10
 	}
 	if len(moves) > maxMoves {
 		moves = moves[:maxMoves]
@@ -312,7 +336,12 @@ func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, play
 		}
 
 		newBoard := ai.copyBoard(state.Board)
-		ai.applyMoveToBoard(newBoard, move.Row, move.Col, player)
+		newHash := ai.applyMoveToBoard(newBoard, move.Row, move.Col, player, state.Hash)
+
+		// Update turn hash: remove current player, add next player
+		if player >= 1 && player <= 4 {
+			newHash ^= ai.zobristTurn[player-1]
+		}
 
 		newState := &GameState{
 			Board:       newBoard,
@@ -320,7 +349,15 @@ func (ai *AIEngine) findBestMoveWithMinimax(state *GameState, moves []Move, play
 			Cols:        state.Cols,
 			PlayerBases: state.PlayerBases,
 			Players:     state.Players,
+			Hash:        0, // Set momentarily
 		}
+
+		// Determine next player to correctly update hash
+		nextPlayer := ai.getNextOpponent(newState, player)
+		if nextPlayer >= 1 && nextPlayer <= 4 {
+			newHash ^= ai.zobristTurn[nextPlayer-1]
+		}
+		newState.Hash = newHash
 
 		result := ai.minimax(newState, depth-1, alpha, beta, false, player)
 
@@ -352,8 +389,7 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 	}
 
 	// Check transposition table
-	boardHash := ai.hashBoard(state.Board, aiPlayer)
-	if entry, exists := ai.transTable.Get(boardHash); exists && entry.Depth >= depth {
+	if entry, exists := ai.transTable.Get(state.Hash); exists && entry.Depth >= depth {
 		if entry.Flag == exactScore {
 			return MinimaxResult{Score: entry.Score, Move: nil}
 		} else if entry.Flag == lowerBound {
@@ -369,7 +405,7 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 	// Base case: reached max depth
 	if depth == 0 {
 		score := ai.evaluateBoard(state, aiPlayer)
-		ai.transTable.Put(boardHash, TranspositionEntry{
+		ai.transTable.Put(state.Hash, TranspositionEntry{
 			Score: score,
 			Depth: depth,
 			Flag:  exactScore,
@@ -393,7 +429,7 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 		} else {
 			score += 10000
 		}
-		ai.transTable.Put(boardHash, TranspositionEntry{
+		ai.transTable.Put(state.Hash, TranspositionEntry{
 			Score: score,
 			Depth: depth,
 			Flag:  exactScore,
@@ -416,12 +452,12 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 	}
 
 	// Limit number of moves to consider at deeper levels for speed
-	maxMoves := 12 // Reduced from 15
+	maxMoves := 16 // Increased from 12
 	if depth <= 2 {
-		maxMoves = 8 // Reduced from 10
+		maxMoves = 12 // Increased from 8
 	}
 	if depth == 1 {
-		maxMoves = 6 // Very aggressive pruning at deepest level
+		maxMoves = 10 // Increased from 6
 	}
 	if len(possibleMoves) > maxMoves {
 		possibleMoves = possibleMoves[:maxMoves]
@@ -436,7 +472,12 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 		for _, move := range possibleMoves {
 			// Try this move
 			newBoard := ai.copyBoard(state.Board)
-			ai.applyMoveToBoard(newBoard, move.Row, move.Col, player)
+			newHash := ai.applyMoveToBoard(newBoard, move.Row, move.Col, player, state.Hash)
+
+			// Update turn hash: remove current player, add next player
+			if player >= 1 && player <= 4 {
+				newHash ^= ai.zobristTurn[player-1]
+			}
 
 			newState := &GameState{
 				Board:       newBoard,
@@ -444,7 +485,15 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 				Cols:        state.Cols,
 				PlayerBases: state.PlayerBases,
 				Players:     state.Players,
+				Hash:        0,
 			}
+
+			// Next is opponent (minimizing)
+			nextPlayer := ai.getNextOpponent(newState, aiPlayer)
+			if nextPlayer >= 1 && nextPlayer <= 4 {
+				newHash ^= ai.zobristTurn[nextPlayer-1]
+			}
+			newState.Hash = newHash
 
 			// Recursively evaluate
 			result := ai.minimax(newState, depth-1, alpha, beta, false, aiPlayer)
@@ -467,7 +516,7 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 		} else if maxScore >= beta {
 			flag = lowerBound
 		}
-		ai.transTable.Put(boardHash, TranspositionEntry{
+		ai.transTable.Put(state.Hash, TranspositionEntry{
 			Score: maxScore,
 			Depth: depth,
 			Flag:  flag,
@@ -483,7 +532,17 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 		for _, move := range possibleMoves {
 			// Try this move
 			newBoard := ai.copyBoard(state.Board)
-			ai.applyMoveToBoard(newBoard, move.Row, move.Col, player)
+			newHash := ai.applyMoveToBoard(newBoard, move.Row, move.Col, player, state.Hash)
+
+			// Update turn hash: remove current player
+			if player >= 1 && player <= 4 {
+				newHash ^= ai.zobristTurn[player-1]
+			}
+
+			// Next is AI (maximizing)
+			if aiPlayer >= 1 && aiPlayer <= 4 {
+				newHash ^= ai.zobristTurn[aiPlayer-1]
+			}
 
 			newState := &GameState{
 				Board:       newBoard,
@@ -491,6 +550,7 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 				Cols:        state.Cols,
 				PlayerBases: state.PlayerBases,
 				Players:     state.Players,
+				Hash:        newHash,
 			}
 
 			// Recursively evaluate
@@ -514,7 +574,7 @@ func (ai *AIEngine) minimax(state *GameState, depth int, alpha, beta float64, is
 		} else if minScore >= beta {
 			flag = upperBound
 		}
-		ai.transTable.Put(boardHash, TranspositionEntry{
+		ai.transTable.Put(state.Hash, TranspositionEntry{
 			Score: minScore,
 			Depth: depth,
 			Flag:  flag,
@@ -564,9 +624,12 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 	opponentRedundantCells := 0
 	aiCohesionPenalty := 0 // Gaps in territory
 	opponentCohesionPenalty := 0
+	baseDanger := 0.0
+	vulnerableOpponentBonus := 0.0
 
 	// Get opponent bases for aggression calculation
 	opponentBases := ai.getOpponentBases(state, aiPlayer)
+	aiBase := state.PlayerBases[aiPlayer-1]
 
 	for r := 0; r < state.Rows; r++ {
 		for c := 0; c < state.Cols; c++ {
@@ -611,6 +674,13 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 						opponentFortified++
 					}
 
+					// Base Danger: check distance of opponent cell to our base
+					distToBase := abs(r-aiBase.Row) + abs(c-aiBase.Col)
+					if distToBase < 4 {
+						// Extremely high penalty for opponents near base
+						baseDanger += float64((4 - distToBase) * 500)
+					}
+
 					// Count AI neighbors (cells AI can attack)
 					aiNeighborCount := ai.countPlayerNeighborsOnBoard(state.Board, r, c, aiPlayer, state.Rows, state.Cols)
 					if aiNeighborCount > 0 {
@@ -621,7 +691,6 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 					opponentPlayer := cell.Player()
 					if opponentPlayer > 0 {
 						// Distance to AI base
-						aiBase := state.PlayerBases[aiPlayer-1]
 						dist := abs(r-aiBase.Row) + abs(c-aiBase.Col)
 						opponentAggression += float64(state.Rows + state.Cols - dist)
 
@@ -677,12 +746,38 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 	// 5. Cohesion Score (penalize gaps/holes)
 	cohesionScore := float64(opponentCohesionPenalty - aiCohesionPenalty)
 
+	// 6. Base Safety Score (Survival)
+	baseSafetyScore := -baseDanger
+
+	// 7. Vulnerable Opponent Score (Aggression)
+	// Check for vulnerable opponents (low piece count)
+	for p := 1; p <= 4; p++ {
+		if p != aiPlayer {
+			isActive := false
+			for _, pl := range state.Players {
+				if pl.PlayerIndex+1 == p && pl.IsActive {
+					isActive = true
+					break
+				}
+			}
+			if isActive {
+				pieceCount := ai.countPlayerPieces(state, p)
+				if pieceCount > 0 && pieceCount <= 5 {
+					// Bonus increases as piece count decreases
+					vulnerableOpponentBonus += float64((6 - pieceCount) * 1000)
+				}
+			}
+		}
+	}
+
 	// Combine scores with weights from bot settings
 	totalScore := materialScore*ai.settings.MaterialWeight +
 		mobilityScore*ai.settings.MobilityWeight +
 		positionScore*ai.settings.PositionWeight +
 		redundancyScore*ai.settings.RedundancyWeight +
-		cohesionScore*ai.settings.CohesionWeight
+		cohesionScore*ai.settings.CohesionWeight +
+		baseSafetyScore + // Add direct penalty
+		vulnerableOpponentBonus // Add direct bonus
 
 	return totalScore
 }
@@ -725,6 +820,14 @@ func (ai *AIEngine) scoreMoveQuick(state *GameState, move Move, player int) floa
 				if distToTheirBase <= 3 {
 					score += 500.0 // Big bonus for attacking near their base
 				}
+
+				// Aggression Bonus: Future Kill Potential
+				// If opponent has very few pieces left (e.g., < 3), prioritize attacking them
+				opponentPieceCount := ai.countPlayerPieces(state, p)
+				if opponentPieceCount <= 3 {
+					score += 2000.0 // Huge incentive to finish off weak opponents
+				}
+
 				break
 			}
 		}
@@ -806,40 +909,58 @@ func (ai *AIEngine) copyBoard(board [][]CellValue) [][]CellValue {
 	return newBoard
 }
 
-func (ai *AIEngine) applyMoveToBoard(board [][]CellValue, row, col, player int) {
-	cell := board[row][col]
-	if cell == 0 {
+// applyMoveToBoard updates the board and returns the new Zobrist hash
+// Uses incremental update: XOR out old value, XOR in new value
+func (ai *AIEngine) applyMoveToBoard(board [][]CellValue, row, col, player int, currentHash uint64) uint64 {
+	// XOR out the old value
+	oldCell := board[row][col]
+	// Use 100 as safe max dimension if board is smaller, but here we access table by [row][col]
+	if row < 100 && col < 100 {
+		currentHash ^= ai.zobristTable[row][col][oldCell]
+	}
+
+	if oldCell == 0 {
 		board[row][col] = NewCell(player, CellFlagNormal)
 	} else {
 		board[row][col] = NewCell(player, CellFlagFortified)
 	}
+
+	// XOR in the new value
+	newCell := board[row][col]
+	if row < 100 && col < 100 {
+		currentHash ^= ai.zobristTable[row][col][newCell]
+	}
+
+	return currentHash
 }
 
-func (ai *AIEngine) hashBoard(board [][]CellValue, player int) string {
-	var key strings.Builder
-	key.WriteString(fmt.Sprintf("P%d:", player))
+// computeHash computes the full Zobrist hash of a board from scratch
+func (ai *AIEngine) computeHash(board [][]CellValue, player int) uint64 {
+	var h uint64
 	for r := range board {
 		for c := range board[r] {
-			if board[r][c] == 0 {
-				key.WriteString("_")
-			} else {
-				key.WriteString(fmt.Sprintf("%d", board[r][c]))
+			val := board[r][c]
+			if r < 100 && c < 100 {
+				h ^= ai.zobristTable[r][c][val]
 			}
-			key.WriteString(",")
 		}
 	}
-	return key.String()
+	// Also hash the player whose turn it is
+	if player > 0 && player <= 4 {
+		h ^= ai.zobristTurn[player-1]
+	}
+	return h
 }
 
 // TranspositionTable methods
-func (tt *TranspositionTable) Get(key string) (TranspositionEntry, bool) {
+func (tt *TranspositionTable) Get(key uint64) (TranspositionEntry, bool) {
 	tt.mu.RLock()
 	defer tt.mu.RUnlock()
 	entry, exists := tt.table[key]
 	return entry, exists
 }
 
-func (tt *TranspositionTable) Put(key string, entry TranspositionEntry) {
+func (tt *TranspositionTable) Put(key uint64, entry TranspositionEntry) {
 	tt.mu.Lock()
 	defer tt.mu.Unlock()
 	tt.table[key] = entry
