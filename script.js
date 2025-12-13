@@ -480,90 +480,13 @@ document.addEventListener('DOMContentLoaded', () => {
     rowsInput = document.getElementById('rows-input');
     colsInput = document.getElementById('cols-input');
     aiEnabledCheckbox = document.getElementById('ai-enabled');
-    aiDepthInput = document.getElementById('ai-depth-input');
-    aiDepthSetting = document.getElementById('ai-depth-setting');
-    aiTimeInput = document.getElementById('ai-time-input');
-    aiTimeSetting = document.getElementById('ai-time-setting');
     putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
     resignButton = document.getElementById('resign-button');
-
-    // Show/hide AI depth setting and tuning based on AI checkbox
-    aiEnabledCheckbox.addEventListener('change', () => {
-        if (aiEnabledCheckbox.checked) {
-            aiDepthSetting.style.display = 'block';
-            aiTimeSetting.style.display = 'block';
-            document.getElementById('ai-tuning-section').style.display = 'block';
-        } else {
-            aiDepthSetting.style.display = 'none';
-            aiTimeSetting.style.display = 'none';
-            document.getElementById('ai-tuning-section').style.display = 'none';
-        }
-    });
-
-    // Update aiDepth variable when user changes the input
-    aiDepthInput.addEventListener('change', () => {
-        aiDepth = parseInt(aiDepthInput.value);
-    });
-
-    // Update aiTimeLimit variable when user changes the input
-    aiTimeInput.addEventListener('change', () => {
-        aiTimeLimit = parseInt(aiTimeInput.value);
-    });
-
-    // AI Tuning collapsible header
-    document.getElementById('ai-tuning-header').addEventListener('click', () => {
-        const controls = document.getElementById('ai-tuning-controls');
-        const header = document.getElementById('ai-tuning-header');
-        if (controls.style.display === 'none') {
-            controls.style.display = 'block';
-            header.innerHTML = '⚙️ AI Strategy Weights <span style="float: right;">▲</span>';
-        } else {
-            controls.style.display = 'none';
-            header.innerHTML = '⚙️ AI Strategy Weights <span style="float: right;">▼</span>';
-        }
-    });
-
-    // Wire up coefficient inputs (optimized to 5 parameters)
-    document.getElementById('coeff-material').addEventListener('input', (e) => {
-        aiCoeffs.materialWeight = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-mobility').addEventListener('input', (e) => {
-        aiCoeffs.mobilityWeight = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-position').addEventListener('input', (e) => {
-        aiCoeffs.positionWeight = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-redundancy').addEventListener('input', (e) => {
-        aiCoeffs.redundancyWeight = parseFloat(e.target.value);
-    });
-    document.getElementById('coeff-cohesion').addEventListener('input', (e) => {
-        aiCoeffs.cohesionWeight = parseFloat(e.target.value);
-    });
-
-    // Reset coefficients to defaults
-    document.getElementById('reset-coeffs-button').addEventListener('click', () => {
-        aiCoeffs.materialWeight = 100;
-        aiCoeffs.mobilityWeight = 50;
-        aiCoeffs.positionWeight = 30;
-        aiCoeffs.redundancyWeight = 40;
-        aiCoeffs.cohesionWeight = 25;
-
-        document.getElementById('coeff-material').value = 100;
-        document.getElementById('coeff-mobility').value = 50;
-        document.getElementById('coeff-position').value = 30;
-        document.getElementById('coeff-redundancy').value = 40;
-        document.getElementById('coeff-cohesion').value = 25;
-    });
 
     function initGame() {
         rows = parseInt(rowsInput.value);
         cols = parseInt(colsInput.value);
         aiEnabled = aiEnabledCheckbox.checked;
-
-        // Update AI depth from input
-        if (aiDepthInput) {
-            aiDepth = parseInt(aiDepthInput.value);
-        }
 
         board = Array(rows).fill(null).map(() => Array(cols).fill(null));
 
