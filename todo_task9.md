@@ -28,7 +28,7 @@ For each game, the following information must be stored:
     *   For each move:
         *   **Sequence Number**: Turn number.
         *   **Player**: Who made the move.
-        *   **Action Type**: Place, Attack.
+        *   **Action Type**: Place, Attack, Put Neutral.
         *   **Coordinates**: Row, Column.
         **Duration**: Time taken for the move in centiseconds (1/100th of a second).
         *   **Time Control info**: Time remaining (if applicable).
