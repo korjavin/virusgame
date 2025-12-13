@@ -12,11 +12,14 @@ let player1NeutralsStarted = false;
 let player2NeutralsStarted = false;
 // Multiplayer mode variables
 let playerBases = []; // Array of {row, col} for each player
-
 // Connection Tree Visualization
 let connectionTreeEnabled = false;
 let connectionCanvas;
 let connectionCtx;
+
+// Connection Tree Styles
+const connectionStyles = ['pen', 'liana', 'japan', 'circuit', 'neon', 'minimal'];
+let playerStyles = ['pen', 'pen', 'pen', 'pen']; // Default to pen, will be randomized in initGame
 
 function isConnectedToBase(startRow, startCol, player) {
     let base;
@@ -584,6 +587,18 @@ document.addEventListener('DOMContentLoaded', () => {
         board[player1Base.row][player1Base.col] = '1-base';
         board[player2Base.row][player2Base.col] = '2-base';
 
+        // Assign random connection styles to players
+        // Shuffle connectionStyles
+        const shuffledStyles = [...connectionStyles].sort(() => 0.5 - Math.random());
+        playerStyles = [];
+        for (let i = 0; i < 4; i++) {
+            // Assign a unique style to each of the 4 potential players
+            // If we have fewer styles than players (unlikely), wrap around
+            playerStyles.push(shuffledStyles[i % shuffledStyles.length]);
+        }
+        console.log('Assigned connection styles:', playerStyles);
+
+
         renderBoard();
         updateStatus();
 
@@ -778,46 +793,227 @@ function updateAllConnectionTrees() {
     }
 }
 
+// Pseudo-random number generator for stable visual randomness
+function getSeededRandom(x, y) {
+    const seed = x * 374761393 + y * 668265263;
+    const m = 2147483647;
+    return ((seed ^ 0xDEADBEEF) % m) / m;
+}
+
 function drawConnectionTree(player, tree) {
     if (!connectionCtx) return;
 
     const cellSize = calculateCellSize();
-    const halfCell = cellSize / 2;
+
+    // Determine style for this player
+    // Fallback to 'pen' if something goes wrong
+    const style = playerStyles[player - 1] || 'pen';
 
     connectionCtx.save();
 
-    // Set style based on player
-    let color;
+    // Set base color based on player
+    let colorStr;
     switch(player) {
-        case 1: color = 'rgba(0, 0, 255, 0.5)'; break; // Blue
-        case 2: color = 'rgba(255, 0, 0, 0.5)'; break;  // Red
-        case 3: color = 'rgba(46, 204, 113, 0.5)'; break; // Green
-        case 4: color = 'rgba(243, 156, 18, 0.5)'; break; // Orange
-        default: color = 'rgba(0, 0, 0, 0.5)';
+        case 1: colorStr = '0, 0, 255'; break; // Blue
+        case 2: colorStr = '255, 0, 0'; break;  // Red
+        case 3: colorStr = '46, 204, 113'; break; // Green
+        case 4: colorStr = '243, 156, 18'; break; // Orange
+        default: colorStr = '0, 0, 0';
     }
 
-    connectionCtx.strokeStyle = color;
-    connectionCtx.lineWidth = Math.max(2, Math.floor(cellSize / 10)); // Responsive line width
+    // Dispatch to specific drawing function
+    switch (style) {
+        case 'liana':
+            drawStyleLiana(tree, cellSize, colorStr);
+            break;
+        case 'japan':
+            drawStyleJapan(tree, cellSize, colorStr);
+            break;
+        case 'circuit':
+            drawStyleCircuit(tree, cellSize, colorStr);
+            break;
+        case 'neon':
+            drawStyleNeon(tree, cellSize, colorStr);
+            break;
+        case 'minimal':
+            drawStyleMinimal(tree, cellSize, colorStr);
+            break;
+        case 'pen':
+        default:
+            drawStylePen(tree, cellSize, colorStr);
+            break;
+    }
+
+    connectionCtx.restore();
+}
+
+function drawStylePen(tree, cellSize, colorStr) {
+    const halfCell = cellSize / 2;
+    connectionCtx.strokeStyle = `rgba(${colorStr}, 0.5)`;
+    connectionCtx.lineWidth = Math.max(2, Math.floor(cellSize / 10));
     connectionCtx.lineCap = 'round';
     connectionCtx.lineJoin = 'round';
 
     connectionCtx.beginPath();
-
     for (const [key, parent] of tree.entries()) {
-        if (parent === null) continue; // Skip base (no parent)
+        if (parent === null) continue;
+        const [r, c] = key.split(',').map(Number);
 
+        connectionCtx.moveTo(c * cellSize + halfCell, r * cellSize + halfCell);
+        connectionCtx.lineTo(parent.col * cellSize + halfCell, parent.row * cellSize + halfCell);
+    }
+    connectionCtx.stroke();
+}
+
+function drawStyleLiana(tree, cellSize, colorStr) {
+    const halfCell = cellSize / 2;
+    // Slightly more opaque for lianas
+    connectionCtx.strokeStyle = `rgba(${colorStr}, 0.6)`;
+    // Variable width logic could be applied, but simpler to stick to constant for now or slight random
+    connectionCtx.lineWidth = Math.max(3, Math.floor(cellSize / 8));
+    connectionCtx.lineCap = 'round';
+
+    connectionCtx.beginPath();
+    for (const [key, parent] of tree.entries()) {
+        if (parent === null) continue;
         const [r, c] = key.split(',').map(Number);
 
         const startX = c * cellSize + halfCell;
         const startY = r * cellSize + halfCell;
+        const endX = parent.col * cellSize + halfCell;
+        const endY = parent.row * cellSize + halfCell;
 
+        // Calculate a control point for the curve
+        // Use seeded random to make it deterministic (so it doesn't jitter)
+        const rand = getSeededRandom(r * 1000 + c, parent.row * 1000 + parent.col);
+        const midX = (startX + endX) / 2;
+        const midY = (startY + endY) / 2;
+
+        // Offset perpendicular to the line
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+        // Perpendicular vector (-dy, dx)
+        // Offset amount varies
+        const offset = (rand - 0.5) * (cellSize * 0.5);
+
+        const controlX = midX - (dy / dist) * offset;
+        const controlY = midY + (dx / dist) * offset;
+
+        connectionCtx.moveTo(startX, startY);
+        connectionCtx.quadraticCurveTo(controlX, controlY, endX, endY);
+    }
+    connectionCtx.stroke();
+}
+
+function drawStyleJapan(tree, cellSize, colorStr) {
+    const halfCell = cellSize / 2;
+    connectionCtx.strokeStyle = `rgba(${colorStr}, 0.7)`;
+    connectionCtx.lineCap = 'butt'; // Brush stroke feel
+
+    for (const [key, parent] of tree.entries()) {
+        if (parent === null) continue;
+        const [r, c] = key.split(',').map(Number);
+
+        const startX = c * cellSize + halfCell;
+        const startY = r * cellSize + halfCell;
+        const endX = parent.col * cellSize + halfCell;
+        const endY = parent.row * cellSize + halfCell;
+
+        // Draw multiple times with slight offsets and different widths to simulate brush
+        const strokes = 3;
+        for (let i = 0; i < strokes; i++) {
+             connectionCtx.beginPath();
+             const rand = getSeededRandom(r * 1000 + c + i, parent.row * 1000 + parent.col + i);
+             const width = Math.max(1, Math.floor(cellSize / 12)) + (rand * 2);
+             connectionCtx.lineWidth = width;
+
+             // Alpha variation
+             connectionCtx.strokeStyle = `rgba(${colorStr}, ${0.4 + (rand * 0.3)})`;
+
+             // Slight offset
+             const offsetX = (getSeededRandom(r, c + i) - 0.5) * 2;
+             const offsetY = (getSeededRandom(r + i, c) - 0.5) * 2;
+
+             connectionCtx.moveTo(startX + offsetX, startY + offsetY);
+             connectionCtx.lineTo(endX + offsetX, endY + offsetY);
+             connectionCtx.stroke();
+        }
+    }
+}
+
+function drawStyleCircuit(tree, cellSize, colorStr) {
+    const halfCell = cellSize / 2;
+    connectionCtx.strokeStyle = `rgba(${colorStr}, 0.8)`;
+    connectionCtx.lineWidth = Math.max(2, Math.floor(cellSize / 12));
+
+    // Draw lines
+    connectionCtx.beginPath();
+    for (const [key, parent] of tree.entries()) {
+        if (parent === null) continue;
+        const [r, c] = key.split(',').map(Number);
+
+        const startX = c * cellSize + halfCell;
+        const startY = r * cellSize + halfCell;
         const endX = parent.col * cellSize + halfCell;
         const endY = parent.row * cellSize + halfCell;
 
         connectionCtx.moveTo(startX, startY);
         connectionCtx.lineTo(endX, endY);
     }
-
     connectionCtx.stroke();
-    connectionCtx.restore();
+
+    // Draw nodes (circles) at each cell center
+    connectionCtx.fillStyle = `rgba(${colorStr}, 1)`;
+    const nodeRadius = Math.max(2, Math.floor(cellSize / 8));
+    for (const key of tree.keys()) {
+        const [r, c] = key.split(',').map(Number);
+        connectionCtx.beginPath();
+        connectionCtx.arc(c * cellSize + halfCell, r * cellSize + halfCell, nodeRadius, 0, Math.PI * 2);
+        connectionCtx.fill();
+    }
+}
+
+function drawStyleNeon(tree, cellSize, colorStr) {
+    const halfCell = cellSize / 2;
+    connectionCtx.strokeStyle = `rgba(${colorStr}, 1)`; // Bright center
+    connectionCtx.lineWidth = Math.max(2, Math.floor(cellSize / 15));
+    connectionCtx.lineCap = 'round';
+
+    // Add glow
+    connectionCtx.shadowBlur = 10;
+    connectionCtx.shadowColor = `rgb(${colorStr})`;
+
+    connectionCtx.beginPath();
+    for (const [key, parent] of tree.entries()) {
+        if (parent === null) continue;
+        const [r, c] = key.split(',').map(Number);
+
+        connectionCtx.moveTo(c * cellSize + halfCell, r * cellSize + halfCell);
+        connectionCtx.lineTo(parent.col * cellSize + halfCell, parent.row * cellSize + halfCell);
+    }
+    connectionCtx.stroke();
+
+    // Reset shadow
+    connectionCtx.shadowBlur = 0;
+    connectionCtx.shadowColor = 'transparent';
+}
+
+function drawStyleMinimal(tree, cellSize, colorStr) {
+    const halfCell = cellSize / 2;
+    connectionCtx.strokeStyle = `rgba(${colorStr}, 0.6)`;
+    connectionCtx.lineWidth = 1; // Very thin
+    connectionCtx.setLineDash([5, 5]); // Dashed
+
+    connectionCtx.beginPath();
+    for (const [key, parent] of tree.entries()) {
+        if (parent === null) continue;
+        const [r, c] = key.split(',').map(Number);
+
+        connectionCtx.moveTo(c * cellSize + halfCell, r * cellSize + halfCell);
+        connectionCtx.lineTo(parent.col * cellSize + halfCell, parent.row * cellSize + halfCell);
+    }
+    connectionCtx.stroke();
+    connectionCtx.setLineDash([]); // Reset
 }
