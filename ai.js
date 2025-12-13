@@ -23,13 +23,27 @@ let searchStartTime = 0;
 let searchTimeLimit = 0;
 
 // Zobrist hashing for board states
-const PIECE_TYPES = {
-    '1': 0, '2': 1, '1-fortified': 2, '2-fortified': 3,
-    '1-base': 4, '2-base': 5, 'killed': 6
-};
-const NUM_PIECE_TYPES = 7;
+// Mapping cell states to indices for Zobrist hashing
+// 0: Empty
+// 1-4: Player 1-4 Normal
+// 5-8: Player 1-4 Fortified
+// 9-12: Player 1-4 Base
+// 13: Killed
+const NUM_PIECE_TYPES = 14;
 let zobristTable = [];
 let zobristTableInitialized = false;
+
+function getPieceTypeIndex(cell) {
+    if (cell === EMPTY) return 0;
+    if (isKilled(cell)) return 13;
+
+    const p = getPlayer(cell);
+    if (p < 1 || p > 4) return 0; // Should not happen
+
+    if (isBase(cell)) return 8 + p; // 9-12
+    if (isFortified(cell)) return 4 + p; // 5-8
+    return p; // 1-4 (Normal)
+}
 
 function initializeZobristTable() {
     // Only initialize if rows and cols are defined
@@ -190,15 +204,7 @@ function hashBoard(boardState) {
         let hash = '';
         for (let r = 0; r < boardState.length; r++) {
             for (let c = 0; c < boardState[r].length; c++) {
-                const cell = boardState[r][c];
-                if (cell === null) {
-                    hash += '0';
-                } else if (typeof cell === 'number') {
-                    hash += cell.toString();
-                } else {
-                    hash += cell; // string like "1-base"
-                }
-                hash += ',';
+                hash += boardState[r][c].toString() + ',';
             }
         }
         return hash;
@@ -209,12 +215,10 @@ function hashBoard(boardState) {
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const cell = boardState[r][c];
-            if (cell !== null) {
-                const pieceType = PIECE_TYPES[cell];
-                if (pieceType !== undefined && zobristTable[r] && zobristTable[r][c] && zobristTable[r][c][pieceType]) {
-                    hash[0] ^= zobristTable[r][c][pieceType][0];
-                    hash[1] ^= zobristTable[r][c][pieceType][1];
-                }
+            const pieceType = getPieceTypeIndex(cell);
+            if (zobristTable[r] && zobristTable[r][c] && zobristTable[r][c][pieceType]) {
+                hash[0] ^= zobristTable[r][c][pieceType][0];
+                hash[1] ^= zobristTable[r][c][pieceType][1];
             }
         }
     }
@@ -239,11 +243,11 @@ function scoreMove(boardState, move, player) {
     let score = 0;
 
     // 1. HIGHEST PRIORITY: Capturing opponent cells (fortifying)
-    if (cellValue === opponent || String(cellValue).startsWith(opponent.toString())) {
+    if (cellValue !== EMPTY && getPlayer(cellValue) === opponent) {
         score += 1000;
 
         // Extra bonus if opponent cell is fortified (breaks their structure)
-        if (String(cellValue).includes('fortified')) {
+        if (isFortified(cellValue)) {
             score += 500;
         }
     }
@@ -259,11 +263,13 @@ function scoreMove(boardState, move, player) {
         const nc = move.col + dc;
         if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
             const neighbor = boardState[nr][nc];
-            if (neighbor && String(neighbor).startsWith(player.toString())) {
-                friendlyNeighbors++;
-            } else if (neighbor && String(neighbor).startsWith(opponent.toString())) {
-                opponentNeighbors++;
-            } else if (!neighbor) {
+            if (neighbor !== EMPTY) {
+                if (getPlayer(neighbor) === player) {
+                    friendlyNeighbors++;
+                } else if (getPlayer(neighbor) === opponent) {
+                    opponentNeighbors++;
+                }
+            } else {
                 emptyNeighbors++;
             }
         }
@@ -307,17 +313,15 @@ function updateHash(oldHash, r, c, oldPiece, newPiece) {
 
     let [h1, h2] = oldHash.split('-').map(h => parseInt(h, 16));
 
-    if (oldPiece !== null && zobristTable[r] && zobristTable[r][c]) {
-        const oldPieceType = PIECE_TYPES[oldPiece];
-        if (oldPieceType !== undefined && zobristTable[r][c][oldPieceType]) {
+    if (zobristTable[r] && zobristTable[r][c]) {
+        const oldPieceType = getPieceTypeIndex(oldPiece);
+        if (zobristTable[r][c][oldPieceType]) {
             h1 ^= zobristTable[r][c][oldPieceType][0];
             h2 ^= zobristTable[r][c][oldPieceType][1];
         }
-    }
 
-    if (newPiece !== null && zobristTable[r] && zobristTable[r][c]) {
-        const newPieceType = PIECE_TYPES[newPiece];
-        if (newPieceType !== undefined && zobristTable[r][c][newPieceType]) {
+        const newPieceType = getPieceTypeIndex(newPiece);
+        if (zobristTable[r][c][newPieceType]) {
             h1 ^= zobristTable[r][c][newPieceType][0];
             h2 ^= zobristTable[r][c][newPieceType][1];
         }
@@ -384,7 +388,10 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
 
             // Try this move
             const oldPiece = boardState[move.row][move.col];
-            const newPiece = (oldPiece === null) ? player : `${player}-fortified`;
+            // If empty, new piece is normal, if capture, new piece is fortified
+            const newFlag = (oldPiece === EMPTY) ? CellFlag.NORMAL : CellFlag.FORTIFIED;
+            const newPiece = createCell(player, newFlag);
+
             const newBoard = applyMove(boardState, move.row, move.col, player);
             const newHash = updateHash(boardHash, move.row, move.col, oldPiece, newPiece);
 
@@ -419,7 +426,10 @@ function minimax(boardState, depth, alpha, beta, isMaximizing, isTopLevel = fals
         for (const move of possibleMoves) {
             // Try this move
             const oldPiece = boardState[move.row][move.col];
-            const newPiece = (oldPiece === null) ? player : `${player}-fortified`;
+            // If empty, new piece is normal, if capture, new piece is fortified
+            const newFlag = (oldPiece === EMPTY) ? CellFlag.NORMAL : CellFlag.FORTIFIED;
+            const newPiece = createCell(player, newFlag);
+
             const newBoard = applyMove(boardState, move.row, move.col, player);
             const newHash = updateHash(boardHash, move.row, move.col, oldPiece, newPiece);
 
@@ -479,47 +489,48 @@ function evaluateBoard(boardState) {
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const cell = boardState[r][c];
-            const cellStr = String(cell);
 
-            if (cellStr.startsWith('2')) {
-                aiCells++;
-                if (cellStr.includes('fortified')) aiFortified++;
+            if (cell !== EMPTY) {
+                const p = getPlayer(cell);
+                if (p === 2) {
+                    aiCells++;
+                    if (isFortified(cell)) aiFortified++;
 
-                // Strategic position: distance to opponent base
-                const distToOpponent = Math.abs(r - player1Base.row) + Math.abs(c - player1Base.col);
-                aiAggression += (rows + cols - distToOpponent);
+                    // Strategic position: distance to opponent base
+                    const distToOpponent = Math.abs(r - player1Base.row) + Math.abs(c - player1Base.col);
+                    aiAggression += (rows + cols - distToOpponent);
 
-                // Our cells that opponent can attack
-                const opponentNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
-                if (opponentNeighbors > 0) {
-                    opponentAttackOpportunities++;
+                    // Our cells that opponent can attack
+                    const opponentNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
+                    if (opponentNeighbors > 0) {
+                        opponentAttackOpportunities++;
+                    }
+
+                    // Fast redundancy: count cells with 2+ friendly neighbors
+                    const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
+                    if (friendlyNeighbors >= 2) {
+                        aiRedundantCells++;
+                    }
+
+                } else if (p === 1) {
+                    opponentCells++;
+                    if (isFortified(cell)) opponentFortified++;
+
+                    // Count attack opportunities (opponent cells we can attack)
+                    const aiNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
+                    if (aiNeighbors > 0) {
+                        aiAttackOpportunities++;
+                    }
+
+                    const distToAI = Math.abs(r - player2Base.row) + Math.abs(c - player2Base.col);
+                    opponentAggression += (rows + cols - distToAI);
+
+                    // Opponent redundancy
+                    const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
+                    if (friendlyNeighbors >= 2) {
+                        opponentRedundantCells++;
+                    }
                 }
-
-                // Fast redundancy: count cells with 2+ friendly neighbors
-                const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
-                if (friendlyNeighbors >= 2) {
-                    aiRedundantCells++;
-                }
-
-            } else if (cellStr.startsWith('1')) {
-                opponentCells++;
-                if (cellStr.includes('fortified')) opponentFortified++;
-
-                // Count attack opportunities (opponent cells we can attack)
-                const aiNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
-                if (aiNeighbors > 0) {
-                    aiAttackOpportunities++;
-                }
-
-                const distToAI = Math.abs(r - player2Base.row) + Math.abs(c - player2Base.col);
-                opponentAggression += (rows + cols - distToAI);
-
-                // Opponent redundancy
-                const friendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 1);
-                if (friendlyNeighbors >= 2) {
-                    opponentRedundantCells++;
-                }
-
             } else {
                 // Empty or neutral cell - check for gaps/holes
                 const aiFriendlyNeighbors = countAdjacentCellsOnBoard(boardState, r, c, 2);
@@ -598,13 +609,15 @@ function isValidMoveOnBoard(boardState, row, col, player) {
     const opponent = player === 1 ? 2 : 1;
 
     // Cannot move on fortified, base, or neutral (killed) cells
-    if (typeof cell === 'string' && (cell.includes('fortified') || cell.includes('base') || cell === 'killed')) {
-        return false;
-    }
+    if (cell !== EMPTY) {
+        if (!canBeAttacked(cell)) {
+            return false;
+        }
 
-    // Can only attack opponent's non-fortified cells or expand to empty cells
-    if (cell !== null && !String(cell).startsWith(opponent.toString())) {
-        return false;
+        // Can only attack opponent's non-fortified cells or expand to empty cells
+        if (getPlayer(cell) !== opponent) {
+            return false;
+        }
     }
 
     // Check if adjacent to own territory
@@ -622,7 +635,7 @@ function isValidMoveOnBoard(boardState, row, col, player) {
 
             if (adjRow >= 0 && adjRow < rows && adjCol >= 0 && adjCol < cols) {
                 const adjCell = boardState[adjRow][adjCol];
-                if (adjCell && String(adjCell).startsWith(player.toString())) {
+                if (adjCell !== EMPTY && getPlayer(adjCell) === player) {
                     // Check if this adjacent cell is connected to base
                     if (isConnectedToBaseOnBoard(boardState, adjRow, adjCol, player)) {
                         return true;
@@ -661,7 +674,7 @@ function isConnectedToBaseOnBoard(boardState, startRow, startCol, player) {
 
                 if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols && !visited.has(`${newRow},${newCol}`)) {
                     const cellValue = boardState[newRow][newCol];
-                    if (cellValue && String(cellValue).startsWith(player.toString())) {
+                    if (cellValue !== EMPTY && getPlayer(cellValue) === player) {
                         visited.add(`${newRow},${newCol}`);
                         stack.push({ row: newRow, col: newCol });
                     }
@@ -684,7 +697,7 @@ function isAdjacentToPlayerOnBoard(boardState, row, col, player) {
 
             if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
                 const adjCell = boardState[newRow][newCol];
-                if (adjCell && String(adjCell).startsWith(player.toString())) {
+                if (adjCell !== EMPTY && getPlayer(adjCell) === player) {
                     return true;
                 }
             }
@@ -707,7 +720,7 @@ function countAdjacentCellsOnBoard(boardState, row, col, player) {
 
             if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
                 const cell = boardState[newRow][newCol];
-                if (cell && String(cell).startsWith(player.toString())) {
+                if (cell !== EMPTY && getPlayer(cell) === player) {
                     count++;
                 }
             }
@@ -721,18 +734,17 @@ function countAdjacentCellsOnBoard(boardState, row, col, player) {
  * Apply a move to a board state (returns new board, doesn't modify original)
  */
 function applyMove(boardState, row, col, player) {
-    // Deep copy the board
+    // Deep copy the board (arrays of numbers are passed by value when copied like this)
     const newBoard = boardState.map(rowArr => rowArr.slice());
 
     const cell = newBoard[row][col];
-    const opponent = player === 1 ? 2 : 1;
 
-    if (cell === null) {
+    if (cell === EMPTY) {
         // Expand to empty cell
-        newBoard[row][col] = player;
-    } else if (cell === opponent) {
+        newBoard[row][col] = createCell(player, CellFlag.NORMAL);
+    } else {
         // Attack opponent's cell (fortify it)
-        newBoard[row][col] = `${player}-fortified`;
+        newBoard[row][col] = createCell(player, CellFlag.FORTIFIED);
     }
 
     return newBoard;
@@ -755,10 +767,10 @@ function playAITurn() {
             if (move) {
                 const cellValue = board[move.row][move.col];
 
-                if (cellValue === null) {
-                    board[move.row][move.col] = 2;
-                } else if (cellValue === 1 || String(cellValue).startsWith('1')) {
-                    board[move.row][move.col] = '2-fortified';
+                if (cellValue === EMPTY) {
+                    board[move.row][move.col] = createCell(2, CellFlag.NORMAL);
+                } else if (getPlayer(cellValue) === 1) {
+                    board[move.row][move.col] = createCell(2, CellFlag.FORTIFIED);
                 }
 
                 movesLeft--;

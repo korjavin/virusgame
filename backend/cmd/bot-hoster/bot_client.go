@@ -53,7 +53,7 @@ type Bot struct {
 	BotSettings  *BotSettings
 
 	// Game state (maintained locally like a human client)
-	Board       [][]interface{}
+	Board       [][]CellValue
 	GamePlayers []GamePlayerInfo
 	PlayerBases [4]CellPos
 	Rows        int
@@ -387,9 +387,9 @@ func (b *Bot) handleGameStart1v1(msg *Message) {
 	b.Cols = msg.Cols
 
 	// Initialize board for 1v1 game
-	b.Board = make([][]interface{}, b.Rows)
+	b.Board = make([][]CellValue, b.Rows)
 	for i := range b.Board {
-		b.Board[i] = make([]interface{}, b.Cols)
+		b.Board[i] = make([]CellValue, b.Cols)
 	}
 
 	// Set up bases for 1v1
@@ -397,8 +397,8 @@ func (b *Bot) handleGameStart1v1(msg *Message) {
 	b.PlayerBases[1] = CellPos{Row: b.Rows - 1, Col: b.Cols - 1}
 
 	// Place bases on board
-	b.Board[b.PlayerBases[0].Row][b.PlayerBases[0].Col] = "1-base"
-	b.Board[b.PlayerBases[1].Row][b.PlayerBases[1].Col] = "2-base"
+    b.Board[b.PlayerBases[0].Row][b.PlayerBases[0].Col] = NewCell(1, CellFlagBase)
+    b.Board[b.PlayerBases[1].Row][b.PlayerBases[1].Col] = NewCell(2, CellFlagBase)
 
 	// Set up game players info for 1v1
 	b.GamePlayers = []GamePlayerInfo{
@@ -451,9 +451,9 @@ func (b *Bot) handleGameStart(msg *Message) {
 	b.GamePlayers = msg.GamePlayers
 
 	// Initialize board
-	b.Board = make([][]interface{}, b.Rows)
+	b.Board = make([][]CellValue, b.Rows)
 	for i := range b.Board {
-		b.Board[i] = make([]interface{}, b.Cols)
+		b.Board[i] = make([]CellValue, b.Cols)
 	}
 
 	// TODO: Extract PlayerBases from message (might need backend change)
@@ -465,19 +465,19 @@ func (b *Bot) handleGameStart(msg *Message) {
 
 	// Place bases on board
 	if len(b.Board) > b.PlayerBases[0].Row && len(b.Board[0]) > b.PlayerBases[0].Col {
-		b.Board[b.PlayerBases[0].Row][b.PlayerBases[0].Col] = "1-base"
+        b.Board[b.PlayerBases[0].Row][b.PlayerBases[0].Col] = NewCell(1, CellFlagBase)
 	}
 	if len(b.Board) > b.PlayerBases[1].Row && len(b.Board[0]) > b.PlayerBases[1].Col {
-		b.Board[b.PlayerBases[1].Row][b.PlayerBases[1].Col] = "2-base"
+        b.Board[b.PlayerBases[1].Row][b.PlayerBases[1].Col] = NewCell(2, CellFlagBase)
 	}
 	if len(b.GamePlayers) > 2 {
 		if len(b.Board) > b.PlayerBases[2].Row && len(b.Board[0]) > b.PlayerBases[2].Col {
-			b.Board[b.PlayerBases[2].Row][b.PlayerBases[2].Col] = "3-base"
+            b.Board[b.PlayerBases[2].Row][b.PlayerBases[2].Col] = NewCell(3, CellFlagBase)
 		}
 	}
 	if len(b.GamePlayers) > 3 {
 		if len(b.Board) > b.PlayerBases[3].Row && len(b.Board[0]) > b.PlayerBases[3].Col {
-			b.Board[b.PlayerBases[3].Row][b.PlayerBases[3].Col] = "4-base"
+            b.Board[b.PlayerBases[3].Row][b.PlayerBases[3].Col] = NewCell(4, CellFlagBase)
 		}
 	}
 
@@ -575,10 +575,10 @@ func (b *Bot) calculateAndSendMove(gameID string) {
 	log.Printf("[Bot %s] Sent move: (%d, %d)", b.Username, row, col)
 }
 
-func (b *Bot) copyBoardLocal(board [][]interface{}) [][]interface{} {
-	newBoard := make([][]interface{}, len(board))
+func (b *Bot) copyBoardLocal(board [][]CellValue) [][]CellValue {
+	newBoard := make([][]CellValue, len(board))
 	for i := range board {
-		newBoard[i] = make([]interface{}, len(board[i]))
+		newBoard[i] = make([]CellValue, len(board[i]))
 		copy(newBoard[i], board[i])
 	}
 	return newBoard
@@ -620,10 +620,10 @@ func (b *Bot) handleLobbyClosed(msg *Message) {
 // applyMove updates the local board state
 func (b *Bot) applyMove(row, col, player int) {
 	cell := b.Board[row][col]
-	if cell == nil {
-		b.Board[row][col] = player
+	if cell == 0 {
+		b.Board[row][col] = NewCell(player, CellFlagNormal)
 	} else {
-		b.Board[row][col] = fmt.Sprintf("%d-fortified", player)
+		b.Board[row][col] = NewCell(player, CellFlagFortified)
 	}
 }
 

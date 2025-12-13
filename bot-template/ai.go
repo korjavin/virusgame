@@ -1,5 +1,45 @@
 package main
 
+const (
+    CellFlagNormal    byte = 0x00
+    CellFlagBase      byte = 0x10
+    CellFlagFortified byte = 0x20
+    CellFlagKilled    byte = 0x30
+
+    FlagMask   byte = 0x30
+    PlayerMask byte = 0x0F
+)
+
+type CellValue byte
+
+func NewCell(player int, flag byte) CellValue {
+    return CellValue(flag | byte(player))
+}
+
+func (c CellValue) Player() int {
+    return int(byte(c) & PlayerMask)
+}
+
+func (c CellValue) Flag() byte {
+    return byte(c) & FlagMask
+}
+
+func (c CellValue) IsBase() bool {
+    return c.Flag() == CellFlagBase
+}
+
+func (c CellValue) IsFortified() bool {
+    return c.Flag() == CellFlagFortified
+}
+
+func (c CellValue) IsKilled() bool {
+    return c.Flag() == CellFlagKilled
+}
+
+func (c CellValue) CanBeAttacked() bool {
+    return c.Flag() == CellFlagNormal
+}
+
 // AI strategy implementation
 // Customize this to create your unique bot!
 
@@ -24,11 +64,15 @@ func (b *Bot) isValidMove(row, col int) bool {
     cell := b.Board[row][col]
 
     // Empty is always valid if adjacent
-    if cell == nil {
+    if cell == 0 {
         return b.isAdjacentToMyTerritory(row, col)
     }
 
-    // TODO: Add more validation logic
+    // If not empty, we can attack if it's not fortified/base and not ours
+    if cell.Player() != b.YourPlayer && cell.CanBeAttacked() {
+        return b.isAdjacentToMyTerritory(row, col)
+    }
+
     return false
 }
 
@@ -44,23 +88,8 @@ func (b *Bot) isAdjacentToMyTerritory(row, col int) bool {
             nr, nc := row+i, col+j
             if nr >= 0 && nr < len(b.Board) && nc >= 0 && nc < len(b.Board[0]) {
                 cell := b.Board[nr][nc]
-                if cell != nil {
-                     // In the main game code, the board stores strings for fortified cells (e.g., "1-fortified")
-                     // or integers for simple ownership (e.g., 1).
-                     // However, the JSON unmarshals to interface{}.
-                     // For the template, we'll keep it simple and assume we just check against YourPlayer.
-                     // But we must handle the type assertion carefully or just check if it's ours.
-                     // Here we'll do a simple check.
-                     switch v := cell.(type) {
-                     case int:
-                         if v == b.YourPlayer {
-                             return true
-                         }
-                     case float64: // JSON numbers are float64
-                         if int(v) == b.YourPlayer {
-                             return true
-                         }
-                     }
+                if cell != 0 && cell.Player() == b.YourPlayer {
+                    return true
                 }
             }
         }

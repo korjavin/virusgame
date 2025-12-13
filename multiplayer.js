@@ -219,10 +219,10 @@ class MultiplayerClient {
         const opponent = msg.player;
         const cellValue = board[msg.row][msg.col];
 
-        if (cellValue === null) {
-            board[msg.row][msg.col] = opponent;
+        if (cellValue === EMPTY) {
+            board[msg.row][msg.col] = createCell(opponent, CellFlag.NORMAL);
         } else {
-            board[msg.row][msg.col] = `${opponent}-fortified`;
+            board[msg.row][msg.col] = createCell(opponent, CellFlag.FORTIFIED);
         }
 
         // Update movesLeft from server
@@ -239,7 +239,8 @@ class MultiplayerClient {
     handleNeutralsPlaced(msg) {
         // Apply opponent's neutral placement
         for (const cell of msg.cells) {
-            board[cell.row][cell.col] = 'killed';
+            // Use createCell with KILLED flag (0x30)
+            board[cell.row][cell.col] = createCell(0, CellFlag.KILLED);
         }
 
         // Track that the player used their neutrals (support all 4 players)
@@ -777,8 +778,9 @@ function initGameMultiplayer(rowsVal, colsVal) {
     player1Base = { row: 0, col: 0 };
     player2Base = { row: rows - 1, col: cols - 1 };
 
-    board[player1Base.row][player1Base.col] = '1-base';
-    board[player2Base.row][player2Base.col] = '2-base';
+    // Use createCell for bases
+    board[player1Base.row][player1Base.col] = createCell(1, CellFlag.BASE);
+    board[player2Base.row][player2Base.col] = createCell(2, CellFlag.BASE);
 
     renderBoard();
     updateStatus();
@@ -818,7 +820,7 @@ function initGameMultiplayerMode(rowsVal, colsVal, gamePlayers, yourPlayerIndex)
     gamePlayers.forEach(player => {
         const playerIndex = player.playerIndex;
         const basePos = basePositions[playerIndex - 1];
-        board[basePos.row][basePos.col] = `${playerIndex}-base`;
+        board[basePos.row][basePos.col] = createCell(playerIndex, CellFlag.BASE);
     });
 
     renderBoard();

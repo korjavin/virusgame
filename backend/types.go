@@ -1,8 +1,56 @@
 package main
 
 import (
+	"encoding/json"
 	"time"
 )
+
+const (
+    CellFlagNormal    byte = 0x00
+    CellFlagBase      byte = 0x10
+    CellFlagFortified byte = 0x20
+    CellFlagKilled    byte = 0x30
+
+    FlagMask   byte = 0x30
+    PlayerMask byte = 0x0F
+)
+
+type CellValue byte
+
+func NewCell(player int, flag byte) CellValue {
+    return CellValue(flag | byte(player))
+}
+
+func (c CellValue) Player() int {
+    return int(byte(c) & PlayerMask)
+}
+
+func (c CellValue) Flag() byte {
+    return byte(c) & FlagMask
+}
+
+func (c CellValue) IsBase() bool {
+    return c.Flag() == CellFlagBase
+}
+
+func (c CellValue) IsFortified() bool {
+    return c.Flag() == CellFlagFortified
+}
+
+func (c CellValue) IsKilled() bool {
+    return c.Flag() == CellFlagKilled
+}
+
+func (c CellValue) CanBeAttacked() bool {
+    // Cannot attack base, fortified, or killed (neutral)
+    return c.Flag() == CellFlagNormal
+}
+
+// Custom marshaling for CellValue to ensure it is treated as a number in JSON
+// although byte naturally marshals to a number in a []byte it might become base64.
+// But if we have [][]CellValue, and CellValue is a named type around byte,
+// Go's json package might still treat a slice of it as a []byte and base64 it.
+// Let's test this hypothesis or just implement MarshalJSON for the Board type.
 
 // Message types sent between client and server
 type Message struct {
@@ -105,7 +153,7 @@ type Game struct {
 	ID            string
 	Player1       *User
 	Player2       *User
-	Board         [][]interface{}
+	Board         Board
 	CurrentPlayer int
 	MovesLeft     int
 	Player1Base   CellPos
@@ -140,6 +188,23 @@ type MoveAction struct {
 	Cells      []CellPos
 	DurationCS int
 	TurnNumber int
+}
+
+type Board [][]CellValue
+
+// MarshalJSON for Board to ensure it serializes as [][]int (numbers) instead of base64
+func (b Board) MarshalJSON() ([]byte, error) {
+    // Convert to [][]int for serialization
+    // This is necessary because encoding/json marshals []byte as a base64 string
+    // but we want a JSON array of numbers for the frontend
+    temp := make([][]int, len(b))
+    for i, row := range b {
+        temp[i] = make([]int, len(row))
+        for j, val := range row {
+            temp[i][j] = int(val)
+        }
+    }
+    return json.Marshal(temp)
 }
 
 // Lobby represents a multiplayer game lobby
