@@ -1446,16 +1446,3 @@ body.dark-theme .move-timer-display {
         margin: 15px auto 8px auto;
     }
 }
-/* Hide symbols when connection tree is enabled */
-#game-board.hide-symbols .cell {
-    color: transparent !important;
-}
-
-/* Also hide any base markers if needed, but keeping background color */
-#game-board.hide-symbols .player1-base,
-#game-board.hide-symbols .player2-base,
-#game-board.hide-symbols .player3-base,
-#game-board.hide-symbols .player4-base {
-    /* Keep border and background, just hide text content */
-    color: transparent !important;
-}

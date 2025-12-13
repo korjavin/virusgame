@@ -17,11 +17,9 @@ let connectionTreeEnabled = false;
 let connectionCanvas;
 let connectionCtx;
 
-// Connection Tree Styles - Fixed assignments
-// Player 1 (Blue) -> Fungi
-// Player 2 (Red) -> Computer Virus
-// Player 3 (Green) -> Virus (Biological)
-// Player 4 (Orange) -> Insects
+// Connection Tree Styles
+const connectionStyles = ['pen', 'liana', 'japan', 'circuit', 'neon', 'minimal'];
+let playerStyles = ['pen', 'pen', 'pen', 'pen']; // Default to pen, will be randomized in initGame
 
 function isConnectedToBase(startRow, startCol, player) {
     let base;
@@ -589,6 +587,18 @@ document.addEventListener('DOMContentLoaded', () => {
         board[player1Base.row][player1Base.col] = '1-base';
         board[player2Base.row][player2Base.col] = '2-base';
 
+        // Assign random connection styles to players
+        // Shuffle connectionStyles
+        const shuffledStyles = [...connectionStyles].sort(() => 0.5 - Math.random());
+        playerStyles = [];
+        for (let i = 0; i < 4; i++) {
+            // Assign a unique style to each of the 4 potential players
+            // If we have fewer styles than players (unlikely), wrap around
+            playerStyles.push(shuffledStyles[i % shuffledStyles.length]);
+        }
+        console.log('Assigned connection styles:', playerStyles);
+
+
         renderBoard();
         updateStatus();
 
@@ -691,8 +701,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (savedPref === 'true') {
             connectionTreeEnabled = true;
             connectionToggle.checked = true;
-            // Also apply hide-symbols class
-            if (gameBoard) gameBoard.classList.add('hide-symbols');
             setTimeout(updateAllConnectionTrees, 100); // Small delay to ensure board is ready
         }
 
@@ -700,13 +708,9 @@ document.addEventListener('DOMContentLoaded', () => {
             connectionTreeEnabled = connectionToggle.checked;
             localStorage.setItem('connectionTreeEnabled', connectionTreeEnabled);
             if (connectionTreeEnabled) {
-                if (gameBoard) gameBoard.classList.add('hide-symbols');
                 updateAllConnectionTrees();
-            } else {
-                if (gameBoard) gameBoard.classList.remove('hide-symbols');
-                if (connectionCtx) {
-                    connectionCtx.clearRect(0, 0, connectionCanvas.width, connectionCanvas.height);
-                }
+            } else if (connectionCtx) {
+                connectionCtx.clearRect(0, 0, connectionCanvas.width, connectionCanvas.height);
             }
         });
     }
@@ -730,6 +734,8 @@ function buildConnectionTree(player) {
     // Check if base exists on board (it might have been overwritten if that's possible, though base shouldn't be)
     if (!board[base.row][base.col] || !String(board[base.row][base.col]).includes('base')) {
          // In 1v1 mode, base variable tracks position, but check board content to be safe
+         // Actually in script.js logic, base cells are marked '1-base', '2-base' etc.
+         // If base is destroyed (not currently possible in game rules but good for safety), return empty
     }
 
     const tree = new Map(); // key: "row,col", value: {row, col} (parent)
@@ -799,31 +805,43 @@ function drawConnectionTree(player, tree) {
 
     const cellSize = calculateCellSize();
 
-    // Determine style based on player (fixed assignment)
+    // Determine style for this player
+    // Fallback to 'pen' if something goes wrong
+    const style = playerStyles[player - 1] || 'pen';
+
     connectionCtx.save();
 
     // Set base color based on player
     let colorStr;
     switch(player) {
-        case 1: // Blue - Fungi
-            colorStr = '0, 0, 255';
-            drawStyleFungi(tree, cellSize, colorStr);
+        case 1: colorStr = '0, 0, 255'; break; // Blue
+        case 2: colorStr = '255, 0, 0'; break;  // Red
+        case 3: colorStr = '46, 204, 113'; break; // Green
+        case 4: colorStr = '243, 156, 18'; break; // Orange
+        default: colorStr = '0, 0, 0';
+    }
+
+    // Dispatch to specific drawing function
+    switch (style) {
+        case 'liana':
+            drawStyleLiana(tree, cellSize, colorStr);
             break;
-        case 2: // Red - Computer Virus
-            colorStr = '255, 0, 0';
-            drawStyleComputer(tree, cellSize, colorStr);
+        case 'japan':
+            drawStyleJapan(tree, cellSize, colorStr);
             break;
-        case 3: // Green - Virus (Bio)
-            colorStr = '46, 204, 113';
-            drawStyleVirus(tree, cellSize, colorStr);
+        case 'circuit':
+            drawStyleCircuit(tree, cellSize, colorStr);
             break;
-        case 4: // Orange - Insects
-            colorStr = '243, 156, 18';
-            drawStyleInsects(tree, cellSize, colorStr);
+        case 'neon':
+            drawStyleNeon(tree, cellSize, colorStr);
             break;
+        case 'minimal':
+            drawStyleMinimal(tree, cellSize, colorStr);
+            break;
+        case 'pen':
         default:
-            colorStr = '0, 0, 0';
             drawStylePen(tree, cellSize, colorStr);
+            break;
     }
 
     connectionCtx.restore();
@@ -847,12 +865,11 @@ function drawStylePen(tree, cellSize, colorStr) {
     connectionCtx.stroke();
 }
 
-// Blue: Fungi (Liana-like but maybe more branching feel, kept liana logic for now as it fits "hyphae")
-function drawStyleFungi(tree, cellSize, colorStr) {
+function drawStyleLiana(tree, cellSize, colorStr) {
     const halfCell = cellSize / 2;
-    // Slightly more opaque for fungi
+    // Slightly more opaque for lianas
     connectionCtx.strokeStyle = `rgba(${colorStr}, 0.6)`;
-    // Variable width logic
+    // Variable width logic could be applied, but simpler to stick to constant for now or slight random
     connectionCtx.lineWidth = Math.max(3, Math.floor(cellSize / 8));
     connectionCtx.lineCap = 'round';
 
@@ -866,15 +883,19 @@ function drawStyleFungi(tree, cellSize, colorStr) {
         const endX = parent.col * cellSize + halfCell;
         const endY = parent.row * cellSize + halfCell;
 
-        // Curve logic from Liana
+        // Calculate a control point for the curve
+        // Use seeded random to make it deterministic (so it doesn't jitter)
         const rand = getSeededRandom(r * 1000 + c, parent.row * 1000 + parent.col);
         const midX = (startX + endX) / 2;
         const midY = (startY + endY) / 2;
 
+        // Offset perpendicular to the line
         const dx = endX - startX;
         const dy = endY - startY;
         const dist = Math.sqrt(dx*dx + dy*dy);
 
+        // Perpendicular vector (-dy, dx)
+        // Offset amount varies
         const offset = (rand - 0.5) * (cellSize * 0.5);
 
         const controlX = midX - (dy / dist) * offset;
@@ -884,26 +905,50 @@ function drawStyleFungi(tree, cellSize, colorStr) {
         connectionCtx.quadraticCurveTo(controlX, controlY, endX, endY);
     }
     connectionCtx.stroke();
+}
 
-    // Add small spore nodes?
-    connectionCtx.fillStyle = `rgba(${colorStr}, 0.4)`;
-    for (const key of tree.keys()) {
+function drawStyleJapan(tree, cellSize, colorStr) {
+    const halfCell = cellSize / 2;
+    connectionCtx.strokeStyle = `rgba(${colorStr}, 0.7)`;
+    connectionCtx.lineCap = 'butt'; // Brush stroke feel
+
+    for (const [key, parent] of tree.entries()) {
+        if (parent === null) continue;
         const [r, c] = key.split(',').map(Number);
-        if (getSeededRandom(r, c) > 0.7) { // 30% chance of spore
-            connectionCtx.beginPath();
-            connectionCtx.arc(c * cellSize + halfCell, r * cellSize + halfCell, cellSize/6, 0, Math.PI * 2);
-            connectionCtx.fill();
+
+        const startX = c * cellSize + halfCell;
+        const startY = r * cellSize + halfCell;
+        const endX = parent.col * cellSize + halfCell;
+        const endY = parent.row * cellSize + halfCell;
+
+        // Draw multiple times with slight offsets and different widths to simulate brush
+        const strokes = 3;
+        for (let i = 0; i < strokes; i++) {
+             connectionCtx.beginPath();
+             const rand = getSeededRandom(r * 1000 + c + i, parent.row * 1000 + parent.col + i);
+             const width = Math.max(1, Math.floor(cellSize / 12)) + (rand * 2);
+             connectionCtx.lineWidth = width;
+
+             // Alpha variation
+             connectionCtx.strokeStyle = `rgba(${colorStr}, ${0.4 + (rand * 0.3)})`;
+
+             // Slight offset
+             const offsetX = (getSeededRandom(r, c + i) - 0.5) * 2;
+             const offsetY = (getSeededRandom(r + i, c) - 0.5) * 2;
+
+             connectionCtx.moveTo(startX + offsetX, startY + offsetY);
+             connectionCtx.lineTo(endX + offsetX, endY + offsetY);
+             connectionCtx.stroke();
         }
     }
 }
 
-// Red: Computer Virus (Circuit-like)
-function drawStyleComputer(tree, cellSize, colorStr) {
+function drawStyleCircuit(tree, cellSize, colorStr) {
     const halfCell = cellSize / 2;
     connectionCtx.strokeStyle = `rgba(${colorStr}, 0.8)`;
     connectionCtx.lineWidth = Math.max(2, Math.floor(cellSize / 12));
 
-    // Draw lines (Manhattan style? No, straight is fine for circuit, maybe add square nodes)
+    // Draw lines
     connectionCtx.beginPath();
     for (const [key, parent] of tree.entries()) {
         if (parent === null) continue;
@@ -914,30 +959,30 @@ function drawStyleComputer(tree, cellSize, colorStr) {
         const endX = parent.col * cellSize + halfCell;
         const endY = parent.row * cellSize + halfCell;
 
-        // Draw with a slight "digital" offset or just straight
         connectionCtx.moveTo(startX, startY);
         connectionCtx.lineTo(endX, endY);
     }
     connectionCtx.stroke();
 
-    // Draw nodes (squares for computer)
+    // Draw nodes (circles) at each cell center
     connectionCtx.fillStyle = `rgba(${colorStr}, 1)`;
-    const nodeSize = Math.max(4, Math.floor(cellSize / 4));
+    const nodeRadius = Math.max(2, Math.floor(cellSize / 8));
     for (const key of tree.keys()) {
         const [r, c] = key.split(',').map(Number);
-        connectionCtx.fillRect((c * cellSize + halfCell) - nodeSize/2, (r * cellSize + halfCell) - nodeSize/2, nodeSize, nodeSize);
+        connectionCtx.beginPath();
+        connectionCtx.arc(c * cellSize + halfCell, r * cellSize + halfCell, nodeRadius, 0, Math.PI * 2);
+        connectionCtx.fill();
     }
 }
 
-// Green: Virus (Biological, like Neon/Blobs)
-function drawStyleVirus(tree, cellSize, colorStr) {
+function drawStyleNeon(tree, cellSize, colorStr) {
     const halfCell = cellSize / 2;
-    connectionCtx.strokeStyle = `rgba(${colorStr}, 0.8)`; // Bright center
-    connectionCtx.lineWidth = Math.max(3, Math.floor(cellSize / 10));
+    connectionCtx.strokeStyle = `rgba(${colorStr}, 1)`; // Bright center
+    connectionCtx.lineWidth = Math.max(2, Math.floor(cellSize / 15));
     connectionCtx.lineCap = 'round';
 
     // Add glow
-    connectionCtx.shadowBlur = 15;
+    connectionCtx.shadowBlur = 10;
     connectionCtx.shadowColor = `rgb(${colorStr})`;
 
     connectionCtx.beginPath();
@@ -950,72 +995,25 @@ function drawStyleVirus(tree, cellSize, colorStr) {
     }
     connectionCtx.stroke();
 
-    // Draw "spiky" or "blob" nodes
-    connectionCtx.fillStyle = `rgb(${colorStr})`;
-    for (const key of tree.keys()) {
-        const [r, c] = key.split(',').map(Number);
-        connectionCtx.beginPath();
-        connectionCtx.arc(c * cellSize + halfCell, r * cellSize + halfCell, cellSize/5, 0, Math.PI * 2);
-        connectionCtx.fill();
-    }
-
     // Reset shadow
     connectionCtx.shadowBlur = 0;
     connectionCtx.shadowColor = 'transparent';
 }
 
-// Orange: Insects (Leggy/Jagged)
-function drawStyleInsects(tree, cellSize, colorStr) {
+function drawStyleMinimal(tree, cellSize, colorStr) {
     const halfCell = cellSize / 2;
-    connectionCtx.strokeStyle = `rgba(${colorStr}, 0.8)`;
-    connectionCtx.lineWidth = Math.max(1, Math.floor(cellSize / 15));
+    connectionCtx.strokeStyle = `rgba(${colorStr}, 0.6)`;
+    connectionCtx.lineWidth = 1; // Very thin
+    connectionCtx.setLineDash([5, 5]); // Dashed
 
-    // Draw "leggy" lines - dashed or zigzag?
-    // User said "insects". Maybe segmented lines.
-
+    connectionCtx.beginPath();
     for (const [key, parent] of tree.entries()) {
         if (parent === null) continue;
         const [r, c] = key.split(',').map(Number);
 
-        const startX = c * cellSize + halfCell;
-        const startY = r * cellSize + halfCell;
-        const endX = parent.col * cellSize + halfCell;
-        const endY = parent.row * cellSize + halfCell;
-
-        // Jagged line
-        connectionCtx.beginPath();
-        connectionCtx.moveTo(startX, startY);
-
-        const midX = (startX + endX) / 2;
-        const midY = (startY + endY) / 2;
-
-        // Offset perpendicular
-        const dx = endX - startX;
-        const dy = endY - startY;
-
-        // Random zig-zag direction based on coord seed
-        const rand = getSeededRandom(r, c);
-        const offset = (rand > 0.5 ? 1 : -1) * (cellSize / 4);
-
-        if (Math.abs(dx) > Math.abs(dy)) {
-            // Horizontal-ish
-            connectionCtx.lineTo(midX, midY + offset);
-        } else {
-            // Vertical-ish
-            connectionCtx.lineTo(midX + offset, midY);
-        }
-
-        connectionCtx.lineTo(endX, endY);
-        connectionCtx.stroke();
+        connectionCtx.moveTo(c * cellSize + halfCell, r * cellSize + halfCell);
+        connectionCtx.lineTo(parent.col * cellSize + halfCell, parent.row * cellSize + halfCell);
     }
-
-    // Draw small "bug" bodies at nodes
-    connectionCtx.fillStyle = `rgba(${colorStr}, 0.9)`;
-    for (const key of tree.keys()) {
-        const [r, c] = key.split(',').map(Number);
-        // Ellipse
-        connectionCtx.beginPath();
-        connectionCtx.ellipse(c * cellSize + halfCell, r * cellSize + halfCell, cellSize/6, cellSize/8, 0, 0, 2 * Math.PI);
-        connectionCtx.fill();
-    }
+    connectionCtx.stroke();
+    connectionCtx.setLineDash([]); // Reset
 }
