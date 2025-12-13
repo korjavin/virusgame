@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	dbPath := flag.String("db", "../games.db", "Path to SQLite database")
+	dbPath := flag.String("db", "../data/games.db", "Path to SQLite database")
 	flag.Parse()
 
 	if _, err := os.Stat(*dbPath); os.IsNotExist(err) {

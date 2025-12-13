@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -14,6 +16,12 @@ var db *sql.DB
 
 // InitDB initializes the SQLite database
 func InitDB(dbPath string) {
+	// Ensure directory exists
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		log.Fatalf("Failed to create database directory: %v", err)
+	}
+
 	var err error
 	db, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
@@ -52,47 +60,51 @@ func SaveGame(game *Game, termination string) {
 		return
 	}
 
+	// Extract data synchronously to avoid race conditions
+	pgnContent, err := generatePGN(game)
+	if err != nil {
+		log.Printf("Error generating PGN: %v", err)
+		return
+	}
+
+	// Get player names
+	p1Name := ""
+	p2Name := ""
+	p3Name := ""
+	p4Name := ""
+
+	if game.IsMultiplayer {
+		if game.Players[0] != nil {
+			p1Name = getPlayerNameSafe(game.Players[0])
+		}
+		if game.Players[1] != nil {
+			p2Name = getPlayerNameSafe(game.Players[1])
+		}
+		if game.Players[2] != nil {
+			p3Name = getPlayerNameSafe(game.Players[2])
+		}
+		if game.Players[3] != nil {
+			p4Name = getPlayerNameSafe(game.Players[3])
+		}
+	} else {
+		if game.Player1 != nil {
+			p1Name = game.Player1.Username
+		}
+		if game.Player2 != nil {
+			p2Name = game.Player2.Username
+		}
+	}
+
+	gameID := game.ID
+	startTime := game.StartTime
+	rows := game.Rows
+	cols := game.Cols
+	winner := game.Winner
+	endTime := time.Now()
+
 	// Run saving in a separate goroutine to avoid blocking the game loop
+	// using ONLY captured local variables
 	go func() {
-		// Prepare PGN content
-		pgnContent, err := generatePGN(game)
-		if err != nil {
-			log.Printf("Error generating PGN: %v", err)
-			return
-		}
-
-		// Get player names
-		p1Name := ""
-		p2Name := ""
-		p3Name := ""
-		p4Name := ""
-
-		if game.IsMultiplayer {
-			if game.Players[0] != nil {
-				p1Name = getPlayerNameSafe(game.Players[0])
-			}
-			if game.Players[1] != nil {
-				p2Name = getPlayerNameSafe(game.Players[1])
-			}
-			if game.Players[2] != nil {
-				p3Name = getPlayerNameSafe(game.Players[2])
-			}
-			if game.Players[3] != nil {
-				p4Name = getPlayerNameSafe(game.Players[3])
-			}
-		} else {
-			if game.Player1 != nil {
-				p1Name = game.Player1.Username
-			}
-			if game.Player2 != nil {
-				p2Name = game.Player2.Username
-			}
-		}
-
-		endTime := time.Now()
-		// Avoid modifying game struct as it might be unsafe in async
-		// game.EndTime = endTime
-
 		// Insert into database
 		insertSQL := `
 		INSERT INTO games (id, started_at, ended_at, rows, cols, player1_name, player2_name, player3_name, player4_name, result, termination, pgn_content)
@@ -100,16 +112,16 @@ func SaveGame(game *Game, termination string) {
 		`
 
 		_, err = db.Exec(insertSQL,
-			game.ID,
-			game.StartTime,
+			gameID,
+			startTime,
 			endTime,
-			game.Rows,
-			game.Cols,
+			rows,
+			cols,
 			p1Name,
 			p2Name,
 			p3Name,
 			p4Name,
-			game.Winner,
+			winner,
 			termination,
 			pgnContent,
 		)
@@ -117,11 +129,10 @@ func SaveGame(game *Game, termination string) {
 		if err != nil {
 			log.Printf("Error saving game to database: %v", err)
 		} else {
-			log.Printf("Game %s saved to database", game.ID)
+			log.Printf("Game %s saved to database", gameID)
 		}
 	}()
 }
-
 func getPlayerNameSafe(player *LobbyPlayer) string {
 	if player.User != nil {
 		return player.User.Username

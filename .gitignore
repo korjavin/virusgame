@@ -6,3 +6,4 @@ backend/bot-hoster
 *.bin
 backend/virusgame-server
 *.db
+backend/data/
