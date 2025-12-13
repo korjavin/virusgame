@@ -27,9 +27,6 @@ The project follows a full-stack architecture:
     *   Handles 1v1 challenges and 3-4 player lobbies (`hub.go`).
     *   Authoritative game state validation and synchronization.
 
-### Experimental
-*   **WASM**: A WebAssembly version of the AI (`/wasm`) exists but is currently not the primary AI engine.
-
 ## Building and Running
 
 ### Prerequisites
