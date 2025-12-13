@@ -223,17 +223,17 @@ function endTurn() {
 
         if (currentPlayer === 1) {
             // Check if it's this player's turn
-            // In multiplayer: only if you're player 1
-            // In local mode: always for player 1
-            const isYourTurn = !isMultiplayer || yourPlayer === 1;
+            // In multiplayer: only if current player matches your player
+            // In local mode: always show for player 1
+            const isYourTurn = isMultiplayer ? (yourPlayer === 1) : true;
             // Hide button if not your turn, player used neutrals, started using neutrals, or doesn't have enough cells
             shouldShowButton = isYourTurn && !player1NeutralsUsed && !player1NeutralsStarted && countNonFortifiedCells(1) >= 2;
         } else if (currentPlayer === 2) {
             // Check if it's this player's turn
-            // In multiplayer: only if you're player 2
+            // In multiplayer: only if current player matches your player
             // In local mode with AI: never show for AI player
             // In local mode without AI (hotseat): show for player 2
-            const isYourTurn = isMultiplayer ? yourPlayer === 2 : !aiEnabled;
+            const isYourTurn = isMultiplayer ? (yourPlayer === 2) : !aiEnabled;
             // Hide button if not your turn, player used neutrals, started using neutrals, or doesn't have enough cells
             shouldShowButton = isYourTurn && !player2NeutralsUsed && !player2NeutralsStarted && countNonFortifiedCells(2) >= 2;
         }
