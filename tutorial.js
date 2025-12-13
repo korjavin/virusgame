@@ -26,24 +26,18 @@ const Tutorial = {
                 highlight: "#status"
             },
             {
-                title: i18n.t('tutorialFortifiedTitle'),
-                content: i18n.t('tutorialFortifiedContent'),
-                highlight: "#game-board"
+                title: i18n.t('tutorialGameModeTitle'),
+                content: i18n.t('tutorialGameModeContent'),
+                highlight: ".game-mode-toggle"
             },
             {
-                title: i18n.t('tutorialSettingsTitle'),
-                content: i18n.t('tutorialSettingsContent'),
-                highlight: ".sidebar-section:first-of-type"
-            },
-            {
-                title: i18n.t('tutorialAITitle'),
-                content: i18n.t('tutorialAIContent'),
-                highlight: "#ai-enabled"
-            },
-            {
-                title: i18n.t('tutorialAITuningTitle'),
-                content: i18n.t('tutorialAITuningContent'),
-                highlight: "#ai-tuning-section"
+                title: i18n.t('tutorialLobbyTitle'),
+                content: i18n.t('tutorialLobbyContent'),
+                highlight: "#multiplayer-section",
+                action: () => {
+                    // Switch to multiplayer mode to show the lobby
+                    document.getElementById('mode-multiplayer').click();
+                }
             },
             {
                 title: i18n.t('tutorialMultiplayerTitle'),
@@ -56,19 +50,13 @@ const Tutorial = {
                 highlight: "#notifications"
             },
             {
-                title: i18n.t('tutorialTurnIndicatorTitle'),
-                content: i18n.t('tutorialTurnIndicatorContent'),
-                highlight: "#status"
-            },
-            {
-                title: i18n.t('tutorialDarkThemeTitle'),
-                content: i18n.t('tutorialDarkThemeContent'),
-                highlight: "#theme-toggle"
-            },
-            {
-                title: i18n.t('tutorialHelpTitle'),
-                content: i18n.t('tutorialHelpContent'),
-                highlight: "#help-button"
+                title: i18n.t('tutorialAITitle'),
+                content: i18n.t('tutorialAIContent'),
+                highlight: "#ai-enabled-group",
+                action: () => {
+                    // Switch back to 1v1 mode
+                    document.getElementById('mode-1v1').click();
+                }
             },
             {
                 title: i18n.t('tutorialReadyTitle'),
@@ -83,8 +71,12 @@ const Tutorial = {
         this.isActive = true;
 
         // Show tutorial modal and overlay
-        document.getElementById('tutorial-modal').style.display = 'block';
-        document.getElementById('tutorial-overlay').style.display = 'block';
+        // Use flex to enable the positioning logic in CSS
+        document.getElementById('tutorial-modal').style.display = 'flex';
+        // We do NOT show the overlay here because the highlight element itself
+        // provides the dimming via a large box-shadow.
+        // Showing #tutorial-overlay would double-darken the screen and obscure the highlighted area.
+        document.getElementById('tutorial-overlay').style.display = 'none';
 
         this.showStep();
         this.setupEventListeners();
@@ -123,31 +115,65 @@ const Tutorial = {
         prevBtn.textContent = i18n.t('previous');
         nextBtn.textContent = this.currentStep === steps.length - 1 ? i18n.t('finish') : i18n.t('next');
 
-        // Highlight element if specified
-        this.highlightElement(step.highlight);
-
-        // Scroll highlighted element into view
-        if (step.highlight) {
-            const element = document.querySelector(step.highlight);
-            if (element) {
-                setTimeout(() => {
-                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 300);
-            }
+        // Execute step action if defined
+        if (step.action) {
+            step.action();
         }
+
+        // Highlight element if specified
+        // Delay slightly to allow UI updates (like switching tabs) to complete
+        setTimeout(() => {
+            this.highlightElement(step.highlight);
+
+            // Scroll highlighted element into view
+            if (step.highlight) {
+                const element = document.querySelector(step.highlight);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    // Check if element is low on screen and move modal to top if needed
+                    const rect = element.getBoundingClientRect();
+                    const windowHeight = window.innerHeight;
+                    const modal = document.getElementById('tutorial-modal');
+
+                    if (rect.bottom > windowHeight * 0.7) {
+                        // Element is in bottom 30% of screen, move modal to top
+                        modal.style.justifyContent = 'flex-start';
+                        modal.style.paddingTop = '20px';
+                        modal.style.paddingBottom = '0';
+                    } else {
+                        // Reset to bottom
+                        modal.style.justifyContent = 'flex-end';
+                        modal.style.paddingTop = '0';
+                        modal.style.paddingBottom = '20px';
+                    }
+                }
+            }
+        }, 100);
     },
 
     highlightElement(selector) {
         const highlightDiv = document.getElementById('tutorial-highlight');
+        const overlayDiv = document.getElementById('tutorial-overlay');
 
         if (!selector) {
             highlightDiv.style.display = 'none';
+            // If no highlight, we might want to show the overlay to dim the background?
+            // But currently the design seems to rely on highlight box-shadow.
+            // If we are just showing a modal without highlight, maybe we should show overlay?
+            // But let's keep it simple and consistent: if no highlight, no dimming (or full dimming?).
+            // Let's assume 'null' highlight means general intro/outro, so maybe show overlay?
+            overlayDiv.style.display = 'block';
             return;
         }
+
+        // If we have a highlight, hide the full screen overlay because the highlight provides the dimming.
+        overlayDiv.style.display = 'none';
 
         const element = document.querySelector(selector);
         if (!element) {
             highlightDiv.style.display = 'none';
+            overlayDiv.style.display = 'block'; // Fallback to overlay if element not found
             return;
         }
 
