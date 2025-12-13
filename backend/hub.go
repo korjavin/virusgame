@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -288,14 +287,14 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 	rows := challenge.Rows
 	cols := challenge.Cols
 
-	board := make([][]interface{}, rows)
+	board := make(Board, rows)
 	for i := range board {
-		board[i] = make([]interface{}, cols)
+		board[i] = make([]CellValue, cols)
 	}
 
 	// Set base positions
-	board[0][0] = "1-base"
-	board[rows-1][cols-1] = "2-base"
+	board[0][0] = NewCell(1, CellFlagBase)
+	board[rows-1][cols-1] = NewCell(2, CellFlagBase)
 
 	game := &Game{
 		ID:            gameID,
@@ -420,13 +419,11 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 
 	// Check if it's a valid target (empty or opponent cell)
 	isValidTarget := false
-	if cellValue == nil {
+	if cellValue == 0 {
 		isValidTarget = true
 	} else {
-		cellStr := fmt.Sprintf("%v", cellValue)
 		// Can attack opponent's non-fortified, non-base, non-killed cells
-		if len(cellStr) > 0 && cellStr[0] != byte('0'+playerNum) &&
-		   !strings.Contains(cellStr, "fortified") && !strings.Contains(cellStr, "base") && cellStr != "killed" {
+        if cellValue.Player() != playerNum && cellValue.CanBeAttacked() {
 			isValidTarget = true
 		}
 	}
@@ -436,11 +433,11 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 	}
 
 	// Apply move
-	if cellValue == nil {
-		game.Board[row][col] = playerNum
+	if cellValue == 0 {
+		game.Board[row][col] = NewCell(playerNum, CellFlagNormal)
 	} else {
 		// Attacking opponent cell - fortify it
-		game.Board[row][col] = fmt.Sprintf("%d-fortified", playerNum)
+		game.Board[row][col] = NewCell(playerNum, CellFlagFortified)
 	}
 
 	game.MovesLeft--
@@ -487,11 +484,8 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 				for i := 0; i < game.Rows; i++ {
 					for j := 0; j < game.Cols; j++ {
 						cell := game.Board[i][j]
-						if cell != nil {
-							cellStr := fmt.Sprintf("%v", cell)
-							if len(cellStr) > 0 && cellStr[0] == byte('0'+playerNum) {
-								game.Board[i][j] = nil
-							}
+						if cell != 0 && cell.Player() == playerNum {
+							game.Board[i][j] = 0
 						}
 					}
 				}
@@ -548,8 +542,12 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 
 	// Mark cells as killed
 	for _, cell := range msg.Cells {
-		if game.Board[cell.Row][cell.Col] == playerNum {
-			game.Board[cell.Row][cell.Col] = "killed"
+		if game.Board[cell.Row][cell.Col].Player() == playerNum {
+            // Note: Killed cell has no player (Player 0) but has FlagKilled (0x30)
+            // But wait, if it's killed, it should probably belong to no one.
+            // "0x30 = neutral/killed (0x30 flag + 0x00 no player)"
+            // So we use NewCell(0, CellFlagKilled)
+			game.Board[cell.Row][cell.Col] = NewCell(0, CellFlagKilled)
 		}
 	}
 
@@ -708,11 +706,9 @@ func (h *Hub) handleResign(user *User, msg *Message) {
 		for i := 0; i < game.Rows; i++ {
 			for j := 0; j < game.Cols; j++ {
 				cell := game.Board[i][j]
-				if cell != nil {
-					cellStr := fmt.Sprintf("%v", cell)
-					if len(cellStr) > 0 && cellStr[0] == byte('0'+resignedPlayer) {
-						game.Board[i][j] = "killed"
-					}
+				if cell != 0 && cell.Player() == resignedPlayer {
+					// Mark as killed (neutral)
+                    game.Board[i][j] = NewCell(0, CellFlagKilled)
 				}
 			}
 		}
@@ -967,13 +963,12 @@ func (h *Hub) checkWinCondition(game *Game) {
 	for i := 0; i < game.Rows; i++ {
 		for j := 0; j < game.Cols; j++ {
 			cell := game.Board[i][j]
-			if cell == nil {
+			if cell == 0 {
 				continue
 			}
-			cellStr := fmt.Sprintf("%v", cell)
-			if len(cellStr) > 0 && cellStr[0] == '1' {
+            if cell.Player() == 1 {
 				player1Count++
-			} else if len(cellStr) > 0 && cellStr[0] == '2' {
+			} else if cell.Player() == 2 {
 				player2Count++
 			}
 		}
@@ -1032,18 +1027,16 @@ func (h *Hub) isValidMove(game *Game, row, col, player int) bool {
 	cellValue := game.Board[row][col]
 
 	// Can't attack fortified, base, or neutral (killed) cells
-	if cellValue != nil {
-		cellStr := fmt.Sprintf("%v", cellValue)
-		if len(cellStr) > 0 && (strings.Contains(cellStr, "fortified") || strings.Contains(cellStr, "base") || cellStr == "killed") {
+	if cellValue != 0 {
+        if !cellValue.CanBeAttacked() {
 			return false
 		}
 	}
 
 	// Must be empty or opponent cell (not own cell)
-	if cellValue != nil {
-		cellStr := fmt.Sprintf("%v", cellValue)
-		// If cell belongs to this player, it's not a valid target
-		if len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+	if cellValue != 0 {
+        // If cell belongs to this player, it's not a valid target
+		if cellValue.Player() == player {
 			return false
 		}
 	}
@@ -1059,9 +1052,8 @@ func (h *Hub) isValidMove(game *Game, row, col, player int) bool {
 
 			if adjRow >= 0 && adjRow < game.Rows && adjCol >= 0 && adjCol < game.Cols {
 				adjCell := game.Board[adjRow][adjCol]
-				if adjCell != nil {
-					adjStr := fmt.Sprintf("%v", adjCell)
-					if len(adjStr) > 0 && adjStr[0] == byte('0'+player) {
+				if adjCell != 0 {
+                    if adjCell.Player() == player {
 						// Check if this cell is connected to base
 						if h.isConnectedToBase(game, adjRow, adjCol, player) {
 							return true
@@ -1117,9 +1109,8 @@ func (h *Hub) isConnectedToBase(game *Game, startRow, startCol, player int) bool
 					key := fmt.Sprintf("%d,%d", newRow, newCol)
 					if !visited[key] {
 						cell := game.Board[newRow][newCol]
-						if cell != nil {
-							cellStr := fmt.Sprintf("%v", cell)
-							if len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+						if cell != 0 {
+                            if cell.Player() == player {
 								visited[key] = true
 								stack = append(stack, struct{ row, col int }{newRow, newCol})
 							}
@@ -1674,9 +1665,9 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 	rows := lobby.Rows
 	cols := lobby.Cols
 
-	board := make([][]interface{}, rows)
+	board := make(Board, rows)
 	for i := range board {
-		board[i] = make([]interface{}, cols)
+		board[i] = make([]CellValue, cols)
 	}
 
 	// Determine base positions based on number of players
@@ -1693,7 +1684,8 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 	for i := 0; i < lobby.MaxPlayers; i++ {
 		if lobby.Players[i] != nil {
 			gamePlayers[i] = lobby.Players[i]
-			board[basePositions[i].Row][basePositions[i].Col] = fmt.Sprintf("%d-base", i+1)
+            // Set base cell for player i+1
+			board[basePositions[i].Row][basePositions[i].Col] = NewCell(i+1, CellFlagBase)
 			activePlayers++
 		}
 	}
@@ -1896,10 +1888,9 @@ func (h *Hub) endTurn(game *Game) {
 						for i := 0; i < game.Rows; i++ {
 							for j := 0; j < game.Cols; j++ {
 								cell := game.Board[i][j]
-								if cell != nil {
-									cellStr := fmt.Sprintf("%v", cell)
-									if len(cellStr) > 0 && cellStr[0] == byte('0'+nextPlayer) {
-										game.Board[i][j] = nil
+								if cell != 0 {
+                                    if cell.Player() == nextPlayer {
+										game.Board[i][j] = 0
 									}
 								}
 							}
@@ -2073,9 +2064,8 @@ func (h *Hub) countPlayerPieces(game *Game, player int) int {
 	for i := 0; i < game.Rows; i++ {
 		for j := 0; j < game.Cols; j++ {
 			cell := game.Board[i][j]
-			if cell != nil {
-				cellStr := fmt.Sprintf("%v", cell)
-				if len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+			if cell != 0 {
+                if cell.Player() == player {
 					count++
 				}
 			}
@@ -2107,10 +2097,9 @@ func (h *Hub) eliminateDisconnectedPlayers(game *Game) {
 						for row := 0; row < game.Rows; row++ {
 							for col := 0; col < game.Cols; col++ {
 								cell := game.Board[row][col]
-								if cell != nil {
-									cellStr := fmt.Sprintf("%v", cell)
-									if len(cellStr) > 0 && cellStr[0] == byte('0'+i) {
-										game.Board[row][col] = nil
+								if cell != 0 {
+                                    if cell.Player() == i {
+										game.Board[row][col] = 0
 									}
 								}
 							}

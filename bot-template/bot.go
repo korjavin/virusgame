@@ -14,7 +14,7 @@ type Bot struct {
     Username     string
     CurrentGame  string
     YourPlayer   int
-    Board        [][]interface{}
+    Board        [][]CellValue // Changed to [][]CellValue
 }
 
 func NewBot(backendURL string) *Bot {
@@ -62,9 +62,9 @@ func (b *Bot) handleMessage(msg *Message) {
     case "multiplayer_game_start":
         b.CurrentGame = msg.GameID
         b.YourPlayer = msg.YourPlayer
-        b.Board = make([][]interface{}, msg.Rows)
+        b.Board = make([][]CellValue, msg.Rows)
         for i := range b.Board {
-            b.Board[i] = make([]interface{}, msg.Cols)
+            b.Board[i] = make([]CellValue, msg.Cols)
         }
         log.Printf("Game started, I am player %d", b.YourPlayer)
 
@@ -112,10 +112,10 @@ func (b *Bot) applyMove(row, col, player int) {
         return
     }
     cell := b.Board[row][col]
-    if cell == nil {
-        b.Board[row][col] = player
+    if cell == 0 {
+        b.Board[row][col] = NewCell(player, CellFlagNormal)
     } else {
-        b.Board[row][col] = player // fortified
+        b.Board[row][col] = NewCell(player, CellFlagFortified)
     }
 }
 

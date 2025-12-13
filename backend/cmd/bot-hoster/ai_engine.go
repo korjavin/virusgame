@@ -33,6 +33,49 @@ const (
 	upperBound
 )
 
+// Cell value constants and helpers - imported logic from backend/types.go
+// Note: We duplicate these here because they are in different packages (main vs bot-hoster)
+// Ideally these should be in a shared package, but for now we keep it simple as requested
+const (
+    CellFlagNormal    byte = 0x00
+    CellFlagBase      byte = 0x10
+    CellFlagFortified byte = 0x20
+    CellFlagKilled    byte = 0x30
+
+    FlagMask   byte = 0x30
+    PlayerMask byte = 0x0F
+)
+
+type CellValue byte
+
+func NewCell(player int, flag byte) CellValue {
+    return CellValue(flag | byte(player))
+}
+
+func (c CellValue) Player() int {
+    return int(byte(c) & PlayerMask)
+}
+
+func (c CellValue) Flag() byte {
+    return byte(c) & FlagMask
+}
+
+func (c CellValue) IsBase() bool {
+    return c.Flag() == CellFlagBase
+}
+
+func (c CellValue) IsFortified() bool {
+    return c.Flag() == CellFlagFortified
+}
+
+func (c CellValue) IsKilled() bool {
+    return c.Flag() == CellFlagKilled
+}
+
+func (c CellValue) CanBeAttacked() bool {
+    return c.Flag() == CellFlagNormal
+}
+
 func NewAIEngine(settings *BotSettings) *AIEngine {
 	return &AIEngine{
 		settings:   settings,
@@ -81,7 +124,7 @@ func (ai *AIEngine) CalculateMove(state *GameState, player int) (int, int, bool)
 
 // GameState represents the current state of the game
 type GameState struct {
-	Board       [][]interface{}
+	Board       [][]CellValue
 	Rows        int
 	Cols        int
 	PlayerBases [4]CellPos
@@ -123,24 +166,19 @@ func (ai *AIEngine) isValidMove(state *GameState, row, col, player int) bool {
 	}
 
 	cell := state.Board[row][col]
-	cellStr := fmt.Sprintf("%v", cell)
 
 	// Cannot move on fortified or base cells
-	if cell != nil {
-		if strings.HasSuffix(cellStr, "-fortified") || strings.HasSuffix(cellStr, "-base") {
+	if cell != 0 {
+        if !cell.CanBeAttacked() {
 			return false
 		}
 	}
 
 	// Can only attack opponent's non-fortified cells or expand to empty cells
-	if cell != nil {
+	if cell != 0 {
 		isOpponent := false
-		// state.Players is only set during initialization and might not be reliable for quick checks
-		// Check player ID from cell string directly
-		cellPlayer := 0
-		if len(cellStr) > 0 {
-			cellPlayer = int(cellStr[0] - '0')
-		}
+
+		cellPlayer := cell.Player()
 
 		if cellPlayer != player && cellPlayer > 0 && cellPlayer <= 4 {
 			isOpponent = true
@@ -166,8 +204,7 @@ func (ai *AIEngine) isAdjacentAndConnected(state *GameState, row, col, player in
 			adjCol := col + j
 			if adjRow >= 0 && adjRow < state.Rows && adjCol >= 0 && adjCol < state.Cols {
 				adjCell := state.Board[adjRow][adjCol]
-				adjStr := fmt.Sprintf("%v", adjCell)
-				if adjCell != nil && len(adjStr) > 0 && adjStr[0] == byte('0'+player) {
+				if adjCell != 0 && adjCell.Player() == player {
 					if ai.isConnectedToBase(state, adjRow, adjCol, player) {
 						return true
 					}
@@ -204,8 +241,7 @@ func (ai *AIEngine) isConnectedToBase(state *GameState, startRow, startCol, play
 
 				if newRow >= 0 && newRow < state.Rows && newCol >= 0 && newCol < state.Cols && !visited[key] {
 					cell := state.Board[newRow][newCol]
-					cellStr := fmt.Sprintf("%v", cell)
-					if cell != nil && len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+					if cell != 0 && cell.Player() == player {
 						visited[key] = true
 						stack = append(stack, struct{ row, col int }{newRow, newCol})
 					}
@@ -489,13 +525,12 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 	for r := 0; r < state.Rows; r++ {
 		for c := 0; c < state.Cols; c++ {
 			cell := state.Board[r][c]
-			cellStr := fmt.Sprintf("%v", cell)
 
-			if cell != nil && len(cellStr) > 0 {
-				if cellStr[0] == byte('0'+aiPlayer) {
+			if cell != 0 {
+				if cell.Player() == aiPlayer {
 					// AI cell
 					aiCells++
-					if strings.HasSuffix(cellStr, "-fortified") {
+					if cell.IsFortified() {
 						aiFortified++
 					}
 
@@ -526,7 +561,7 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 				} else {
 					// Opponent cell
 					opponentCells++
-					if strings.HasSuffix(cellStr, "-fortified") {
+					if cell.IsFortified() {
 						opponentFortified++
 					}
 
@@ -537,7 +572,7 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 					}
 
 					// Opponent aggression and redundancy
-					opponentPlayer := ai.getCellPlayer(cellStr)
+					opponentPlayer := cell.Player()
 					if opponentPlayer > 0 {
 						// Distance to AI base
 						aiBase := state.PlayerBases[aiPlayer-1]
@@ -608,7 +643,6 @@ func (ai *AIEngine) evaluateBoard(state *GameState, aiPlayer int) float64 {
 
 func (ai *AIEngine) scoreMoveQuick(state *GameState, move Move, player int) float64 {
 	cellValue := state.Board[move.Row][move.Col]
-	cellStr := fmt.Sprintf("%v", cellValue)
 	score := 0.0
 
 	// PRIORITY 0: Check if this move defeats any opponent (kills a player)
@@ -621,7 +655,8 @@ func (ai *AIEngine) scoreMoveQuick(state *GameState, move Move, player int) floa
 
 	// 1. Capturing opponent cells (1500 points, +800 if fortified)
 	isCapture := false
-	if cellValue != nil && len(cellStr) > 0 {
+	if cellValue != 0 {
+        cellPlayer := cellValue.Player()
 		for p := 1; p <= 4; p++ {
 			// Check if player is active
 			isActive := false
@@ -632,10 +667,10 @@ func (ai *AIEngine) scoreMoveQuick(state *GameState, move Move, player int) floa
 				}
 			}
 
-			if p != player && isActive && cellStr[0] == byte('0'+p) {
+			if p != player && isActive && cellPlayer == p {
 				isCapture = true
 				score += 1500.0
-				if strings.HasSuffix(cellStr, "-fortified") {
+				if cellValue.IsFortified() {
 					score += 800.0
 				}
 				// Bonus for capturing cells near their base (aggressive play)
@@ -661,11 +696,10 @@ func (ai *AIEngine) scoreMoveQuick(state *GameState, move Move, player int) floa
 		nc := move.Col + dir[1]
 		if nr >= 0 && nr < state.Rows && nc >= 0 && nc < state.Cols {
 			neighbor := state.Board[nr][nc]
-			neighborStr := fmt.Sprintf("%v", neighbor)
-			if neighbor != nil && len(neighborStr) > 0 {
-				if neighborStr[0] == byte('0'+player) {
+			if neighbor != 0 {
+				if neighbor.Player() == player {
 					friendlyNeighbors++
-					if strings.HasSuffix(neighborStr, "-fortified") {
+					if neighbor.IsFortified() {
 						fortifiedNeighbors++
 					}
 				} else {
@@ -717,33 +751,33 @@ func (ai *AIEngine) scoreMoveQuick(state *GameState, move Move, player int) floa
 	return score
 }
 
-func (ai *AIEngine) copyBoard(board [][]interface{}) [][]interface{} {
-	newBoard := make([][]interface{}, len(board))
+func (ai *AIEngine) copyBoard(board [][]CellValue) [][]CellValue {
+	newBoard := make([][]CellValue, len(board))
 	for i := range board {
-		newBoard[i] = make([]interface{}, len(board[i]))
+		newBoard[i] = make([]CellValue, len(board[i]))
 		copy(newBoard[i], board[i])
 	}
 	return newBoard
 }
 
-func (ai *AIEngine) applyMoveToBoard(board [][]interface{}, row, col, player int) {
+func (ai *AIEngine) applyMoveToBoard(board [][]CellValue, row, col, player int) {
 	cell := board[row][col]
-	if cell == nil {
-		board[row][col] = player
+	if cell == 0 {
+		board[row][col] = NewCell(player, CellFlagNormal)
 	} else {
-		board[row][col] = fmt.Sprintf("%d-fortified", player)
+		board[row][col] = NewCell(player, CellFlagFortified)
 	}
 }
 
-func (ai *AIEngine) hashBoard(board [][]interface{}, player int) string {
+func (ai *AIEngine) hashBoard(board [][]CellValue, player int) string {
 	var key strings.Builder
 	key.WriteString(fmt.Sprintf("P%d:", player))
 	for r := range board {
 		for c := range board[r] {
-			if board[r][c] == nil {
+			if board[r][c] == 0 {
 				key.WriteString("_")
 			} else {
-				key.WriteString(fmt.Sprintf("%v", board[r][c]))
+				key.WriteString(fmt.Sprintf("%d", board[r][c]))
 			}
 			key.WriteString(",")
 		}
@@ -789,8 +823,7 @@ func (ai *AIEngine) countPlayerPieces(state *GameState, player int) int {
 	for r := 0; r < state.Rows; r++ {
 		for c := 0; c < state.Cols; c++ {
 			cell := state.Board[r][c]
-			cellStr := fmt.Sprintf("%v", cell)
-			if cell != nil && len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+			if cell != 0 && cell.Player() == player {
 				count++
 			}
 		}
@@ -817,7 +850,7 @@ func (ai *AIEngine) getOpponentBases(state *GameState, aiPlayer int) []CellPos {
 	return bases
 }
 
-func (ai *AIEngine) countFriendlyNeighborsOnBoard(board [][]interface{}, row, col, player, rows, cols int) int {
+func (ai *AIEngine) countFriendlyNeighborsOnBoard(board [][]CellValue, row, col, player, rows, cols int) int {
 	count := 0
 	for i := -1; i <= 1; i++ {
 		for j := -1; j <= 1; j++ {
@@ -828,8 +861,7 @@ func (ai *AIEngine) countFriendlyNeighborsOnBoard(board [][]interface{}, row, co
 			nc := col + j
 			if nr >= 0 && nr < rows && nc >= 0 && nc < cols {
 				cell := board[nr][nc]
-				cellStr := fmt.Sprintf("%v", cell)
-				if cell != nil && len(cellStr) > 0 && cellStr[0] == byte('0'+player) {
+				if cell != 0 && cell.Player() == player {
 					count++
 				}
 			}
@@ -838,11 +870,11 @@ func (ai *AIEngine) countFriendlyNeighborsOnBoard(board [][]interface{}, row, co
 	return count
 }
 
-func (ai *AIEngine) countPlayerNeighborsOnBoard(board [][]interface{}, row, col, player, rows, cols int) int {
+func (ai *AIEngine) countPlayerNeighborsOnBoard(board [][]CellValue, row, col, player, rows, cols int) int {
 	return ai.countFriendlyNeighborsOnBoard(board, row, col, player, rows, cols)
 }
 
-func (ai *AIEngine) countOpponentNeighborsOnBoard(board [][]interface{}, row, col, player, rows, cols int) int {
+func (ai *AIEngine) countOpponentNeighborsOnBoard(board [][]CellValue, row, col, player, rows, cols int) int {
 	count := 0
 	for i := -1; i <= 1; i++ {
 		for j := -1; j <= 1; j++ {
@@ -853,8 +885,7 @@ func (ai *AIEngine) countOpponentNeighborsOnBoard(board [][]interface{}, row, co
 			nc := col + j
 			if nr >= 0 && nr < rows && nc >= 0 && nc < cols {
 				cell := board[nr][nc]
-				cellStr := fmt.Sprintf("%v", cell)
-				if cell != nil && len(cellStr) > 0 && cellStr[0] != byte('0'+player) {
+				if cell != 0 && cell.Player() != player {
 					count++
 				}
 			}
@@ -863,14 +894,8 @@ func (ai *AIEngine) countOpponentNeighborsOnBoard(board [][]interface{}, row, co
 	return count
 }
 
-func (ai *AIEngine) getCellPlayer(cellStr string) int {
-	if len(cellStr) > 0 {
-		playerChar := cellStr[0]
-		if playerChar >= '1' && playerChar <= '4' {
-			return int(playerChar - '0')
-		}
-	}
-	return 0
+func (ai *AIEngine) getCellPlayer(cell CellValue) int {
+	return cell.Player()
 }
 
 func (ai *AIEngine) getClosestOpponentBase(state *GameState, player int, fromRow, fromCol int) *CellPos {
@@ -912,18 +937,13 @@ func abs(x int) int {
 func (ai *AIEngine) checkIfMoveDefeatsOpponent(state *GameState, move Move, player int) int {
 	// Get the cell we're targeting
 	cellValue := state.Board[move.Row][move.Col]
-	if cellValue == nil {
+	if cellValue == 0 {
 		// Expanding into empty space - cannot defeat anyone
 		return 0
 	}
 
-	cellStr := fmt.Sprintf("%v", cellValue)
-	if len(cellStr) == 0 {
-		return 0
-	}
-
 	// Get the targeted opponent player
-	targetPlayer := ai.getCellPlayer(cellStr)
+	targetPlayer := cellValue.Player()
 	if targetPlayer == 0 || targetPlayer == player {
 		return 0
 	}
@@ -946,14 +966,11 @@ func (ai *AIEngine) checkIfMoveDefeatsOpponent(state *GameState, move Move, play
 	for r := 0; r < state.Rows && opponentPieceCount <= 1; r++ {
 		for c := 0; c < state.Cols && opponentPieceCount <= 1; c++ {
 			cell := state.Board[r][c]
-			if cell != nil {
-				cellStr := fmt.Sprintf("%v", cell)
-				if len(cellStr) > 0 && ai.getCellPlayer(cellStr) == targetPlayer {
-					opponentPieceCount++
-					// Early exit if we find more than 1 piece
-					if opponentPieceCount > 1 {
-						return 0
-					}
+			if cell != 0 && cell.Player() == targetPlayer {
+				opponentPieceCount++
+				// Early exit if we find more than 1 piece
+				if opponentPieceCount > 1 {
+					return 0
 				}
 			}
 		}

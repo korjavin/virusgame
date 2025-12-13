@@ -1,3 +1,45 @@
+// Cell Constants and Bit Flags
+const CellFlag = {
+    NORMAL: 0x00,
+    BASE: 0x10,
+    FORTIFIED: 0x20,
+    KILLED: 0x30
+};
+
+const EMPTY = 0x00;
+const FLAG_MASK = 0x30;
+const PLAYER_MASK = 0x0F;
+
+// Helper functions for cell manipulation
+function createCell(player, flag = CellFlag.NORMAL) {
+    return (flag | player);
+}
+
+function getPlayer(cell) {
+    return cell & PLAYER_MASK;
+}
+
+function getFlag(cell) {
+    return cell & FLAG_MASK;
+}
+
+function isBase(cell) {
+    return (cell & FLAG_MASK) === CellFlag.BASE;
+}
+
+function isFortified(cell) {
+    return (cell & FLAG_MASK) === CellFlag.FORTIFIED;
+}
+
+function isKilled(cell) {
+    return (cell & FLAG_MASK) === CellFlag.KILLED;
+}
+
+function canBeAttacked(cell) {
+    // Only normal cells can be attacked (not base, fortified, or killed)
+    return (cell & FLAG_MASK) === CellFlag.NORMAL;
+}
+
 let rows, cols, board, currentPlayer, movesLeft, player1Base, player2Base, gameOver, aiEnabled;
 let gameBoard, statusDisplay, newGameButton, rowsInput, colsInput, aiEnabledCheckbox, putNeutralsButton, aiDepthInput, aiDepthSetting, aiTimeInput, aiTimeSetting, resignButton;
 // Track neutral usage for all 4 players (index 0-3 for players 1-4)
@@ -54,7 +96,8 @@ function isConnectedToBase(startRow, startCol, player) {
 
                 if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols && !visited.has(`${newRow},${newCol}`)) {
                     const cellValue = board[newRow][newCol];
-                    if (cellValue && String(cellValue).startsWith(player)) {
+                    // Using new bit-packed format
+                    if (cellValue !== EMPTY && getPlayer(cellValue) === player) {
                         visited.add(`${newRow},${newCol}`);
                         stack.push({ row: newRow, col: newCol });
                     }
@@ -67,15 +110,16 @@ function isConnectedToBase(startRow, startCol, player) {
 
 function isValidMove(row, col, player) {
     const cellValue = board[row][col];
-    if (typeof cellValue === 'string' && (cellValue.includes('fortified') || cellValue.includes('base') || cellValue === 'killed')) {
-        return false; // Cannot attack fortified, base, or neutral (killed) cells
-    }
 
-    // Check if cell is empty or belongs to an opponent
-    if (cellValue !== null) {
-        const cellStr = String(cellValue);
-        if (cellStr.startsWith(player.toString())) {
-            return false; // Cannot place on own cell
+    // Check if cell is occupied and not attackable (base, fortified, killed)
+    if (cellValue !== EMPTY) {
+        if (!canBeAttacked(cellValue)) {
+            return false;
+        }
+
+        // Cannot place on own cell
+        if (getPlayer(cellValue) === player) {
+            return false;
         }
     }
 
@@ -88,7 +132,7 @@ function isValidMove(row, col, player) {
 
             if (adjRow >= 0 && adjRow < rows && adjCol >= 0 && adjCol < cols) {
                 const adjCellValue = board[adjRow][adjCol];
-                if (adjCellValue && String(adjCellValue).startsWith(player) && isConnectedToBase(adjRow, adjCol, player)) {
+                if (adjCellValue !== EMPTY && getPlayer(adjCellValue) === player && isConnectedToBase(adjRow, adjCol, player)) {
                     return true;
                 }
             }
@@ -138,22 +182,25 @@ function renderBoard() {
 
             const cellValue = board[i][j];
 
-            // Handle player cells (1, 2, 3, 4)
-            for (let p = 1; p <= 4; p++) {
-                if (cellValue === p) {
-                    cell.classList.add(`player${p}`);
-                    cell.textContent = playerSymbols[p - 1];
-                } else if (cellValue === `${p}-fortified`) {
-                    cell.classList.add(`player${p}-fortified`);
-                    cell.textContent = playerSymbols[p - 1];
-                } else if (cellValue === `${p}-base`) {
-                    cell.classList.add(`player${p}-base`);
-                    cell.textContent = playerSymbols[p - 1];
+            if (cellValue !== EMPTY) {
+                if (isKilled(cellValue)) {
+                    cell.classList.add('killed');
+                } else {
+                    const p = getPlayer(cellValue);
+                    if (p > 0) {
+                        const symbol = playerSymbols[p - 1];
+                        if (isBase(cellValue)) {
+                            cell.classList.add(`player${p}-base`);
+                            cell.textContent = symbol;
+                        } else if (isFortified(cellValue)) {
+                            cell.classList.add(`player${p}-fortified`);
+                            cell.textContent = symbol;
+                        } else {
+                            cell.classList.add(`player${p}`);
+                            cell.textContent = symbol;
+                        }
+                    }
                 }
-            }
-
-            if (cellValue === 'killed') {
-                cell.classList.add('killed');
             }
 
             gameBoard.appendChild(cell);
@@ -267,7 +314,7 @@ function updateStatus() {
 }
 
 function countNonFortifiedCells(player) {
-    return board.flat().filter(cell => cell === player).length;
+    return board.flat().filter(cell => getPlayer(cell) === player && !isFortified(cell) && !isBase(cell)).length;
 }
 
 function endTurn() {
@@ -294,8 +341,8 @@ function endTurn() {
 
 function checkWinCondition() {
     if (gameOver) return;
-    const player1Pieces = board.flat().filter(cell => String(cell).startsWith('1')).length;
-    const player2Pieces = board.flat().filter(cell => String(cell).startsWith('2')).length;
+    const player1Pieces = board.flat().filter(cell => getPlayer(cell) === 1).length;
+    const player2Pieces = board.flat().filter(cell => getPlayer(cell) === 2).length;
 
     let winner = 0;
     if (player1Pieces === 0) {
@@ -347,8 +394,9 @@ function handleCellClick(event) {
 
     if (neutralMode) {
         const cellValue = board[row][col];
-        if (cellValue === currentPlayer) {
-            board[row][col] = 'killed';
+        if (getPlayer(cellValue) === currentPlayer) {
+            // Mark as killed (neutral)
+            board[row][col] = createCell(0, CellFlag.KILLED);
             neutralsPlaced++;
 
             // Store cells for multiplayer
@@ -415,19 +463,16 @@ function handleCellClick(event) {
         // Local mode only - apply move locally
         const cellValue = board[row][col];
 
-        if (cellValue === null) {
+        if (cellValue === EMPTY) {
             // Place on empty cell - just the number, not fortified
-            board[row][col] = currentPlayer;
+            board[row][col] = createCell(currentPlayer, CellFlag.NORMAL);
         } else {
             // Attacking opponent's cell - it becomes ours and fortified
             // This should only happen if it's a non-fortified, non-base opponent cell
-            const cellStr = String(cellValue);
-
-            // Check it's opponent's non-fortified cell
-            if (!cellStr.includes('fortified') && !cellStr.includes('base') &&
-                !cellStr.startsWith(currentPlayer.toString())) {
+            // isValidMove already checks attackability
+            if (canBeAttacked(cellValue) && getPlayer(cellValue) !== currentPlayer) {
                 // Capture it and make it fortified
-                board[row][col] = `${currentPlayer}-fortified`;
+                board[row][col] = createCell(currentPlayer, CellFlag.FORTIFIED);
             } else {
                 return; // Invalid attack
             }
@@ -565,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
             aiDepth = parseInt(aiDepthInput.value);
         }
 
-        board = Array(rows).fill(null).map(() => Array(cols).fill(null));
+        board = Array(rows).fill(EMPTY).map(() => Array(cols).fill(EMPTY));
 
         currentPlayer = 1;
         movesLeft = 3;
@@ -584,8 +629,8 @@ document.addEventListener('DOMContentLoaded', () => {
         player1Base = { row: 0, col: 0 };
         player2Base = { row: rows - 1, col: cols - 1 };
 
-        board[player1Base.row][player1Base.col] = '1-base';
-        board[player2Base.row][player2Base.col] = '2-base';
+        board[player1Base.row][player1Base.col] = createCell(1, CellFlag.BASE);
+        board[player2Base.row][player2Base.col] = createCell(2, CellFlag.BASE);
 
         // Assign random connection styles to players
         // Shuffle connectionStyles
@@ -732,9 +777,9 @@ function buildConnectionTree(player) {
     }
 
     // Check if base exists on board (it might have been overwritten if that's possible, though base shouldn't be)
-    if (!board[base.row][base.col] || !String(board[base.row][base.col]).includes('base')) {
-         // In 1v1 mode, base variable tracks position, but check board content to be safe
-         // Actually in script.js logic, base cells are marked '1-base', '2-base' etc.
+    // Using bit check instead of string check
+    if (!isBase(board[base.row][base.col])) {
+         // Base destroyed or invalid
          // If base is destroyed (not currently possible in game rules but good for safety), return empty
     }
 
@@ -762,7 +807,7 @@ function buildConnectionTree(player) {
                     if (!visited.has(neighborKey)) {
                         const cellValue = board[neighborRow][neighborCol];
                         // Check if cell belongs to player
-                        if (cellValue && String(cellValue).startsWith(player)) {
+                        if (cellValue !== EMPTY && getPlayer(cellValue) === player) {
                             visited.add(neighborKey);
                             tree.set(neighborKey, current); // Parent is current
                             queue.push({ row: neighborRow, col: neighborCol });
@@ -785,7 +830,7 @@ function updateAllConnectionTrees() {
     // Update for all players (1-4)
     for (let p = 1; p <= 4; p++) {
         // Only process if player has presence on board
-        const hasPresence = board.flat().some(cell => cell && String(cell).startsWith(p));
+        const hasPresence = board.flat().some(cell => cell !== EMPTY && getPlayer(cell) === p);
         if (hasPresence) {
             const tree = buildConnectionTree(p);
             drawConnectionTree(p, tree);
