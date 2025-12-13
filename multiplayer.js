@@ -106,9 +106,6 @@ class MultiplayerClient {
             case 'game_end':
                 this.handleGameEnd(msg);
                 break;
-            case 'rematch_received':
-                this.handleRematchReceived(msg);
-                break;
             case 'opponent_disconnected':
                 this.handleOpponentDisconnected(msg);
                 break;
@@ -163,12 +160,11 @@ class MultiplayerClient {
             // Multiplayer mode (3-4 players) - show leave game button
             this.showLeaveGameButton();
         } else {
-            // 1v1 mode - show result and rematch button, auto-cleanup
+            // 1v1 mode - show result and auto-cleanup
             const winnerText = msg.winner === this.yourPlayer ? 'You win!' : 'You lose!';
             if (statusDisplay) {
                 statusDisplay.textContent = `Game Over! ${winnerText}`;
             }
-            this.showRematchButton();
             // Auto-cleanup 1v1 game state after a short delay
             setTimeout(() => {
                 this.endMultiplayerGame();
@@ -276,12 +272,6 @@ class MultiplayerClient {
 
         // Reset move timer
         this.resetMoveTimer();
-    }
-
-    handleRematchReceived(msg) {
-        // Rematch is now just a regular challenge, so this won't be called
-        // But keep it for compatibility
-        this.showNotification('Rematch Request', `${this.opponentUsername} wants a rematch!`);
     }
 
     handleOpponentDisconnected(msg) {
@@ -413,23 +403,6 @@ class MultiplayerClient {
         // Hide neutral button
         const neutralBtn = document.getElementById('put-neutrals-button');
         if (neutralBtn) neutralBtn.style.display = 'none';
-        
-        // Show rematch button
-        this.showRematchButton();
-    }
-
-    requestRematch() {
-        if (!this.opponentId) {
-            this.showNotification('Error', 'No opponent to rematch with');
-            return;
-        }
-        // Simply send a new challenge to the same opponent
-        this.challengeUser(this.opponentId);
-        this.showNotification('Rematch', `Rematch request sent to ${this.opponentUsername}!`);
-    }
-
-    acceptRematch(gameId) {
-        // Not used - rematch is just a new challenge
     }
 
     startMultiplayerGame(rows, cols) {
@@ -724,18 +697,6 @@ class MultiplayerClient {
                 notification.remove();
             }
         }, 30000);
-    }
-
-    showRematchButton() {
-        // Don't show rematch button in multiplayer mode
-        if (this.isMultiplayerGame) {
-            return;
-        }
-
-        const rematchBtn = document.getElementById('rematch-button');
-        if (rematchBtn) {
-            rematchBtn.style.display = 'block';
-        }
     }
 
     showNotification(title, message, options = {}) {

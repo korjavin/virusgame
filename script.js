@@ -317,7 +317,6 @@ function checkWinCondition() {
         if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
             const youWon = winner === mpClient.yourPlayer;
             statusDisplay.textContent = youWon ? i18n.t('youWin') : i18n.t('youLose');
-            // Don't show rematch button in multiplayer (doesn't work)
         } else {
             // Local mode
             statusDisplay.textContent = i18n.t('playerWins', { player: winner });
