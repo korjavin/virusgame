@@ -206,6 +206,22 @@ func (ai *AIEngine) getAllValidMoves(state *GameState, player int) []Move {
 			}
 		}
 	}
+
+	// Debug logging when no moves found
+	if len(moves) == 0 {
+		log.Printf("[AI DEBUG] No valid moves found for player %d. Board snapshot:", player)
+		playerPieceCount := 0
+		for row := 0; row < state.Rows; row++ {
+			for col := 0; col < state.Cols; col++ {
+				cell := state.Board[row][col]
+				if cell != 0 && cell.Player() == player {
+					playerPieceCount++
+				}
+			}
+		}
+		log.Printf("[AI DEBUG] Player %d has %d pieces on board", player, playerPieceCount)
+	}
+
 	return moves
 }
 

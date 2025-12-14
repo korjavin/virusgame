@@ -1089,14 +1089,23 @@ func (h *Hub) checkWinCondition(game *Game) {
 func (h *Hub) canMakeAnyMove(game *Game, player int) bool {
 	// Check if player can make any valid move
 	validMoves := 0
+	var firstValidMove *struct{ row, col int }
 	for row := 0; row < game.Rows; row++ {
 		for col := 0; col < game.Cols; col++ {
 			if h.isValidMove(game, row, col, player) {
 				validMoves++
+				if firstValidMove == nil {
+					firstValidMove = &struct{ row, col int }{row, col}
+				}
 			}
 		}
 	}
-	log.Printf("canMakeAnyMove: Player %d has %d valid moves on a %dx%d board", player, validMoves, game.Rows, game.Cols)
+	if firstValidMove != nil {
+		log.Printf("canMakeAnyMove: Player %d has %d valid moves (first: %d,%d) on a %dx%d board",
+			player, validMoves, firstValidMove.row, firstValidMove.col, game.Rows, game.Cols)
+	} else {
+		log.Printf("canMakeAnyMove: Player %d has 0 valid moves on a %dx%d board", player, game.Rows, game.Cols)
+	}
 	return validMoves > 0
 }
 
