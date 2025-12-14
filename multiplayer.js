@@ -583,11 +583,15 @@ class MultiplayerClient {
             gameId: this.gameId
         });
 
-        // Reset local state
+        // Reset local state - CRITICAL: reset multiplayerMode to prevent state pollution
         this.gameId = null;
         this.yourPlayer = null;
+        this.opponentId = null;
+        this.opponentUsername = null;
         this.gamePlayers = [];
+        this.playerSymbol = null;
         this.isMultiplayerGame = false;
+        this.multiplayerMode = false;
         this.stopMoveTimer();
 
         // Hide game buttons and players display
