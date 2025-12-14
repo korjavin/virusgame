@@ -91,6 +91,9 @@ class MultiplayerClient {
             case 'challenge_declined':
                 this.handleChallengeDeclined(msg);
                 break;
+            case 'challenge_expired':
+                this.handleChallengeExpired(msg);
+                break;
             case 'game_start':
                 this.handleGameStart(msg);
                 break;
@@ -194,6 +197,21 @@ class MultiplayerClient {
 
     handleChallengeDeclined(msg) {
         this.showNotification('Challenge Declined', 'Your challenge was declined');
+    }
+
+    handleChallengeExpired(msg) {
+        // Find notification by challenge ID and remove it
+        const notification = document.querySelector(`.challenge-notification[data-challenge-id="${msg.challengeId}"]`);
+        if (notification) {
+            notification.remove();
+        }
+
+        // If I was the sender (msg.username present means "expired to user X"), show toast
+        if (msg.username) {
+            this.showNotification('Challenge Expired', `Challenge to ${msg.username} expired`);
+        }
+
+        this.pendingChallenges.delete(msg.challengeId);
     }
 
     handleGameStart(msg) {
@@ -715,6 +733,7 @@ class MultiplayerClient {
     showChallengeNotification(msg) {
         const notification = document.createElement('div');
         notification.className = 'challenge-notification';
+        notification.setAttribute('data-challenge-id', msg.challengeId);
         notification.innerHTML = `
             <p><strong>${msg.fromUsername}</strong> challenges you to a game!</p>
             <button class="accept-btn">Accept</button>
@@ -736,13 +755,13 @@ class MultiplayerClient {
             notification.remove();
         });
 
-        // Auto-decline after 30 seconds
+        // Auto-decline after 60 seconds (client-side fallback, server handles real expiration)
         setTimeout(() => {
             if (notification.parentNode) {
-                this.declineChallenge(msg.challengeId);
+                // Just remove visual, server handles logic
                 notification.remove();
             }
-        }, 30000);
+        }, 60000);
     }
 
     showNotification(title, message, options = {}) {
