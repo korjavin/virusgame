@@ -516,6 +516,11 @@ class MultiplayerClient {
         this.gamePlayers = [];
         this.playerSymbol = null;
 
+        // Hide chat and restore lobby view
+        if (typeof lobbyManager !== 'undefined' && lobbyManager) {
+            lobbyManager.exitLobbyView();
+        }
+
         // Reset status
         if (statusDisplay) {
             statusDisplay.textContent = 'Multiplayer game ended. Start a new local game or challenge another player.';
@@ -591,12 +596,17 @@ class MultiplayerClient {
         const playersInfo = document.getElementById('players-info');
 
         if (resignBtn) resignBtn.style.display = 'none';
-        
+
         const neutralBtn = document.getElementById('put-neutrals-button');
         if (neutralBtn) neutralBtn.style.display = 'none';
-        
+
         if (leaveGameBtn) leaveGameBtn.style.display = 'none';
         if (playersInfo) playersInfo.remove();
+
+        // Hide chat and restore lobby view
+        if (typeof lobbyManager !== 'undefined' && lobbyManager) {
+            lobbyManager.exitLobbyView();
+        }
 
         // Show notification
         this.showNotification('Left Game', 'You have left the game');

@@ -203,8 +203,12 @@ class LobbyManager {
         this.currentLobbySection.style.display = 'none';
         this.multiplayerSection.style.display = 'block';
         this.refreshLobbies();
-        // Don't clear chat log when exiting to game - keep chat history
-        // this.clearChatLog();
+
+        // Clear chat log when completely leaving (not during game)
+        this.clearChatLog();
+
+        // Restore full lobby view elements
+        this.restoreLobbyView();
     }
 
     // Show only the chat panel during multiplayer game
