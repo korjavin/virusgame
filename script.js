@@ -353,6 +353,74 @@ function renderBoard() {
     }
 }
 
+// Global AudioContext for ping sounds (lazy initialized)
+let pingAudioCtx = null;
+
+// Initialize AudioContext on first user interaction to comply with browser autoplay policies
+document.addEventListener('click', function initAudio() {
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext && !pingAudioCtx) {
+            pingAudioCtx = new AudioContext();
+        }
+        if (pingAudioCtx && pingAudioCtx.state === 'suspended') {
+            pingAudioCtx.resume();
+        }
+        // Remove listener after first interaction
+        document.removeEventListener('click', initAudio);
+    } catch (e) {
+        console.warn('AudioContext init failed:', e);
+    }
+}, { once: true });
+
+// Function to highlight a cell (ping effect)
+function highlightCell(row, col, playerIndex) {
+    const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+    if (!cell) return;
+
+    // Add generic class and player-specific class
+    cell.classList.add('ping-highlight');
+    if (playerIndex >= 1 && playerIndex <= 4) {
+        cell.classList.add(`p${playerIndex}`);
+    }
+
+    // Play sound if possible (subtle ping)
+    try {
+        if (pingAudioCtx) {
+            if (pingAudioCtx.state === 'suspended') {
+                pingAudioCtx.resume();
+            }
+
+            const osc = pingAudioCtx.createOscillator();
+            const gain = pingAudioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(pingAudioCtx.destination);
+
+            // Higher pitch for ping
+            const now = pingAudioCtx.currentTime;
+            osc.frequency.setValueAtTime(800, now);
+            osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+
+            osc.start(now);
+            osc.stop(now + 0.1);
+        }
+    } catch (e) {
+        // Ignore audio errors
+        console.warn('Audio play failed:', e);
+    }
+
+    // Remove classes after animation finishes (1s)
+    setTimeout(() => {
+        cell.classList.remove('ping-highlight');
+        if (playerIndex >= 1 && playerIndex <= 4) {
+            cell.classList.remove(`p${playerIndex}`);
+        }
+    }, 1000);
+}
+
 function updateStatus() {
     if (gameOver) {
         // Remove animation when game is over
@@ -840,6 +908,72 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     gameBoard.addEventListener('click', handleCellClick);
+
+    // Right-click to highlight (Ping)
+    gameBoard.addEventListener('contextmenu', (event) => {
+        event.preventDefault(); // Prevent default context menu
+
+        // Only allow in multiplayer
+        if (typeof mpClient === 'undefined' || !mpClient.multiplayerMode) return;
+
+        const cell = event.target.closest('.cell');
+        if (!cell) return;
+
+        const row = parseInt(cell.dataset.row);
+        const col = parseInt(cell.dataset.col);
+
+        // Send highlight message
+        mpClient.sendHighlight(row, col);
+
+        // Visual feedback locally is handled when server echoes back the message
+        // but we can add immediate feedback if latency is high, though requirement says
+        // "Upon receiving the event, all clients (including the sender) should display..."
+        // so we'll rely on the echo.
+    });
+
+    // Mobile long-press handling
+    let touchTimer;
+    let touchStartCell = null;
+
+    gameBoard.addEventListener('touchstart', (event) => {
+        const cell = event.target.closest('.cell');
+        if (!cell) return;
+
+        // Only allow in multiplayer
+        if (typeof mpClient === 'undefined' || !mpClient.multiplayerMode) return;
+
+        touchStartCell = cell;
+        touchTimer = setTimeout(() => {
+            if (touchStartCell === cell) {
+                // Long press detected
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                mpClient.sendHighlight(row, col);
+
+                // Provide haptic feedback if available
+                if (navigator.vibrate) navigator.vibrate(50);
+
+                touchStartCell = null; // Prevent click handling if any
+            }
+        }, 600); // 600ms for long press
+    }, {passive: true});
+
+    gameBoard.addEventListener('touchend', () => {
+        if (touchTimer) {
+            clearTimeout(touchTimer);
+            touchTimer = null;
+        }
+        touchStartCell = null;
+    });
+
+    gameBoard.addEventListener('touchmove', () => {
+        // Cancel if moved
+        if (touchTimer) {
+            clearTimeout(touchTimer);
+            touchTimer = null;
+        }
+        touchStartCell = null;
+    }, {passive: true});
 
     // Resign button handler
     if (resignButton) {
