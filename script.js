@@ -219,8 +219,10 @@ function updateStatus() {
         return;
     }
 
-    // Multiplayer mode status
-    if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+    const isMultiplayer = typeof mpClient !== 'undefined' && mpClient.multiplayerMode;
+
+    if (isMultiplayer) {
+        // Multiplayer mode status
         const isYourTurn = currentPlayer === mpClient.yourPlayer;
         const playerSymbol = mpClient.playerSymbol || playerSymbols[mpClient.yourPlayer - 1];
 
@@ -253,17 +255,31 @@ function updateStatus() {
                 statusDisplay.classList.remove('your-turn');
             }
         }
-        // Don't return yet - need to handle neutral button below
-    }
+    } else {
+        // Local mode status
+        if (statusDisplay) {
+            // Apply 'your-turn' class logic for local games
+            let shouldHighlight = false;
 
-    // Local mode status - remove animation
-    if (statusDisplay) {
-        statusDisplay.classList.remove('your-turn');
+            if (aiEnabled) {
+                // In AI mode, highlight only for Player 1 (Human)
+                if (currentPlayer === 1) shouldHighlight = true;
+            } else {
+                // In Hotseat mode (PvP), highlight for both players to prompt them to move
+                shouldHighlight = true;
+            }
 
-        if (neutralMode) {
-            statusDisplay.textContent = i18n.t('placeNeutralPlayer', { player: currentPlayer, count: 2 - neutralsPlaced });
-        } else {
-            statusDisplay.textContent = i18n.t('playerTurn', { player: currentPlayer, moves: movesLeft });
+            if (shouldHighlight && !gameOver) {
+                statusDisplay.classList.add('your-turn');
+            } else {
+                statusDisplay.classList.remove('your-turn');
+            }
+
+            if (neutralMode) {
+                statusDisplay.textContent = i18n.t('placeNeutralPlayer', { player: currentPlayer, count: 2 - neutralsPlaced });
+            } else {
+                statusDisplay.textContent = i18n.t('playerTurn', { player: currentPlayer, moves: movesLeft });
+            }
         }
     }
 
