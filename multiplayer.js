@@ -23,6 +23,23 @@ class MultiplayerClient {
         this.moveTimerInterval = null;
     }
 
+    /**
+     * Reset all multiplayer game state to clean defaults
+     * This is the SINGLE SOURCE OF TRUTH for state cleanup
+     * Call this whenever transitioning from multiplayer → local or ending a game
+     */
+    resetGameState() {
+        this.gameId = null;
+        this.yourPlayer = null;
+        this.opponentId = null;
+        this.opponentUsername = null;
+        this.gamePlayers = [];
+        this.playerSymbol = null;
+        this.isMultiplayerGame = false;
+        this.multiplayerMode = false;
+        this.stopMoveTimer();
+    }
+
     connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -505,16 +522,8 @@ class MultiplayerClient {
     }
 
     endMultiplayerGame() {
-        // Stop move timer
-        this.stopMoveTimer();
-        this.multiplayerMode = false;
-        this.isMultiplayerGame = false;
-        this.gameId = null;
-        this.yourPlayer = null;
-        this.opponentId = null;
-        this.opponentUsername = null;
-        this.gamePlayers = [];
-        this.playerSymbol = null;
+        // Reset all game state using centralized method
+        this.resetGameState();
 
         // Hide chat and restore lobby view
         if (typeof lobbyManager !== 'undefined' && lobbyManager) {
@@ -583,16 +592,8 @@ class MultiplayerClient {
             gameId: this.gameId
         });
 
-        // Reset local state - CRITICAL: reset multiplayerMode to prevent state pollution
-        this.gameId = null;
-        this.yourPlayer = null;
-        this.opponentId = null;
-        this.opponentUsername = null;
-        this.gamePlayers = [];
-        this.playerSymbol = null;
-        this.isMultiplayerGame = false;
-        this.multiplayerMode = false;
-        this.stopMoveTimer();
+        // Reset all game state using centralized method
+        this.resetGameState();
 
         // Hide game buttons and players display
         const resignBtn = document.getElementById('resign-button');
