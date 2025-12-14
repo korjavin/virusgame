@@ -571,6 +571,23 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		return
 	}
 
+	// Validate exactly 2 cells
+	if len(msg.Cells) != 2 {
+		log.Printf("Neutrals invalid: must supply exactly 2 cells (got %d)", len(msg.Cells))
+		return
+	}
+
+	// Validate cells belong to player
+	for _, cell := range msg.Cells {
+		if cell.Row < 0 || cell.Row >= game.Rows || cell.Col < 0 || cell.Col >= game.Cols {
+			return
+		}
+		if game.Board[cell.Row][cell.Col].Player() != playerNum {
+			log.Printf("Neutrals invalid: cell (%d,%d) does not belong to player %d", cell.Row, cell.Col, playerNum)
+			return
+		}
+	}
+
 	// Mark cells as killed
 	for _, cell := range msg.Cells {
 		if game.Board[cell.Row][cell.Col].Player() == playerNum {
