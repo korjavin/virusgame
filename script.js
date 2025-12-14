@@ -1018,6 +1018,22 @@ function drawConnectionTree(player, tree) {
             break;
     }
 
+    // Special handling for Player 3 (Triangle) to prevent obscuring the symbol
+    if (player === 3) {
+        connectionCtx.globalCompositeOperation = 'destination-out';
+        connectionCtx.fillStyle = 'black'; // Color doesn't matter for destination-out
+        const halfCell = cellSize / 2;
+        // Radius slightly larger than typical symbol size to ensure clarity
+        const maskRadius = cellSize * 0.25;
+
+        for (const key of tree.keys()) {
+            const [r, c] = key.split(',').map(Number);
+            connectionCtx.beginPath();
+            connectionCtx.arc(c * cellSize + halfCell, r * cellSize + halfCell, maskRadius, 0, Math.PI * 2);
+            connectionCtx.fill();
+        }
+    }
+
     connectionCtx.restore();
 }
 
