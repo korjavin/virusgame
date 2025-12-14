@@ -361,6 +361,7 @@ function updateStatus() {
     }
 
     const isMultiplayer = typeof mpClient !== 'undefined' && mpClient.multiplayerMode;
+    const inHistoryMode = gameHistory.isHistoryMode();
 
     if (isMultiplayer) {
         // Multiplayer mode status
@@ -370,7 +371,12 @@ function updateStatus() {
         if (neutralMode) {
             if (statusDisplay) {
                 statusDisplay.textContent = i18n.t('placeNeutral', { count: 2 - neutralsPlaced });
-                statusDisplay.classList.add('your-turn');
+                // Don't add 'your-turn' class in history mode
+                if (!inHistoryMode) {
+                    statusDisplay.classList.add('your-turn');
+                } else {
+                    statusDisplay.classList.remove('your-turn');
+                }
             }
         } else if (isYourTurn) {
             if (statusDisplay) {
@@ -381,7 +387,12 @@ function updateStatus() {
                     // 1v1 mode
                     statusDisplay.textContent = i18n.t('yourTurn', { symbol: playerSymbol, opponent: mpClient.opponentUsername, moves: movesLeft });
                 }
-                statusDisplay.classList.add('your-turn');
+                // Don't add 'your-turn' class in history mode
+                if (!inHistoryMode) {
+                    statusDisplay.classList.add('your-turn');
+                } else {
+                    statusDisplay.classList.remove('your-turn');
+                }
             }
         } else {
             if (statusDisplay) {
@@ -410,7 +421,8 @@ function updateStatus() {
                 shouldHighlight = true;
             }
 
-            if (shouldHighlight && !gameOver) {
+            // Don't highlight in history mode
+            if (shouldHighlight && !gameOver && !inHistoryMode) {
                 statusDisplay.classList.add('your-turn');
             } else {
                 statusDisplay.classList.remove('your-turn');
@@ -440,30 +452,33 @@ function updateStatus() {
         // Determine if we should show the button
         let shouldShowButton = false;
 
-        // Check if it's your turn
-        let isYourTurn = false;
-        if (isMultiplayer) {
-            // Multiplayer: only show when it's your player's turn
-            isYourTurn = (currentPlayer === yourPlayer);
-        } else {
-            // Local mode
-            if (currentPlayer === 1) {
-                isYourTurn = true; // Always show for player 1 in local mode
-            } else if (currentPlayer === 2) {
-                isYourTurn = !aiEnabled; // Only show for player 2 if not AI (hotseat mode)
+        // Never show button in history mode
+        if (!inHistoryMode) {
+            // Check if it's your turn
+            let isYourTurn = false;
+            if (isMultiplayer) {
+                // Multiplayer: only show when it's your player's turn
+                isYourTurn = (currentPlayer === yourPlayer);
+            } else {
+                // Local mode
+                if (currentPlayer === 1) {
+                    isYourTurn = true; // Always show for player 1 in local mode
+                } else if (currentPlayer === 2) {
+                    isYourTurn = !aiEnabled; // Only show for player 2 if not AI (hotseat mode)
+                }
+                // Players 3-4 not supported in local mode
             }
-            // Players 3-4 not supported in local mode
-        }
 
-        // Check neutral usage for current player (support all 4 players)
-        // Only show button at start of turn (movesLeft === 3)
-        if (isYourTurn && currentPlayer >= 1 && currentPlayer <= 4 && movesLeft === 3) {
-            const playerIndex = currentPlayer - 1;
-            const neutralsUsed = playerNeutralsUsed[playerIndex];
-            const neutralsStarted = playerNeutralsStarted[playerIndex];
-            const playerCells = countNonFortifiedCells(currentPlayer);
+            // Check neutral usage for current player (support all 4 players)
+            // Only show button at start of turn (movesLeft === 3)
+            if (isYourTurn && currentPlayer >= 1 && currentPlayer <= 4 && movesLeft === 3) {
+                const playerIndex = currentPlayer - 1;
+                const neutralsUsed = playerNeutralsUsed[playerIndex];
+                const neutralsStarted = playerNeutralsStarted[playerIndex];
+                const playerCells = countNonFortifiedCells(currentPlayer);
 
-            shouldShowButton = !neutralsUsed && !neutralsStarted && playerCells >= 2;
+                shouldShowButton = !neutralsUsed && !neutralsStarted && playerCells >= 2;
+            }
         }
 
         putNeutralsButton.style.display = shouldShowButton ? 'inline-block' : 'none';
