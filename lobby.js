@@ -203,7 +203,39 @@ class LobbyManager {
         this.currentLobbySection.style.display = 'none';
         this.multiplayerSection.style.display = 'block';
         this.refreshLobbies();
-        this.clearChatLog();
+        // Don't clear chat log when exiting to game - keep chat history
+        // this.clearChatLog();
+    }
+
+    // Show only the chat panel during multiplayer game
+    showChatDuringGame() {
+        // Hide lobby details but keep chat visible
+        if (this.lobbyDetails) {
+            this.lobbyDetails.style.display = 'none';
+        }
+        if (this.leaveLobbyBtn) {
+            this.leaveLobbyBtn.style.display = 'none';
+        }
+        if (this.addBotBtn) {
+            this.addBotBtn.style.display = 'none';
+        }
+        if (this.startGameBtn) {
+            this.startGameBtn.style.display = 'none';
+        }
+
+        // Keep the chat container visible
+        this.currentLobbySection.style.display = 'block';
+        this.multiplayerSection.style.display = 'none';
+    }
+
+    // Restore full lobby view after game ends
+    restoreLobbyView() {
+        if (this.lobbyDetails) {
+            this.lobbyDetails.style.display = 'block';
+        }
+        if (this.leaveLobbyBtn) {
+            this.leaveLobbyBtn.style.display = 'block';
+        }
     }
 
     // Chat Functions
@@ -239,7 +271,8 @@ class LobbyManager {
     }
 
     handleLobbyChat(msg) {
-        if (!this.isInLobby) return;
+        // Accept chat messages both in lobby and during game
+        if (!this.isInLobby && !this.mpClient.isMultiplayerGame) return;
 
         const isSelf = msg.fromUserId === this.mpClient.userId;
         const senderName = isSelf ? 'You' : msg.username;
@@ -252,10 +285,13 @@ class LobbyManager {
             text = msg.content || msg.messageId;
         }
 
-        this.addChatMessage(senderName, text, isSelf);
+        // Include player symbol if available (during game)
+        const playerSymbol = msg.playerSymbol || null;
+
+        this.addChatMessage(senderName, text, isSelf, playerSymbol);
     }
 
-    addChatMessage(sender, text, isSelf) {
+    addChatMessage(sender, text, isSelf, playerSymbol = null) {
         if (!this.chatLog) return;
 
         const msgEl = document.createElement('div');
@@ -263,7 +299,17 @@ class LobbyManager {
 
         const senderEl = document.createElement('div');
         senderEl.className = 'chat-sender';
-        senderEl.textContent = sender;
+
+        // Add player symbol if available (during game)
+        if (playerSymbol) {
+            const symbolEl = document.createElement('span');
+            symbolEl.className = 'chat-player-symbol';
+            symbolEl.textContent = playerSymbol;
+            senderEl.appendChild(symbolEl);
+            senderEl.appendChild(document.createTextNode(' ' + sender));
+        } else {
+            senderEl.textContent = sender;
+        }
 
         const contentEl = document.createElement('div');
         contentEl.className = 'chat-content';

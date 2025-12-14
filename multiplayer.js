@@ -530,9 +530,9 @@ class MultiplayerClient {
         this.isMultiplayerGame = true;
         this.multiplayerMode = true;
 
-        // Exit lobby view when game starts to avoid confusion
+        // Keep chat visible during game
         if (typeof lobbyManager !== 'undefined' && lobbyManager) {
-            lobbyManager.exitLobbyView();
+            lobbyManager.showChatDuringGame();
         }
 
         // Start multiplayer game with more than 2 players

@@ -239,19 +239,44 @@ type ChatLimit struct {
 }
 
 func (h *Hub) handleLobbyChat(user *User, msg *Message) {
-	if !user.InLobby || user.LobbyID == "" {
-		h.sendError(user, "You must be in a lobby to chat")
-		return
-	}
-
-	lobby, exists := h.lobbies[user.LobbyID]
-	if !exists {
-		h.sendError(user, "Lobby not found")
-		return
-	}
-
 	// Rate limiting: Token Bucket / Window Counter
 	// Allow max 3 messages per 10 seconds
+	if !h.checkChatRateLimit(user) {
+		return
+	}
+
+	// Allow chat both in lobby AND during multiplayer games
+	// First check if user is in a lobby
+	if user.InLobby && user.LobbyID != "" {
+		lobby, exists := h.lobbies[user.LobbyID]
+		if !exists {
+			h.sendError(user, "Lobby not found")
+			return
+		}
+		h.broadcastChatToLobby(user, lobby, msg)
+		return
+	}
+
+	// If not in lobby, check if user is in a multiplayer game
+	if user.InGame && user.GameID != "" {
+		game, exists := h.games[user.GameID]
+		if !exists {
+			h.sendError(user, "Game not found")
+			return
+		}
+		if !game.IsMultiplayer {
+			h.sendError(user, "Chat is only available in multiplayer games")
+			return
+		}
+		h.broadcastChatToGame(user, game, msg)
+		return
+	}
+
+	h.sendError(user, "You must be in a lobby or multiplayer game to chat")
+}
+
+// checkChatRateLimit checks if user is within rate limit (3 messages per 10 seconds)
+func (h *Hub) checkChatRateLimit(user *User) bool {
 	now := time.Now()
 	limit, exists := h.userChatLimit[user.ID]
 	if !exists {
@@ -270,13 +295,15 @@ func (h *Hub) handleLobbyChat(user *User, msg *Message) {
 
 	if limit.Count >= 3 {
 		// Rate limit exceeded
-		// h.sendError(user, "Chatting too fast")
-		return
+		return false
 	}
 
 	limit.Count++
+	return true
+}
 
-	// Broadcast to all lobby members
+// broadcastChatToLobby sends a chat message to all players in a lobby
+func (h *Hub) broadcastChatToLobby(user *User, lobby *Lobby, msg *Message) {
 	chatMsg := Message{
 		Type:       "lobby_chat",
 		LobbyID:    lobby.ID,
@@ -289,6 +316,39 @@ func (h *Hub) handleLobbyChat(user *User, msg *Message) {
 	for i := 0; i < lobby.MaxPlayers; i++ {
 		if lobby.Players[i] != nil && lobby.Players[i].User != nil {
 			h.sendToUser(lobby.Players[i].User, &chatMsg)
+		}
+	}
+}
+
+// broadcastChatToGame sends a chat message to all players in a multiplayer game
+// Includes the player's symbol for visual identification
+func (h *Hub) broadcastChatToGame(user *User, game *Game, msg *Message) {
+	// Find the user's player number and symbol
+	var playerNum int
+	var playerSymbol string
+	for i := 0; i < 4; i++ {
+		if game.Players[i] != nil && game.Players[i].User != nil && game.Players[i].User.ID == user.ID {
+			playerNum = i + 1
+			playerSymbol = game.Players[i].Symbol
+			break
+		}
+	}
+
+	chatMsg := Message{
+		Type:         "lobby_chat",
+		GameID:       game.ID,
+		FromUserID:   user.ID,
+		Username:     user.Username,
+		PlayerSymbol: playerSymbol,
+		Player:       playerNum,
+		MessageID:    msg.MessageID,
+		Content:      msg.Content,
+	}
+
+	// Send to all players in the game
+	for i := 0; i < 4; i++ {
+		if game.Players[i] != nil && game.Players[i].User != nil {
+			h.sendToUser(game.Players[i].User, &chatMsg)
 		}
 	}
 }
