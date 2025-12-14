@@ -1,4 +1,4 @@
-# Bot Template
+# Bot Template (Go)
 
 Quick-start template for building your own game bot in Go.
 
@@ -6,7 +6,7 @@ Quick-start template for building your own game bot in Go.
 
 ```bash
 # 1. Clone or copy this template
-cp -r bot-template my-bot
+cp -r bot-templates/go my-bot
 cd my-bot
 
 # 2. Install dependencies
