@@ -183,6 +183,15 @@ class MultiplayerClient {
             case 'lobby_chat':
                 if (lobbyManager) lobbyManager.handleLobbyChat(msg);
                 break;
+            case 'highlight_cell':
+                this.handleHighlightCell(msg);
+                break;
+        }
+    }
+
+    handleHighlightCell(msg) {
+        if (typeof highlightCell === 'function') {
+            highlightCell(msg.row, msg.col, msg.player);
         }
     }
 
@@ -479,6 +488,15 @@ class MultiplayerClient {
     sendMove(row, col) {
         this.send({
             type: 'move',
+            gameId: this.gameId,
+            row: row,
+            col: col,
+        });
+    }
+
+    sendHighlight(row, col) {
+        this.send({
+            type: 'highlight_cell',
             gameId: this.gameId,
             row: row,
             col: col,

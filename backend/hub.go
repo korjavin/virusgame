@@ -33,6 +33,7 @@ type Hub struct {
 	lobbies       map[string]*Lobby
 	botRequests   map[string]*BotRequest // requestID -> BotRequest
 	userChatLimit map[string]*ChatLimit  // userID -> chat limit state
+	userPingLimit map[string]*PingLimit  // userID -> ping limit state
 	register      chan *Client
 	unregister    chan *Client
 	handleMessage chan *MessageWrapper
@@ -47,6 +48,7 @@ func newHub() *Hub {
 		lobbies:       make(map[string]*Lobby),
 		botRequests:   make(map[string]*BotRequest),
 		userChatLimit: make(map[string]*ChatLimit),
+		userPingLimit: make(map[string]*PingLimit),
 		register:      make(chan *Client),
 		unregister:    make(chan *Client),
 		handleMessage: make(chan *MessageWrapper, 256), // Buffered to prevent deadlock when sending internal messages
@@ -184,6 +186,7 @@ func (h *Hub) handleDisconnect(client *Client) {
 
 	delete(h.users, user.ID)
 	delete(h.userChatLimit, user.ID) // Clean up chat rate limit state
+	delete(h.userPingLimit, user.ID) // Clean up ping rate limit state
 	h.broadcastUserList()
 }
 
@@ -227,6 +230,8 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 		h.handleGetLobbies(client.user, msg)
 	case "lobby_chat":
 		h.handleLobbyChat(client.user, msg)
+	case "highlight_cell":
+		h.handleHighlightCell(client.user, msg)
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
 	}
@@ -234,6 +239,12 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 
 // ChatLimit tracks rate limiting state for a user
 type ChatLimit struct {
+	Count       int
+	WindowStart time.Time
+}
+
+// PingLimit tracks rate limiting state for pings
+type PingLimit struct {
 	Count       int
 	WindowStart time.Time
 }
@@ -275,6 +286,68 @@ func (h *Hub) handleLobbyChat(user *User, msg *Message) {
 	h.sendError(user, "You must be in a lobby or multiplayer game to chat")
 }
 
+func (h *Hub) handleHighlightCell(user *User, msg *Message) {
+	// Rate limiting: 10 pings per 5 seconds
+	if !h.checkPingRateLimit(user) {
+		return
+	}
+
+	// Check if user is in a game
+	if !user.InGame || user.GameID == "" {
+		return
+	}
+
+	game, exists := h.games[user.GameID]
+	if !exists {
+		return
+	}
+
+	// Validate coordinates
+	if msg.Row == nil || msg.Col == nil {
+		return
+	}
+
+	// Bounds check
+	if *msg.Row < 0 || *msg.Row >= game.Rows || *msg.Col < 0 || *msg.Col >= game.Cols {
+		return
+	}
+
+	// Determine player number/symbol
+	var playerNum int
+	var playerSymbol string
+	if game.IsMultiplayer {
+		for i := 0; i < 4; i++ {
+			if game.Players[i] != nil && game.Players[i].User != nil && game.Players[i].User.ID == user.ID {
+				playerNum = i + 1
+				playerSymbol = game.Players[i].Symbol
+				break
+			}
+		}
+	} else {
+		if game.Player1 != nil && game.Player1.ID == user.ID {
+			playerNum = 1
+			playerSymbol = "X"
+		} else if game.Player2 != nil && game.Player2.ID == user.ID {
+			playerNum = 2
+			playerSymbol = "O"
+		}
+	}
+
+	// Create broadcast message
+	highlightMsg := Message{
+		Type:         "highlight_cell",
+		GameID:       game.ID,
+		Row:          msg.Row,
+		Col:          msg.Col,
+		Player:       playerNum,
+		PlayerSymbol: playerSymbol,
+		FromUserID:   user.ID,
+	}
+
+	// Broadcast to game (including sender)
+	h.broadcastToGame(game, &highlightMsg)
+}
+
 // checkChatRateLimit checks if user is within rate limit (3 messages per 10 seconds)
 func (h *Hub) checkChatRateLimit(user *User) bool {
 	now := time.Now()
@@ -294,6 +367,33 @@ func (h *Hub) checkChatRateLimit(user *User) bool {
 	}
 
 	if limit.Count >= 3 {
+		// Rate limit exceeded
+		return false
+	}
+
+	limit.Count++
+	return true
+}
+
+// checkPingRateLimit checks if user is within rate limit (10 pings per 5 seconds)
+func (h *Hub) checkPingRateLimit(user *User) bool {
+	now := time.Now()
+	limit, exists := h.userPingLimit[user.ID]
+	if !exists {
+		limit = &PingLimit{
+			Count:       0,
+			WindowStart: now,
+		}
+		h.userPingLimit[user.ID] = limit
+	}
+
+	// Reset window if > 5 seconds passed
+	if now.Sub(limit.WindowStart) > 5*time.Second {
+		limit.Count = 0
+		limit.WindowStart = now
+	}
+
+	if limit.Count >= 10 {
 		// Rate limit exceeded
 		return false
 	}
