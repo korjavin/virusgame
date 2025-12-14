@@ -7,10 +7,9 @@ Welcome! This guide shows you how to create your own bot for the multiplayer gam
 1. [Overview](#overview)
 2. [Protocol](#protocol)
 3. [Quick Start](#quick-start)
-4. [Bot Template](#bot-template)
+4. [Bot Templates](#bot-templates)
 5. [AI Strategies](#ai-strategies)
 6. [Deployment](#deployment)
-7. [Examples](#examples)
 
 ---
 
@@ -194,35 +193,39 @@ Game over! Return to idle state.
 
 ### Prerequisites
 
-- Go 1.21+ installed
+- Go 1.21+ (for Go bot)
+- Python 3.8+ (for Python bot)
+- Node.js 14+ (for JS bot)
 - Game server running and accessible
 
-### Clone Template
+### Choose a Template
+
+We provide templates for Go, Python, and JavaScript in the `bot-templates/` directory.
+
+#### Go Template
 
 ```bash
-git clone https://github.com/yourserver/bot-template.git
-cd bot-template
-```
-
-### Configure
-
-Edit `.env`:
-
-```env
-BACKEND_URL=ws://your-server.com/ws
-```
-
-### Run
-
-```bash
+cd bot-templates/go
+# Edit .env to set BACKEND_URL
 go run .
 ```
 
-Output:
+#### Python Template
+
+```bash
+cd bot-templates/python
+pip install -r requirements.txt
+# Set BACKEND_URL env var if needed
+python bot.py
 ```
-Bot connected to ws://your-server.com/ws
-Bot registered as AI-BraveOctopus42
-Bot waiting for games...
+
+#### JavaScript Template
+
+```bash
+cd bot-templates/javascript
+npm install
+# Set BACKEND_URL env var if needed
+npm start
 ```
 
 ### Test
@@ -233,272 +236,44 @@ Bot waiting for games...
 
 ---
 
-## Bot Template
+## Bot Templates
 
-See `bot-template/` directory for a complete example.
-
-### Structure
+The repository contains starter kits in the `bot-templates/` directory:
 
 ```
-bot-template/
-├── main.go           # Entry point
-├── bot.go            # Bot client
-├── ai.go             # AI strategy
-├── protocol.go       # Message types
-├── .env             # Configuration
-├── Dockerfile        # Docker build
-└── README.md         # Quick start
+bot-templates/
+├── go/               # Go implementation
+├── python/           # Python implementation
+└── javascript/       # JavaScript (Node.js) implementation
 ```
 
-### main.go
+Each template includes:
+-   **WebSocket connection logic**: Handles the communication protocol.
+-   **Game State**: Tracks the board, players, and current turn.
+-   **Valid Move Logic**: Ensures the bot only attempts legal moves.
+-   **Stub AI**: A random move generator you can replace with your own strategy.
 
-```go
-package main
+### Python Bot Structure
 
-import (
-    "log"
-    "os"
-)
+-   `bot.py`: Main entry point. Handles WebSocket connection and protocol.
+-   `game.py`: Game logic helper. Implements board state and move validation.
 
-func main() {
-    backendURL := os.Getenv("BACKEND_URL")
-    if backendURL == "" {
-        backendURL = "ws://localhost:8080/ws"
-    }
+### JavaScript Bot Structure
 
-    bot := NewBot(backendURL)
-
-    if err := bot.Connect(); err != nil {
-        log.Fatal(err)
-    }
-
-    log.Println("Bot running... Press Ctrl+C to stop")
-    bot.Run()
-}
-```
-
-### bot.go
-
-```go
-package main
-
-import (
-    "encoding/json"
-    "log"
-
-    "github.com/gorilla/websocket"
-)
-
-type Bot struct {
-    WS           *websocket.Conn
-    BackendURL   string
-    UserID       string
-    Username     string
-    CurrentGame  string
-    YourPlayer   int
-    Board        [][]interface{}
-}
-
-func NewBot(backendURL string) *Bot {
-    return &Bot{BackendURL: backendURL}
-}
-
-func (b *Bot) Connect() error {
-    ws, _, err := websocket.DefaultDialer.Dial(b.BackendURL, nil)
-    if err != nil {
-        return err
-    }
-    b.WS = ws
-    log.Printf("Bot connected to %s", b.BackendURL)
-    return nil
-}
-
-func (b *Bot) Run() {
-    defer b.WS.Close()
-
-    for {
-        var msg Message
-        if err := b.WS.ReadJSON(&msg); err != nil {
-            log.Printf("Error: %v", err)
-            return
-        }
-
-        b.handleMessage(&msg)
-    }
-}
-
-func (b *Bot) handleMessage(msg *Message) {
-    switch msg.Type {
-    case "welcome":
-        b.UserID = msg.UserID
-        b.Username = msg.Username
-        log.Printf("Bot registered as %s", b.Username)
-
-    case "bot_wanted":
-        log.Printf("Bot requested for lobby %s", msg.LobbyID)
-        b.joinLobby(msg.LobbyID)
-
-    case "lobby_joined":
-        log.Printf("Joined lobby")
-
-    case "multiplayer_game_start":
-        b.CurrentGame = msg.GameID
-        b.YourPlayer = msg.YourPlayer
-        b.Board = make([][]interface{}, msg.Rows)
-        for i := range b.Board {
-            b.Board[i] = make([]interface{}, msg.Cols)
-        }
-        log.Printf("Game started, I am player %d", b.YourPlayer)
-
-    case "turn_change":
-        if msg.Player == b.YourPlayer {
-            b.makeMove()
-        }
-
-    case "move_made":
-        if msg.Row != nil && msg.Col != nil {
-            b.applyMove(*msg.Row, *msg.Col, msg.Player)
-        }
-
-    case "game_end":
-        log.Printf("Game ended, winner: player %d", msg.Winner)
-        b.CurrentGame = ""
-    }
-}
-
-func (b *Bot) joinLobby(lobbyID string) {
-    msg := Message{
-        Type:    "join_lobby",
-        LobbyID: lobbyID,
-    }
-    b.sendMessage(&msg)
-}
-
-func (b *Bot) makeMove() {
-    // Simple AI: find first valid move
-    row, col := b.findValidMove()
-
-    msg := Message{
-        Type:   "move",
-        GameID: b.CurrentGame,
-        Row:    &row,
-        Col:    &col,
-    }
-
-    b.sendMessage(&msg)
-    log.Printf("Sent move: (%d, %d)", row, col)
-}
-
-func (b *Bot) findValidMove() (int, int) {
-    // TODO: Implement your AI here!
-    // This simple version just returns (1, 1)
-    // See ai.go for a more sophisticated implementation
-    return 1, 1
-}
-
-func (b *Bot) applyMove(row, col, player int) {
-    cell := b.Board[row][col]
-    if cell == nil {
-        b.Board[row][col] = player
-    } else {
-        b.Board[row][col] = player // fortified
-    }
-}
-
-func (b *Bot) sendMessage(msg *Message) {
-    data, _ := json.Marshal(msg)
-    b.WS.WriteMessage(websocket.TextMessage, data)
-}
-```
-
-### protocol.go
-
-```go
-package main
-
-type Message struct {
-    Type         string           `json:"type"`
-    UserID       string           `json:"userId,omitempty"`
-    Username     string           `json:"username,omitempty"`
-    LobbyID      string           `json:"lobbyId,omitempty"`
-    GameID       string           `json:"gameId,omitempty"`
-    YourPlayer   int              `json:"yourPlayer,omitempty"`
-    Player       int              `json:"player,omitempty"`
-    Row          *int             `json:"row,omitempty"`
-    Col          *int             `json:"col,omitempty"`
-    Rows         int              `json:"rows,omitempty"`
-    Cols         int              `json:"cols,omitempty"`
-    MovesLeft    int              `json:"movesLeft,omitempty"`
-    Winner       int              `json:"winner,omitempty"`
-    GamePlayers  []GamePlayerInfo `json:"gamePlayers,omitempty"`
-    BotSettings  *BotSettings     `json:"botSettings,omitempty"`
-    Lobby        *LobbyInfo       `json:"lobby,omitempty"`
-}
-
-type GamePlayerInfo struct {
-    PlayerIndex int    `json:"playerIndex"`
-    Username    string `json:"username"`
-    Symbol      string `json:"symbol"`
-    IsBot       bool   `json:"isBot"`
-    IsActive    bool   `json:"isActive"`
-}
-
-type BotSettings struct {
-    MaterialWeight   float64 `json:"materialWeight"`
-    MobilityWeight   float64 `json:"mobilityWeight"`
-    PositionWeight   float64 `json:"positionWeight"`
-    RedundancyWeight float64 `json:"redundancyWeight"`
-    CohesionWeight   float64 `json:"cohesionWeight"`
-    SearchDepth      int     `json:"searchDepth"`
-}
-
-type LobbyInfo struct {
-    LobbyID    string `json:"lobbyId"`
-    HostName   string `json:"hostName"`
-    MaxPlayers int    `json:"maxPlayers"`
-}
-```
+-   `bot.js`: Main entry point. Handles WebSocket connection and protocol.
+-   `game.js`: Game logic helper. Implements board state and move validation.
 
 ---
 
 ## AI Strategies
 
-### Strategy 1: Random Bot
+### Strategy 1: Random Bot (Included)
 
-Picks random valid moves:
-
-```go
-func (b *Bot) findValidMove() (int, int) {
-    for row := 0; row < len(b.Board); row++ {
-        for col := 0; col < len(b.Board[0]); col++ {
-            if b.isValidMove(row, col) {
-                return row, col
-            }
-        }
-    }
-    return 0, 0
-}
-```
+Picks random valid moves. This is implemented in the templates by default.
 
 ### Strategy 2: Greedy Bot
 
-Always captures opponent cells when possible:
-
-```go
-func (b *Bot) findBestMove() (int, int) {
-    // First, look for opponent cells to capture
-    for row := 0; row < len(b.Board); row++ {
-        for col := 0; col < len(b.Board[0]); col++ {
-            if b.isOpponentCell(row, col) && b.canCapture(row, col) {
-                return row, col // Capture!
-            }
-        }
-    }
-
-    // Otherwise, expand territory
-    return b.findExpansionMove()
-}
-```
+Always captures opponent cells when possible.
 
 ### Strategy 3: Minimax Bot
 
@@ -510,121 +285,13 @@ Use game tree search (see our official bot-hoster for full implementation).
 
 ### Docker
 
-```dockerfile
-FROM golang:1.21-alpine
-WORKDIR /app
-COPY . .
-RUN go build -o bot .
-CMD ["./bot"]
-```
-
-Build and run:
-
-```bash
-docker build -t my-bot .
-docker run -e BACKEND_URL=ws://server.com/ws my-bot
-```
+Each template can be containerized. See the Go template's `Dockerfile` for an example.
 
 ### Portainer
 
 1. Create stack with your bot's docker-compose.yml
 2. Set environment variables
 3. Deploy on any host
-
----
-
-## Examples
-
-### Python Bot
-
-```python
-import websocket
-import json
-
-class Bot:
-    def __init__(self, url):
-        self.ws = websocket.WebSocket()
-        self.ws.connect(url)
-        print(f"Connected to {url}")
-
-    def run(self):
-        while True:
-            msg = json.loads(self.ws.recv())
-            self.handle_message(msg)
-
-    def handle_message(self, msg):
-        if msg['type'] == 'welcome':
-            print(f"Bot: {msg['username']}")
-
-        elif msg['type'] == 'bot_wanted':
-            self.join_lobby(msg['lobbyId'])
-
-        elif msg['type'] == 'turn_change':
-            if msg['player'] == self.your_player:
-                self.make_move()
-
-    def join_lobby(self, lobby_id):
-        self.ws.send(json.dumps({
-            'type': 'join_lobby',
-            'lobbyId': lobby_id
-        }))
-
-    def make_move(self):
-        # Simple AI: always move to (1, 1)
-        self.ws.send(json.dumps({
-            'type': 'move',
-            'gameId': self.game_id,
-            'row': 1,
-            'col': 1
-        }))
-
-bot = Bot('ws://localhost:8080/ws')
-bot.run()
-```
-
-### JavaScript Bot (Node.js)
-
-```javascript
-const WebSocket = require('ws');
-
-class Bot {
-    constructor(url) {
-        this.ws = new WebSocket(url);
-        this.ws.on('open', () => console.log('Connected'));
-        this.ws.on('message', (data) => this.handleMessage(JSON.parse(data)));
-    }
-
-    handleMessage(msg) {
-        if (msg.type === 'welcome') {
-            console.log(`Bot: ${msg.username}`);
-        } else if (msg.type === 'bot_wanted') {
-            this.joinLobby(msg.lobbyId);
-        } else if (msg.type === 'turn_change') {
-            if (msg.player === this.yourPlayer) {
-                this.makeMove();
-            }
-        }
-    }
-
-    joinLobby(lobbyId) {
-        this.ws.send(JSON.stringify({
-            type: 'join_lobby',
-            lobbyId: lobbyId
-        }));
-    }
-
-    makeMove() {
-        this.ws.send(JSON.stringify({
-            type: 'move',
-            gameId: this.gameId,
-            row: 1,
-            col: 1
-        }));
-    }
-}
-
-const bot = new Bot('ws://localhost:8080/ws');
-```
 
 ---
 
