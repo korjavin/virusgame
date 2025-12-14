@@ -56,6 +56,10 @@ func (h *Hub) run() {
 	cleanupTicker := time.NewTicker(5 * time.Minute)
 	defer cleanupTicker.Stop()
 
+	// Challenge expiration ticker - runs every 1 second
+	challengeTicker := time.NewTicker(1 * time.Second)
+	defer challengeTicker.Stop()
+
 	for {
 		select {
 		case client := <-h.register:
@@ -69,6 +73,8 @@ func (h *Hub) run() {
 			}
 		case wrapper := <-h.handleMessage:
 			h.handleClientMessage(wrapper.client, wrapper.message)
+		case <-challengeTicker.C:
+			h.checkExpiredChallenges()
 		case <-cleanupTicker.C:
 			h.cleanupStaleGames()
 		}
@@ -230,11 +236,19 @@ func (h *Hub) handleChallenge(from *User, msg *Message) {
 
 	if to.InGame {
 		errorMsg := Message{
-			Type: "error",
+			Type:     "error",
 			Username: "User is already in game",
 		}
 		h.sendToUser(from, &errorMsg)
 		return
+	}
+
+	// Check for existing pending challenges from this user to the target
+	for _, c := range h.challenges {
+		if c.FromUser.ID == from.ID && c.ToUser.ID == to.ID {
+			h.sendError(from, "You already have a pending challenge to this user")
+			return
+		}
 	}
 
 	// Get board size from message, default to 10x10
@@ -919,6 +933,33 @@ func (h *Hub) cleanupBotRequestsForLobby(lobbyID string) {
 		}
 	}
 	log.Printf("Cleaned up %d bot request(s) for lobby %s (total remaining: %d)", cleaned, lobbyID, len(h.botRequests))
+}
+
+// checkExpiredChallenges removes challenges older than 60 seconds
+func (h *Hub) checkExpiredChallenges() {
+	now := time.Now()
+	for id, c := range h.challenges {
+		if now.Sub(c.Timestamp) > 60*time.Second {
+			// Notify sender
+			senderMsg := Message{
+				Type:        "challenge_expired",
+				ChallengeID: id,
+				Username:    c.ToUser.Username, // "Challenge to X expired"
+			}
+			h.sendToUser(c.FromUser, &senderMsg)
+
+			// Notify receiver
+			receiverMsg := Message{
+				Type:         "challenge_expired",
+				ChallengeID:  id,
+				FromUsername: c.FromUser.Username, // "Challenge from Y expired"
+			}
+			h.sendToUser(c.ToUser, &receiverMsg)
+
+			delete(h.challenges, id)
+			log.Printf("Challenge expired: %s -> %s", c.FromUser.Username, c.ToUser.Username)
+		}
+	}
 }
 
 // cleanupStaleGames removes games that are finished or have no human players
