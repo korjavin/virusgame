@@ -89,6 +89,10 @@ type Message struct {
 	EliminatedPlayer int           `json:"eliminatedPlayer,omitempty"`
 	// Bot settings
 	BotSettings   *BotSettings     `json:"botSettings,omitempty"`
+
+	// Chat fields
+	MessageID string `json:"messageId,omitempty"` // Translation key
+	Content   string `json:"content,omitempty"`   // Fallback text or custom message
 }
 
 type UserInfo struct {
