@@ -704,13 +704,33 @@ document.addEventListener('DOMContentLoaded', () => {
     putNeutralsButton = document.getElementById('put-neutrals-button'); // May be null
     resignButton = document.getElementById('resign-button');
 
-    function initGame() {
-        // Force leave multiplayer game if still connected
-        if (typeof mpClient !== 'undefined' && mpClient && mpClient.gameId) {
+    function initGame(force = false) {
+        // Check for active game
+        const isMultiplayer = typeof mpClient !== 'undefined' && mpClient.isMultiplayerGame;
+        const isLocalActive = !gameOver && gameHistory.history.length > 1;
+
+        if (!force && (isMultiplayer || isLocalActive)) {
+            if (confirm(i18n.t('confirmNewGame') || "Are you sure you want to start a new local game? Your current game will be forfeited.")) {
+                if (isMultiplayer) {
+                    mpClient.leaveGame(); // This will call initGame(true)
+                    return;
+                }
+                // If local, just proceed (implicit resign)
+            } else {
+                return; // User cancelled
+            }
+        }
+
+        // Force leave multiplayer game if still connected (safety check)
+        if (typeof mpClient !== 'undefined' && mpClient && mpClient.gameId && !force) {
             console.log('Forcing leave from multiplayer game before starting local game');
             mpClient.leaveGame();
-            return; // leaveGame() will call initGame() again after cleanup
+            return; // leaveGame() will call initGame(true) again after cleanup
         }
+
+        // Cleanup history view artifacts
+        const boardWrapper = document.getElementById('board-wrapper');
+        if (boardWrapper) boardWrapper.classList.remove('history-mode');
 
         rows = parseInt(rowsInput.value);
         cols = parseInt(colsInput.value);
@@ -783,7 +803,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    newGameButton.addEventListener('click', initGame);
+    newGameButton.addEventListener('click', () => initGame(false));
     aiEnabledCheckbox.addEventListener('change', () => {
         aiEnabled = aiEnabledCheckbox.checked;
     });
@@ -860,7 +880,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Initial game start
-    initGame();
+    initGame(true);
 
     // Connection Tree Setup
     connectionCanvas = document.getElementById('connection-canvas');

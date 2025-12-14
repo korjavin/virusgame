@@ -613,7 +613,7 @@ class MultiplayerClient {
 
         // Start a new local game
         if (typeof initGame === 'function') {
-            initGame();
+            initGame(true);
         }
     }
 
