@@ -27,6 +27,7 @@ const i18n = {
             aiTimeTitle: '0 = fixed depth, >0 = iterative deepening with time limit',
             showConnectionTrees: 'Show Connection Trees',
             newLocalGame: 'New Local Game',
+            confirmNewGame: 'Are you sure you want to start a new local game? Your current game will be forfeited.',
 
             // AI Tuning
             aiStrategyWeights: 'AI Strategy Weights',
@@ -178,6 +179,7 @@ const i18n = {
             aiTimeTitle: '0 = feste Tiefe, >0 = iterative Vertiefung mit Zeitlimit',
             showConnectionTrees: 'Verbindungslinien anzeigen',
             newLocalGame: 'Neues lokales Spiel',
+            confirmNewGame: 'Möchten Sie wirklich ein neues lokales Spiel starten? Ihr aktuelles Spiel wird aufgegeben.',
 
             // AI Tuning
             aiStrategyWeights: 'KI-Strategiegewichte',
