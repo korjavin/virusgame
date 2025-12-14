@@ -1,5 +1,23 @@
 // Multiplayer WebSocket client for Virus Game
-// Version 1.3 - Mobile-friendly UI, custom notifications, board size
+// Version 1.4 - Improved state management with centralized reset
+//
+// STATE MANAGEMENT ARCHITECTURE:
+// ===============================
+// This client manages transitions between three states:
+//   1. Disconnected (no game)
+//   2. Multiplayer game (connected to server, multiplayerMode = true)
+//   3. Local game (no connection, multiplayerMode = false)
+//
+// CRITICAL: When transitioning from state 2 → 3 or 2 → 1, ALWAYS call
+// resetGameState() to ensure complete cleanup. Partial resets cause bugs
+// like "null's turn" where the UI thinks it's still in multiplayer mode.
+//
+// Key flags:
+//   - multiplayerMode: true when in ANY multiplayer game (1v1 or 3-4 players)
+//   - isMultiplayerGame: true ONLY in 3-4 player games
+//   - gameId: non-null when in active game
+//
+// See resetGameState() for the single source of truth for cleanup.
 
 class MultiplayerClient {
     constructor() {
