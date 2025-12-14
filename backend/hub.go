@@ -32,6 +32,7 @@ type Hub struct {
 	games         map[string]*Game
 	lobbies       map[string]*Lobby
 	botRequests   map[string]*BotRequest // requestID -> BotRequest
+	userChatLimit map[string]*ChatLimit  // userID -> chat limit state
 	register      chan *Client
 	unregister    chan *Client
 	handleMessage chan *MessageWrapper
@@ -45,6 +46,7 @@ func newHub() *Hub {
 		games:         make(map[string]*Game),
 		lobbies:       make(map[string]*Lobby),
 		botRequests:   make(map[string]*BotRequest),
+		userChatLimit: make(map[string]*ChatLimit),
 		register:      make(chan *Client),
 		unregister:    make(chan *Client),
 		handleMessage: make(chan *MessageWrapper, 256), // Buffered to prevent deadlock when sending internal messages
@@ -175,6 +177,7 @@ func (h *Hub) handleDisconnect(client *Client) {
 	}
 
 	delete(h.users, user.ID)
+	delete(h.userChatLimit, user.ID) // Clean up chat rate limit state
 	h.broadcastUserList()
 }
 
@@ -216,8 +219,71 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 		h.handleStartMultiplayerGame(client.user, msg)
 	case "get_lobbies":
 		h.handleGetLobbies(client.user, msg)
+	case "lobby_chat":
+		h.handleLobbyChat(client.user, msg)
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
+	}
+}
+
+// ChatLimit tracks rate limiting state for a user
+type ChatLimit struct {
+	Count       int
+	WindowStart time.Time
+}
+
+func (h *Hub) handleLobbyChat(user *User, msg *Message) {
+	if !user.InLobby || user.LobbyID == "" {
+		h.sendError(user, "You must be in a lobby to chat")
+		return
+	}
+
+	lobby, exists := h.lobbies[user.LobbyID]
+	if !exists {
+		h.sendError(user, "Lobby not found")
+		return
+	}
+
+	// Rate limiting: Token Bucket / Window Counter
+	// Allow max 3 messages per 10 seconds
+	now := time.Now()
+	limit, exists := h.userChatLimit[user.ID]
+	if !exists {
+		limit = &ChatLimit{
+			Count:       0,
+			WindowStart: now,
+		}
+		h.userChatLimit[user.ID] = limit
+	}
+
+	// Reset window if > 10 seconds passed
+	if now.Sub(limit.WindowStart) > 10*time.Second {
+		limit.Count = 0
+		limit.WindowStart = now
+	}
+
+	if limit.Count >= 3 {
+		// Rate limit exceeded
+		// h.sendError(user, "Chatting too fast")
+		return
+	}
+
+	limit.Count++
+
+	// Broadcast to all lobby members
+	chatMsg := Message{
+		Type:       "lobby_chat",
+		LobbyID:    lobby.ID,
+		FromUserID: user.ID,
+		Username:   user.Username,
+		MessageID:  msg.MessageID,
+		Content:    msg.Content,
+	}
+
+	for i := 0; i < lobby.MaxPlayers; i++ {
+		if lobby.Players[i] != nil && lobby.Players[i].User != nil {
+			h.sendToUser(lobby.Players[i].User, &chatMsg)
+		}
 	}
 }
 

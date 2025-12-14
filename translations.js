@@ -60,6 +60,13 @@ const i18n = {
             playerWins: 'Player {player} wins!',
             noMoreMoves: 'Player {winner} wins! Player {player} has no more moves.',
 
+            // Chat messages
+            chatStartGame: 'Let\'s start the game! 🎮',
+            chatMoveFaster: 'Move faster! ⏱️',
+            chatWin: 'I will win against all of you! 🏆',
+            chatScary: 'Oh, how scary! 😱',
+            chatRateLimit: 'Wait before sending again.',
+
             // AI progress
             aiThinking: 'AI thinking: {progress}',
 
@@ -210,6 +217,13 @@ const i18n = {
             youLose: 'Du verlierst!',
             playerWins: 'Spieler {player} gewinnt!',
             noMoreMoves: 'Spieler {winner} gewinnt! Spieler {player} hat keine Züge mehr.',
+
+            // Chat messages
+            chatStartGame: 'Lass uns anfangen! 🎮',
+            chatMoveFaster: 'Mach schneller! ⏱️',
+            chatWin: 'Ich werde gegen euch alle gewinnen! 🏆',
+            chatScary: 'Oh, wie gruselig! 😱',
+            chatRateLimit: 'Warte kurz vor der nächsten Nachricht.',
 
             // AI progress
             aiThinking: 'KI denkt nach: {progress}',

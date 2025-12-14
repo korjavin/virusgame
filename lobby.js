@@ -33,6 +33,13 @@ class LobbyManager {
         this.leaveLobbyBtn = document.getElementById('leave-lobby-button');
         this.addBotBtn = document.getElementById('add-bot-button');
         this.startGameBtn = document.getElementById('start-game-button');
+
+        // Chat elements
+        this.chatLog = document.getElementById('lobby-chat-log');
+        this.chatButtons = document.querySelectorAll('.chat-btn');
+        this.chatLastSent = 0; // Timestamp for rate limiting
+        this.chatCount = 0;    // Counter for rate limiting window
+        this.chatWindowStart = 0;
     }
 
     attachEventListeners() {
@@ -45,6 +52,14 @@ class LobbyManager {
         this.leaveLobbyBtn.addEventListener('click', () => this.leaveLobby());
         this.addBotBtn.addEventListener('click', () => this.addBot());
         this.startGameBtn.addEventListener('click', () => this.startGame());
+
+        // Chat actions
+        this.chatButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const msgId = btn.getAttribute('data-msg');
+                this.sendQuickChat(msgId);
+            });
+        });
     }
 
     switchMode(mode) {
@@ -149,6 +164,7 @@ class LobbyManager {
         this.isHost = true;
         this.showLobbyView();
         this.updateLobbyDisplay();
+        this.clearChatLog();
     }
 
     handleLobbyJoined(msg) {
@@ -157,6 +173,7 @@ class LobbyManager {
         this.isHost = false;  // Not the host, just a player
         this.showLobbyView();
         this.updateLobbyDisplay();
+        this.clearChatLog();
     }
 
     handleLobbyUpdate(msg) {
@@ -186,6 +203,95 @@ class LobbyManager {
         this.currentLobbySection.style.display = 'none';
         this.multiplayerSection.style.display = 'block';
         this.refreshLobbies();
+        this.clearChatLog();
+    }
+
+    // Chat Functions
+
+    sendQuickChat(messageId) {
+        const now = Date.now();
+
+        // Rate limiting: max 3 messages per 10 seconds
+        if (now - this.chatWindowStart > 10000) {
+            // Reset window
+            this.chatWindowStart = now;
+            this.chatCount = 0;
+        }
+
+        if (this.chatCount >= 3) {
+            // Rate limited
+            this.showChatRateLimit();
+            return;
+        }
+
+        this.chatCount++;
+        this.chatLastSent = now;
+
+        this.mpClient.send({
+            type: 'lobby_chat',
+            messageId: messageId,
+            // fallback content in English if translation fails on other end (or for future custom text)
+            content: i18n.translations['en'][messageId] || messageId
+        });
+
+        // Add visual feedback (disable buttons briefly)
+        this.disableChatButtons(1000);
+    }
+
+    handleLobbyChat(msg) {
+        if (!this.isInLobby) return;
+
+        const isSelf = msg.fromUserId === this.mpClient.userId;
+        const senderName = isSelf ? 'You' : msg.username;
+
+        // Try to translate messageId, fallback to content
+        let text = '';
+        if (msg.messageId && i18n.t(msg.messageId) !== msg.messageId) {
+            text = i18n.t(msg.messageId);
+        } else {
+            text = msg.content || msg.messageId;
+        }
+
+        this.addChatMessage(senderName, text, isSelf);
+    }
+
+    addChatMessage(sender, text, isSelf) {
+        if (!this.chatLog) return;
+
+        const msgEl = document.createElement('div');
+        msgEl.className = `chat-message ${isSelf ? 'self' : 'other'}`;
+
+        const senderEl = document.createElement('div');
+        senderEl.className = 'chat-sender';
+        senderEl.textContent = sender;
+
+        const contentEl = document.createElement('div');
+        contentEl.className = 'chat-content';
+        contentEl.textContent = text;
+
+        if (!isSelf) msgEl.appendChild(senderEl); // Don't show name for self to save space
+        msgEl.appendChild(contentEl);
+
+        this.chatLog.appendChild(msgEl);
+        this.chatLog.scrollTop = this.chatLog.scrollHeight;
+    }
+
+    clearChatLog() {
+        if (this.chatLog) this.chatLog.innerHTML = '';
+        this.chatCount = 0;
+        this.chatWindowStart = 0;
+    }
+
+    disableChatButtons(duration) {
+        this.chatButtons.forEach(btn => btn.disabled = true);
+        setTimeout(() => {
+            this.chatButtons.forEach(btn => btn.disabled = false);
+        }, duration);
+    }
+
+    showChatRateLimit() {
+        this.addChatMessage('System', i18n.t('chatRateLimit'), false);
+        this.disableChatButtons(2000);
     }
 
     updateLobbiesList() {

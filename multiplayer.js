@@ -142,6 +142,9 @@ class MultiplayerClient {
                 // Only bot clients will respond to this signal
                 console.log('Bot wanted signal received (ignored by human client):', msg.lobbyId);
                 break;
+            case 'lobby_chat':
+                if (lobbyManager) lobbyManager.handleLobbyChat(msg);
+                break;
         }
     }
 
