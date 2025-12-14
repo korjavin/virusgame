@@ -216,50 +216,100 @@ class MultiplayerClient {
 
         console.log('Move made received:', msg, 'movesLeft before:', movesLeft);
 
-        const opponent = msg.player;
-        const cellValue = board[msg.row][msg.col];
+        const applyMove = () => {
+            const opponent = msg.player;
+            const cellValue = board[msg.row][msg.col];
 
-        if (cellValue === EMPTY) {
-            board[msg.row][msg.col] = createCell(opponent, CellFlag.NORMAL);
+            if (cellValue === EMPTY) {
+                board[msg.row][msg.col] = createCell(opponent, CellFlag.NORMAL);
+            } else {
+                board[msg.row][msg.col] = createCell(opponent, CellFlag.FORTIFIED);
+            }
+
+            // Update movesLeft from server
+            if (msg.movesLeft !== undefined) {
+                movesLeft = msg.movesLeft;
+                console.log('movesLeft updated from server to:', movesLeft);
+            }
+
+            // Note: renderBoard() will be called by updateStatus() or manually below
+            // But we specifically need to render if not in history mode
+        };
+
+        if (gameHistory.isHistoryMode()) {
+            // Load live state
+            gameHistory.loadState(gameHistory.history[gameHistory.history.length - 1]);
+            applyMove();
+            gameHistory.push();
+            checkWinCondition();
+
+            // Restore view
+            gameHistory.loadState(gameHistory.history[gameHistory.viewIndex]);
         } else {
-            board[msg.row][msg.col] = createCell(opponent, CellFlag.FORTIFIED);
+            applyMove();
+            gameHistory.push();
+            renderBoard();
+            updateStatus();
+            checkWinCondition();
         }
-
-        // Update movesLeft from server
-        if (msg.movesLeft !== undefined) {
-            movesLeft = msg.movesLeft;
-            console.log('movesLeft updated from server to:', movesLeft);
-        }
-
-        renderBoard();
-        updateStatus();
-        checkWinCondition();
     }
 
     handleNeutralsPlaced(msg) {
-        // Apply opponent's neutral placement
-        for (const cell of msg.cells) {
-            // Use createCell with KILLED flag (0x30)
-            board[cell.row][cell.col] = createCell(0, CellFlag.KILLED);
-        }
+        const applyNeutrals = () => {
+            // Apply opponent's neutral placement
+            for (const cell of msg.cells) {
+                // Use createCell with KILLED flag (0x30)
+                board[cell.row][cell.col] = createCell(0, CellFlag.KILLED);
+            }
 
-        // Track that the player used their neutrals (support all 4 players)
-        if (msg.player >= 1 && msg.player <= 4) {
-            const playerIndex = msg.player - 1;
-            playerNeutralsUsed[playerIndex] = true;
-            // Update legacy variables
-            if (msg.player === 1) player1NeutralsUsed = true;
-            if (msg.player === 2) player2NeutralsUsed = true;
-        }
+            // Track that the player used their neutrals (support all 4 players)
+            if (msg.player >= 1 && msg.player <= 4) {
+                const playerIndex = msg.player - 1;
+                playerNeutralsUsed[playerIndex] = true;
+                // Update legacy variables
+                if (msg.player === 1) player1NeutralsUsed = true;
+                if (msg.player === 2) player2NeutralsUsed = true;
+            }
+        };
 
-        renderBoard();
+        if (gameHistory.isHistoryMode()) {
+            gameHistory.loadState(gameHistory.history[gameHistory.history.length - 1]);
+            applyNeutrals();
+            gameHistory.push();
+            gameHistory.loadState(gameHistory.history[gameHistory.viewIndex]);
+        } else {
+            applyNeutrals();
+            gameHistory.push();
+            renderBoard();
+        }
     }
 
     handleTurnChange(msg) {
         console.log('Turn change received:', msg);
-        currentPlayer = msg.player;
-        movesLeft = msg.movesLeft !== undefined ? msg.movesLeft : 3;
-        updateStatus();
+
+        const applyTurnChange = () => {
+            currentPlayer = msg.player;
+            movesLeft = msg.movesLeft !== undefined ? msg.movesLeft : 3;
+            // updateStatus() call moved to outside to handle history
+        };
+
+        // If it's our turn, force live mode
+        if (msg.player === this.yourPlayer) {
+            if (gameHistory.isHistoryMode()) {
+                gameHistory.goLive();
+            }
+        }
+
+        if (gameHistory.isHistoryMode()) {
+            gameHistory.loadState(gameHistory.history[gameHistory.history.length - 1]);
+            applyTurnChange();
+            gameHistory.push();
+            gameHistory.loadState(gameHistory.history[gameHistory.viewIndex]);
+        } else {
+            applyTurnChange();
+            gameHistory.push();
+            updateStatus();
+        }
 
         // Update players display in multiplayer mode
         if (this.isMultiplayerGame) {

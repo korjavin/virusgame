@@ -63,6 +63,147 @@ let connectionCtx;
 const connectionStyles = ['pen', 'liana', 'japan', 'circuit', 'neon', 'minimal'];
 let playerStyles = ['pen', 'pen', 'pen', 'pen']; // Default to pen, will be randomized in initGame
 
+class GameHistory {
+    constructor() {
+        this.history = [];
+        this.viewIndex = -1; // -1 means live
+    }
+
+    // Deep copy of board
+    cloneBoard(boardToClone) {
+        if (!boardToClone) return [];
+        return boardToClone.map(row => [...row]);
+    }
+
+    // Capture current global state
+    snapshot() {
+        return {
+            board: this.cloneBoard(board),
+            currentPlayer: currentPlayer,
+            movesLeft: movesLeft,
+            gameOver: gameOver,
+            playerNeutralsUsed: [...playerNeutralsUsed],
+            playerNeutralsStarted: [...playerNeutralsStarted],
+            neutralMode: neutralMode,
+            neutralsPlaced: neutralsPlaced,
+            player1Base: { ...player1Base },
+            player2Base: { ...player2Base },
+            playerBases: [...playerBases], // Capture multiplayer bases
+        };
+    }
+
+    reset() {
+        this.history = [];
+        this.viewIndex = -1;
+        this.updateControls();
+    }
+
+    push() {
+        const state = this.snapshot();
+        this.history.push(state);
+        this.updateControls();
+    }
+
+    isHistoryMode() {
+        return this.viewIndex !== -1;
+    }
+
+    canGoBack() {
+        if (this.history.length <= 1) return false;
+        if (this.viewIndex === -1) return true; // Can go back from live
+        return this.viewIndex > 0;
+    }
+
+    canGoForward() {
+        return this.viewIndex !== -1; // Can always go forward if not live
+    }
+
+    goBack() {
+        if (!this.canGoBack()) return;
+
+        if (this.viewIndex === -1) {
+            this.viewIndex = this.history.length - 2; // Start one before live (which is last)
+        } else {
+            this.viewIndex--;
+        }
+
+        this.loadState(this.history[this.viewIndex]);
+    }
+
+    goForward() {
+        if (!this.canGoForward()) return;
+
+        this.viewIndex++;
+        if (this.viewIndex >= this.history.length - 1) {
+            this.goLive();
+        } else {
+            this.loadState(this.history[this.viewIndex]);
+        }
+    }
+
+    goLive() {
+        this.viewIndex = -1;
+        if (this.history.length > 0) {
+            this.loadState(this.history[this.history.length - 1]);
+        }
+        this.updateControls();
+    }
+
+    loadState(state) {
+        if (!state) return;
+
+        // Restore globals
+        board = this.cloneBoard(state.board);
+        currentPlayer = state.currentPlayer;
+        movesLeft = state.movesLeft;
+        gameOver = state.gameOver;
+        playerNeutralsUsed = [...state.playerNeutralsUsed];
+        playerNeutralsStarted = [...state.playerNeutralsStarted];
+        neutralMode = state.neutralMode;
+        neutralsPlaced = state.neutralsPlaced;
+        player1Base = { ...state.player1Base };
+        player2Base = { ...state.player2Base };
+        playerBases = [...state.playerBases];
+
+        // Force render
+        renderBoard();
+
+        // Update status but maybe add indicator
+        updateStatus();
+
+        // Visual indicator
+        const boardWrapper = document.getElementById('board-wrapper');
+        const statusEl = document.getElementById('status');
+
+        if (this.isHistoryMode()) {
+            if (boardWrapper) boardWrapper.classList.add('history-mode');
+            if (statusEl) {
+               statusDisplay.innerHTML = `<span class="history-indicator">[HISTORY VIEW]</span> ` + statusDisplay.innerHTML;
+            }
+        } else {
+            if (boardWrapper) boardWrapper.classList.remove('history-mode');
+        }
+
+        this.updateControls();
+    }
+
+    updateControls() {
+        const btnPrev = document.getElementById('history-prev');
+        const btnNext = document.getElementById('history-next');
+        const btnLive = document.getElementById('history-live');
+
+        if (btnPrev) btnPrev.disabled = !this.canGoBack();
+        if (btnNext) btnNext.disabled = !this.canGoForward();
+
+        // Reset button is visible only in history mode
+        if (btnLive) {
+            btnLive.style.display = this.isHistoryMode() ? 'inline-block' : 'none';
+        }
+    }
+}
+
+const gameHistory = new GameHistory();
+
 function isConnectedToBase(startRow, startCol, player) {
     let base;
     if (typeof mpClient !== 'undefined' && mpClient.isMultiplayerGame) {
@@ -321,6 +462,7 @@ function endTurn() {
     currentPlayer = currentPlayer === 1 ? 2 : 1;
     movesLeft = 3;
     updateStatus(); // This now handles neutral button management for both local and multiplayer
+    gameHistory.push();
 
     // In multiplayer mode, let the server check win conditions
     if (typeof mpClient === 'undefined' || !mpClient.multiplayerMode) {
@@ -378,6 +520,7 @@ function canMakeMove(player) {
 
 function handleCellClick(event) {
     if (gameOver || (aiEnabled && currentPlayer === 2)) return;
+    if (gameHistory.isHistoryMode()) return; // Block input in history mode
 
     // In multiplayer mode, check if it's your turn
     if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
@@ -405,6 +548,7 @@ function handleCellClick(event) {
 
             renderBoard();
             updateStatus();
+            gameHistory.push();
             
             // Mark that player started using neutrals (hide button for rest of game)
             if (neutralsPlaced === 1 && currentPlayer >= 1 && currentPlayer <= 4) {
@@ -481,6 +625,7 @@ function handleCellClick(event) {
         // Local mode only - manage movesLeft locally
         movesLeft--;
         renderBoard();
+        gameHistory.push();
 
         // Update connection tree if enabled
         if (connectionTreeEnabled) {
@@ -582,6 +727,10 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBoard();
         updateStatus();
 
+        // Initialize History
+        gameHistory.reset();
+        gameHistory.push();
+
         // Update connection trees if enabled
         if (connectionTreeEnabled) {
             updateAllConnectionTrees();
@@ -645,6 +794,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (resignButton) {
         resignButton.addEventListener('click', handleResign);
     }
+
+    // History controls
+    const btnPrev = document.getElementById('history-prev');
+    const btnNext = document.getElementById('history-next');
+    const btnLive = document.getElementById('history-live');
+
+    if (btnPrev) btnPrev.addEventListener('click', () => gameHistory.goBack());
+    if (btnNext) btnNext.addEventListener('click', () => gameHistory.goForward());
+    if (btnLive) btnLive.addEventListener('click', () => gameHistory.goLive());
 
     // Leave game button handler
     const leaveGameButton = document.getElementById('leave-game-button');
