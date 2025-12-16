@@ -817,13 +817,22 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		return
 	}
 
-	// Validate cells belong to player
+	// Validate cells belong to player and are NOT bases
 	for _, cell := range msg.Cells {
 		if cell.Row < 0 || cell.Row >= game.Rows || cell.Col < 0 || cell.Col >= game.Cols {
 			return
 		}
-		if game.Board[cell.Row][cell.Col].Player() != playerNum {
+
+		cellValue := game.Board[cell.Row][cell.Col]
+
+		if cellValue.Player() != playerNum {
 			log.Printf("Neutrals invalid: cell (%d,%d) does not belong to player %d", cell.Row, cell.Col, playerNum)
+			return
+		}
+
+		// Check if cell is a base
+		if cellValue.IsBase() {
+			log.Printf("Neutrals invalid: cell (%d,%d) is a base", cell.Row, cell.Col)
 			return
 		}
 	}

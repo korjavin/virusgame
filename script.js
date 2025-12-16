@@ -637,6 +637,11 @@ function handleCellClick(event) {
     if (neutralMode) {
         const cellValue = board[row][col];
         if (getPlayer(cellValue) === currentPlayer) {
+            // Check if cell is a base
+            if (isBase(cellValue)) {
+                return;
+            }
+
             // Mark as killed (neutral)
             board[row][col] = createCell(0, CellFlag.KILLED);
             neutralsPlaced++;
