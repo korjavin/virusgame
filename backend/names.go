@@ -33,3 +33,9 @@ func GenerateRandomName() string {
 	number := rng.Intn(100)
 	return fmt.Sprintf("%s%s%d", adjective, animal, number)
 }
+
+// GenerateBotName creates a bot name in format: Bot 1234
+func GenerateBotName() string {
+	number := rng.Intn(9000) + 1000 // 1000 to 9999
+	return fmt.Sprintf("Bot %d", number)
+}
