@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
@@ -174,9 +175,16 @@ func NewBot(backendURL string, manager *BotManager) *Bot {
 
 // Connect establishes WebSocket connection to backend
 func (b *Bot) Connect() error {
-	ws, _, err := websocket.DefaultDialer.Dial(b.BackendURL, nil)
+	url := b.BackendURL
+	if strings.Contains(url, "?") {
+		url += "&bot=true"
+	} else {
+		url += "?bot=true"
+	}
+
+	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %w", b.BackendURL, err)
+		return fmt.Errorf("failed to connect to %s: %w", url, err)
 	}
 
 	b.mu.Lock()

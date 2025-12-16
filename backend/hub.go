@@ -87,7 +87,13 @@ func (h *Hub) run() {
 
 func (h *Hub) handleConnect(client *Client) {
 	// Generate random username
-	username := GenerateRandomName()
+	var username string
+	if client.IsBot {
+		username = GenerateBotName()
+	} else {
+		username = GenerateRandomName()
+	}
+
 	userID := uuid.New().String()
 
 	user := &User{

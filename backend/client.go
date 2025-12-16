@@ -26,10 +26,11 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a websocket connection
 type Client struct {
-	hub  *Hub
-	conn *websocket.Conn
-	send chan []byte
-	user *User
+	hub   *Hub
+	conn  *websocket.Conn
+	send  chan []byte
+	user  *User
+	IsBot bool
 }
 
 // readPump pumps messages from the websocket connection to the hub
@@ -97,7 +98,9 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 		return
 	}
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256)}
+
+	isBot := r.URL.Query().Get("bot") == "true"
+	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), IsBot: isBot}
 	client.hub.register <- client
 
 	go client.writePump()
