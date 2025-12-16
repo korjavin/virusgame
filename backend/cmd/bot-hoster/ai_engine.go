@@ -249,7 +249,8 @@ func (ai *AIEngine) getNeutralMoves(state *GameState, player int) []Move {
 	for r := 0; r < state.Rows; r++ {
 		for c := 0; c < state.Cols; c++ {
 			cell := state.Board[r][c]
-			if cell != 0 && cell.Player() == player {
+			// IMPORTANT: Base cells cannot be turned neutral
+			if cell != 0 && cell.Player() == player && !cell.IsBase() {
 				// Check neighbors for opponents
 				hasOpponentNeighbor := false
 				for i := -1; i <= 1; i++ {
