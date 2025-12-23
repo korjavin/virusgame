@@ -327,7 +327,7 @@ That's up to you! You can host bots as a service for others.
 - Official Bot-Hoster: `/backend/cmd/bot-hoster`
 - Protocol Docs: `/MULTIPLAYER.md`
 - Server Source: `/backend/hub.go`
-- AI Implementation: `/backend/bot.go`
+- AI Implementation: `/backend/cmd/bot-hoster/ai_engine.go`
 
 ---
 
