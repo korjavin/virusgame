@@ -25,8 +25,9 @@
   - Implemented "Defeat on Illegal Move" in `backend/hub.go`.
   - Added strict validation (neutral check + connectivity) to `backend/hub.go` and `backend/cmd/bot-hoster/ai_engine.go`.
   - Updated `BOT_DEVELOPMENT_GUIDE.md` with strict rules.
+  - Merged PR #44.
 - **Now**:
-  - Submitting changes.
+  - Monitoring for regressions.
 - **Next**:
   - Verify visually in frontend if possible (optional).
   - Deploy and monitor.
