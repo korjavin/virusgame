@@ -85,6 +85,76 @@ func (h *Hub) run() {
 	}
 }
 
+func (h *Hub) handleIllegalMove(game *Game, player int, reason string) {
+	log.Printf("Player %d made illegal move in game %s: %s", player, game.ID, reason)
+
+	// Send error to the specific player if possible
+	var user *User
+	if game.IsMultiplayer {
+		if player >= 1 && player <= 4 && game.Players[player-1] != nil {
+			user = game.Players[player-1].User
+		}
+	} else {
+		if player == 1 {
+			user = game.Player1
+		} else {
+			user = game.Player2
+		}
+	}
+
+	if user != nil {
+		h.sendError(user, "Defeated by illegal move: "+reason)
+	}
+
+	// Eliminate player
+	// Remove all pieces for this player
+	for i := 0; i < game.Rows; i++ {
+		for j := 0; j < game.Cols; j++ {
+			cell := game.Board[i][j]
+			if cell != 0 && cell.Player() == player {
+				game.Board[i][j] = 0
+			}
+		}
+	}
+
+	// Send player_eliminated message
+	elimMsg := Message{
+		Type:             "player_eliminated",
+		GameID:           game.ID,
+		EliminatedPlayer: player,
+	}
+	h.broadcastToGame(game, &elimMsg)
+
+	// Check if game should end
+	if game.IsMultiplayer {
+		h.checkMultiplayerStatus(game)
+	} else {
+		// For 1v1, illegal move = loss
+		game.GameOver = true
+		game.Winner = 3 - player
+		endMsg := Message{
+			Type:   "game_end",
+			GameID: game.ID,
+			Winner: game.Winner,
+		}
+		h.broadcastToGame(game, &endMsg)
+
+		if game.Player1 != nil {
+			game.Player1.InGame = false
+		}
+		if game.Player2 != nil {
+			game.Player2.InGame = false
+		}
+		h.broadcastUserList()
+		SaveGame(game, "illegal_move")
+	}
+
+	// If game continues, we need to end the turn of the eliminated player
+	if !game.GameOver && game.CurrentPlayer == player {
+		h.endTurn(game)
+	}
+}
+
 func (h *Hub) handleConnect(client *Client) {
 	// Generate random username
 	var username string
@@ -667,18 +737,9 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 	// Validate and apply move
 	cellValue := game.Board[row][col]
 
-	// Check if it's a valid target (empty or opponent cell)
-	isValidTarget := false
-	if cellValue == 0 {
-		isValidTarget = true
-	} else {
-		// Can attack opponent's non-fortified, non-base, non-killed cells
-        if cellValue.Player() != playerNum && cellValue.CanBeAttacked() {
-			isValidTarget = true
-		}
-	}
-
-	if !isValidTarget {
+	// Strictly validate move (checks bounds, target validity, AND connectivity)
+	if !h.isValidMove(game, row, col, playerNum) {
+		h.handleIllegalMove(game, playerNum, fmt.Sprintf("Invalid move to (%d, %d)", row, col))
 		return
 	}
 
@@ -1416,9 +1477,15 @@ func (h *Hub) isValidMove(game *Game, row, col, player int) bool {
 
 	cellValue := game.Board[row][col]
 
+	// EXPLICIT CHECK: Can't attack neutral (killed) cells
+	// This is critical - IsKilled() checks specifically for CellFlagKilled (0x30)
+	if cellValue != 0 && cellValue.IsKilled() {
+		return false
+	}
+
 	// Can't attack fortified, base, or neutral (killed) cells
 	if cellValue != 0 {
-        if !cellValue.CanBeAttacked() {
+		if !cellValue.CanBeAttacked() {
 			return false
 		}
 	}

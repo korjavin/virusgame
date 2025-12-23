@@ -358,9 +358,14 @@ func (ai *AIEngine) isValidMove(state *GameState, row, col, player int) bool {
 
 	cell := state.Board[row][col]
 
+	// Cannot attack neutral (killed) cells
+	if cell != 0 && cell.IsKilled() {
+		return false
+	}
+
 	// Cannot move on fortified or base cells
 	if cell != 0 {
-        if !cell.CanBeAttacked() {
+		if !cell.CanBeAttacked() {
 			return false
 		}
 	}

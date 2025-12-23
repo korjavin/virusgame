@@ -187,6 +187,18 @@ Update your local board state.
 
 Game over! Return to idle state.
 
+### Strict Validation and Illegal Moves
+
+**Important:** The server enforces strict move validation. If your bot attempts an illegal move, it will be **immediately defeated/eliminated** from the game.
+
+**Illegal Moves Include:**
+1.  **Attacking Neutral Cells**: Cells marked as "Neutral" (Killed) cannot be attacked or used for connectivity.
+2.  **Disconnected Moves**: You must place pieces adjacent to your existing connected territory (connected to your base).
+3.  **Attacking Bases/Fortified Cells**: Bases and Fortified cells are invulnerable.
+4.  **Out of Bounds**: Coordinates outside the board dimensions.
+
+Ensure your bot's `isValidMove` logic strictly adheres to these rules. See `backend/hub.go` or the provided templates for reference implementation.
+
 ---
 
 ## Quick Start
