@@ -1,41 +1,41 @@
 # Continuity Ledger
 
 ## Goal
-**Stabilize Lobby System and V2 Bot Architecture**
-- Ensure the Lobby System (the core feature) is fully documented and stable.
-- Finalize the transition to V2 Bot Architecture (Bots as external clients).
-- Bring documentation (`MULTIPLAYER.md`) in line with the implemented code.
+**Fix Neutral Field Logic and Harden Game Validation**
+- Fix a bug where bots could retake neutral fields.
+- Implement strict server-side validation to defeat players who attempt illegal moves.
+- Add backend unit tests to verify validation logic.
+- Ensure bots explicitly avoid neutral fields.
 
 ## Constraints/Assumptions
-- **Architecture**: Go backend with single-threaded Hub (no mutexes for game state), JS frontend, external Bot Hoster service.
-- **Protocol**: WebSockets for all real-time communication.
-- **Bot Identity**: Bots connect as regular clients with `?bot=true` or via `bot-hoster` service, identified by "AI-" prefix or `isBot` flag.
-- **Tests**: Currently relying on manual verification and frontend tests; backend unit tests are missing.
+- **Neutral Fields**: Immutable `CellFlagKilled` (0x30). Cannot be attacked or used for connectivity.
+- **Illegal Moves**: Result in immediate elimination/defeat for the offending player.
+- **Testing**: Need to establish a new `go test` suite for the backend.
 
 ## Key Decisions
-- **Bots as First-Class Players**: Bots run as external WebSocket clients (via `bot-hoster`), not as internal backend logic.
-- **Lobby System Centrality**: The Lobby is the primary entry point for multiplayer games; bots are requested by hosts within a lobby.
-- **Broadcast Signaling**: The backend uses `bot_wanted` broadcast messages to solicit bot joins from the `bot-hoster` pool.
+- **Defeat by Illegal Move**: Instead of silently rejecting illegal moves, the server will now actively eliminate the player. This protects the game integrity against buggy or malicious clients.
+- **Strict Validation**: Explicit checks for `IsKilled()` will be added to `isValidMove` in both backend and bot code.
+- **Connectivity Check**: `handleMove` now enforces connectivity checks via `isValidMove`, closing a major loophole.
 
 ## State
 - **Done**:
-  - Implemented V2 Bot Architecture (backend `hub.go` changes).
-  - Implemented `bot-hoster` service (`backend/cmd/bot-hoster`).
-  - Updated `backend/ARCHITECTURE.md`.
-  - Implemented frontend Lobby UI for bot management.
+  - Implemented V2 Bot Architecture.
+  - Implemented Bot Hoster.
+  - Created backend unit tests (`backend/hub_test.go`) covering validation logic.
+  - Implemented "Defeat on Illegal Move" in `backend/hub.go`.
+  - Added strict validation (neutral check + connectivity) to `backend/hub.go` and `backend/cmd/bot-hoster/ai_engine.go`.
+  - Updated `BOT_DEVELOPMENT_GUIDE.md` with strict rules.
 - **Now**:
-  - Restoring `CONTINUITY.md`.
-  - Updating `MULTIPLAYER.md` to reflect V2 architecture.
-  - Fixing links in `BOT_DEVELOPMENT_GUIDE.md`.
+  - Submitting changes.
 - **Next**:
-  - Add backend unit tests (`go test`).
-  - Restore/Create `smoke_test.sh` for end-to-end verification.
-  - Verify "Success Criteria" from `BOT_HOSTER_PLAN_V2.md` (Bot scaling, reconnects).
+  - Verify visually in frontend if possible (optional).
+  - Deploy and monitor.
 
 ## Open Questions
 - None.
 
 ## Working Set
-- `CONTINUITY.md`
-- `MULTIPLAYER.md`
+- `backend/hub.go`
+- `backend/hub_test.go`
+- `backend/cmd/bot-hoster/ai_engine.go`
 - `BOT_DEVELOPMENT_GUIDE.md`
