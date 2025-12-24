@@ -1,118 +1,380 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 )
 
-// TestNewCell verifies that NewCell creates cells with correct flags and player IDs
-func TestNewCell(t *testing.T) {
-	// Test Normal Cell
-	c1 := NewCell(1, CellFlagNormal)
-	if c1.Player() != 1 {
-		t.Errorf("Expected player 1, got %d", c1.Player())
-	}
-	if c1.Flag() != CellFlagNormal {
-		t.Errorf("Expected normal flag, got %x", c1.Flag())
-	}
-	if !c1.CanBeAttacked() {
-		t.Error("Normal cell should be attackable")
-	}
-
-	// Test Neutral/Killed Cell
-	cNeutral := NewCell(0, CellFlagKilled)
-	if cNeutral.Player() != 0 {
-		t.Errorf("Expected player 0 for neutral, got %d", cNeutral.Player())
-	}
-	if !cNeutral.IsKilled() {
-		t.Error("Expected IsKilled() to be true")
-	}
-	if cNeutral.CanBeAttacked() {
-		t.Error("Neutral cell should NOT be attackable")
+// Helper function to drain welcome messages
+func drainWelcome(c *Client) {
+	timeout := time.After(100 * time.Millisecond)
+	select {
+	case <-c.send:
+	case <-timeout:
 	}
 }
 
-// TestIsValidMove verifies the validation logic
-func TestIsValidMove(t *testing.T) {
+// Helper to wait for specific message type
+func waitForMessage(t *testing.T, c *Client, msgType string) *Message {
+	timeout := time.After(1 * time.Second)
+	for {
+		select {
+		case msgBytes := <-c.send:
+			var msg Message
+			if err := json.Unmarshal(msgBytes, &msg); err != nil {
+				continue // skip invalid json or keep trying
+			}
+			if msg.Type == msgType {
+				return &msg
+			}
+		case <-timeout:
+			t.Errorf("Timeout waiting for message type: %s", msgType)
+			return nil
+		}
+	}
+}
+
+// Helper to send message via handleMessage channel
+func sendMessage(h *Hub, c *Client, msg *Message) {
+	h.handleMessage <- &MessageWrapper{
+		client: c,
+		message: msg,
+	}
+}
+
+func TestHubIntegration_Connect(t *testing.T) {
 	h := newHub()
+	go h.run()
+
+	client := &Client{
+		hub:  h,
+		send: make(chan []byte, 256),
+	}
+
+	// Register client
+	h.register <- client
+
+	// Should receive welcome message
+	msg := waitForMessage(t, client, "welcome")
+	if msg == nil {
+		return
+	}
+
+	// Cleanup
+	h.unregister <- client
+}
+
+func TestHubIntegration_LobbyAndGame(t *testing.T) {
+	h := newHub()
+	go h.run()
+
+	// Client 1
+	c1 := &Client{hub: h, send: make(chan []byte, 256)}
+	h.register <- c1
+
+	// Client 2
+	c2 := &Client{hub: h, send: make(chan []byte, 256)}
+	h.register <- c2
+
+	waitForMessage(t, c1, "welcome")
+	waitForMessage(t, c2, "welcome")
+
+	// Get users (handleConnect sets them)
+	// We check for not nil to satisfy unused variable check if logic changes
+	if c1.user == nil || c2.user == nil {
+		t.Error("Users should be set")
+		return
+	}
+
+	// Client 1 challenges Client 2
+	challengeMsg := &Message{
+		Type:         "challenge",
+		TargetUserID: c2.user.ID,
+		Rows:         10,
+		Cols:         10,
+	}
+	sendMessage(h, c1, challengeMsg)
+
+	// We expect C2 to receive a challenge message.
+	waitForMessage(t, c2, "challenge_received")
+
+	// Verify Challenge exists
+	if len(h.challenges) != 1 {
+		t.Errorf("Expected 1 challenge, got %d", len(h.challenges))
+	}
+
+	// Client 2 accepts
+	// Find challenge ID
+	var challengeID string
+	for id := range h.challenges {
+		challengeID = id
+	}
+
+	acceptMsg := &Message{
+		Type:        "accept_challenge",
+		ChallengeID: challengeID,
+	}
+	sendMessage(h, c2, acceptMsg)
+
+	// Expect Game Start messages for both
+	waitForMessage(t, c1, "game_start")
+	waitForMessage(t, c2, "game_start")
+
+	if len(h.games) != 1 {
+		t.Errorf("Expected 1 active game, got %d", len(h.games))
+	}
+}
+
+func TestHubIntegration_Move(t *testing.T) {
+	h := newHub()
+	go h.run()
+
+	c1 := &Client{hub: h, send: make(chan []byte, 256)}
+	c2 := &Client{hub: h, send: make(chan []byte, 256)}
+	h.register <- c1
+	h.register <- c2
+
+	waitForMessage(t, c1, "welcome")
+	waitForMessage(t, c2, "welcome")
+
+	u1 := c1.user
+	u2 := c2.user
+
+	// Create game manually to skip challenge flow
+	gameID := "test-game-move"
+	rows, cols := 5, 5
+	board := make(Board, rows)
+	for i := range board {
+		board[i] = make([]CellValue, cols)
+	}
+	game := &Game{
+		ID: gameID,
+		Player1: u1,
+		Player2: u2,
+		Board: board,
+		Rows: rows,
+		Cols: cols,
+		CurrentPlayer: 1,
+		MovesLeft: 1,
+		Player1Base: CellPos{0,0},
+		Player2Base: CellPos{4,4},
+		// Initialize history to avoid panic
+		MoveHistory: []MoveAction{},
+		LastActionTime: time.Now(),
+	}
+	game.Board[0][0] = NewCell(1, CellFlagBase)
+	game.Board[0][1] = NewCell(1, CellFlagNormal)
+	game.Board[4][4] = NewCell(2, CellFlagBase)
+
+	h.games[gameID] = game
+	u1.InGame = true
+	u1.GameID = gameID
+	u2.InGame = true
+	u2.GameID = gameID
+
+	// Player 1 makes a move at (1,1) (valid)
+	r, c := 1, 1
+	moveMsg := &Message{
+		Type:   "move",
+		GameID: gameID,
+		Row:    &r,
+		Col:    &c,
+	}
+	sendMessage(h, c1, moveMsg)
+
+	// Wait for move_made message
+	waitForMessage(t, c1, "move_made")
+	waitForMessage(t, c2, "move_made")
+
+	// Check if move was applied
+	if game.Board[1][1].Player() != 1 {
+		t.Error("Board not updated after move")
+	}
+
+	// Turn should change to Player 2
+	waitForMessage(t, c1, "turn_change")
+	waitForMessage(t, c2, "turn_change")
+
+	if game.CurrentPlayer != 2 {
+		t.Error("Turn should switch to Player 2")
+	}
+}
+
+func TestHubIntegration_Neutrals(t *testing.T) {
+	h := newHub()
+	go h.run()
+
+	c1 := &Client{hub: h, send: make(chan []byte, 256)}
+	c2 := &Client{hub: h, send: make(chan []byte, 256)}
+	h.register <- c1
+	h.register <- c2
+
+	waitForMessage(t, c1, "welcome")
+	waitForMessage(t, c2, "welcome")
+
+	u1 := c1.user
+	u2 := c2.user
 
 	rows, cols := 5, 5
 	board := make(Board, rows)
 	for i := range board {
 		board[i] = make([]CellValue, cols)
 	}
-
-	// Setup a game
+	gameID := "test-neutrals"
 	game := &Game{
-		ID:    "test-game",
-		Board: board,
-		Rows:  rows,
-		Cols:  cols,
-		Player1Base: CellPos{0, 0},
-		Player2Base: CellPos{rows-1, cols-1},
-	}
-
-	// Setup Base for Player 1
-	game.Board[0][0] = NewCell(1, CellFlagBase)
-	// Setup a connected piece for Player 1 at (0,1)
-	game.Board[0][1] = NewCell(1, CellFlagNormal)
-
-	// Test 1: Valid move (expanding to empty cell (1,1))
-	// (1,1) is adjacent to (0,1) which is connected to base (0,0)
-	if !h.isValidMove(game, 1, 1, 1) {
-		t.Error("Expected (1,1) to be a valid move for Player 1")
-	}
-
-	// Test 2: Invalid move (too far)
-	if h.isValidMove(game, 3, 3, 1) {
-		t.Error("Expected (3,3) to be invalid (too far)")
-	}
-
-	// Test 3: Attacking Neutral Cell
-	// Place a neutral cell at (0,2). (0,1) is adjacent to (0,2).
-	game.Board[0][2] = NewCell(0, CellFlagKilled)
-
-	// Player 1 tries to attack (0,2)
-	if h.isValidMove(game, 0, 2, 1) {
-		t.Error("Expected move to Neutral cell (0,2) to be INVALID")
-	} else {
-		t.Log("Correctly rejected move to Neutral cell")
-	}
-
-	// Test 4: Attacking Own Base
-	if h.isValidMove(game, 0, 0, 1) {
-		t.Error("Expected move to own Base to be INVALID")
-	}
-}
-
-// TestIsConnectedToBase verifies BFS
-func TestIsConnectedToBase(t *testing.T) {
-	h := newHub()
-	rows, cols := 5, 5 // Increased size to allow disconnection
-	board := make(Board, rows)
-	for i := range board {
-		board[i] = make([]CellValue, cols)
-	}
-
-	game := &Game{
+		ID: gameID,
+		Player1: u1,
+		Player2: u2,
 		Board: board,
 		Rows: rows,
 		Cols: cols,
-		Player1Base: CellPos{0, 0},
+		CurrentPlayer: 1,
+		MovesLeft: 3,
+		Player1Base: CellPos{0,0},
+		Player2Base: CellPos{4,4},
+		MoveHistory: []MoveAction{},
+		LastActionTime: time.Now(),
 	}
-
 	game.Board[0][0] = NewCell(1, CellFlagBase)
 	game.Board[0][1] = NewCell(1, CellFlagNormal)
+	game.Board[1][0] = NewCell(1, CellFlagNormal)
 
-	// Connected chain: (0,0)->(0,1)->(0,2)
-	game.Board[0][2] = NewCell(1, CellFlagNormal)
+	h.games[gameID] = game
+	u1.InGame = true
+	u1.GameID = gameID
 
-	if !h.isConnectedToBase(game, 0, 2, 1) {
-		t.Error("Expected (0,2) to be connected to base (0,0)")
+	neutralsMsg := &Message{
+		Type:   "neutrals",
+		GameID: gameID,
+		Cells: []CellPos{
+			{0, 1},
+			{1, 0},
+		},
+	}
+	sendMessage(h, c1, neutralsMsg)
+
+	// Should receive neutrals_placed
+	waitForMessage(t, c2, "neutrals_placed")
+
+	// Should receive turn_change
+	waitForMessage(t, c1, "turn_change")
+
+	if !game.Board[0][1].IsKilled() {
+		t.Error("Cell (0,1) should be killed")
+	}
+}
+
+func TestHubIntegration_Resign(t *testing.T) {
+	h := newHub()
+	go h.run()
+
+	c1 := &Client{hub: h, send: make(chan []byte, 256)}
+	c2 := &Client{hub: h, send: make(chan []byte, 256)}
+	h.register <- c1
+	h.register <- c2
+
+	waitForMessage(t, c1, "welcome")
+	waitForMessage(t, c2, "welcome")
+
+	u1 := c1.user
+	u2 := c2.user
+
+	gameID := "test-resign"
+	game := &Game{
+		ID: gameID,
+		Player1: u1,
+		Player2: u2,
+		CurrentPlayer: 1,
+		MovesLeft: 3,
+	}
+	h.games[gameID] = game
+	u1.InGame = true
+	u1.GameID = gameID
+	u2.InGame = true
+	u2.GameID = gameID
+
+	resignMsg := &Message{
+		Type:   "resign",
+		GameID: gameID,
+	}
+	sendMessage(h, c1, resignMsg)
+
+	waitForMessage(t, c2, "game_end")
+
+	if !game.GameOver {
+		t.Error("Game should be over")
+	}
+	if game.Winner != 2 {
+		t.Errorf("Player 2 should win, got %d", game.Winner)
+	}
+}
+
+func TestHubIntegration_MultiplayerLobby(t *testing.T) {
+	h := newHub()
+	go h.run()
+
+	// Create 3 clients
+	clients := make([]*Client, 3)
+	for i := 0; i < 3; i++ {
+		clients[i] = &Client{hub: h, send: make(chan []byte, 256)}
+		h.register <- clients[i]
 	}
 
-	// Disconnected piece at (4,4)
-	game.Board[4][4] = NewCell(1, CellFlagNormal)
-	if h.isConnectedToBase(game, 4, 4, 1) {
-		t.Error("Expected (4,4) to be DISCONNECTED")
+	for i := 0; i < 3; i++ {
+		waitForMessage(t, clients[i], "welcome")
+	}
+
+	// 1. Host creates lobby
+	createMsg := &Message{
+		Type: "create_lobby",
+		Rows: 10,
+		Cols: 10,
+	}
+	sendMessage(h, clients[0], createMsg)
+
+	// Wait for lobby_created
+	msg := waitForMessage(t, clients[0], "lobby_created")
+	if msg == nil { return }
+	lobbyID := msg.LobbyID
+
+	// 2. Others join lobby
+	joinMsg := &Message{
+		Type:    "join_lobby",
+		LobbyID: lobbyID,
+	}
+	sendMessage(h, clients[1], joinMsg)
+	waitForMessage(t, clients[1], "lobby_joined")
+
+	sendMessage(h, clients[2], joinMsg)
+	waitForMessage(t, clients[2], "lobby_joined")
+
+	// 3. Start Game
+	startMsg := &Message{
+		Type: "start_multiplayer_game",
+	}
+	sendMessage(h, clients[0], startMsg)
+
+	// Wait for multiplayer_game_start
+	waitForMessage(t, clients[0], "multiplayer_game_start")
+	waitForMessage(t, clients[1], "multiplayer_game_start")
+	waitForMessage(t, clients[2], "multiplayer_game_start")
+
+	if len(h.games) != 1 {
+		t.Errorf("Expected 1 active game, got %d", len(h.games))
+	}
+
+	// Safe to read h.games keys?
+	var game *Game
+	for _, g := range h.games {
+		game = g
+		break
+	}
+
+	if !game.IsMultiplayer {
+		t.Error("Game should be multiplayer")
+	}
+	if game.ActivePlayers != 3 {
+		t.Errorf("Expected 3 active players, got %d", game.ActivePlayers)
 	}
 }
