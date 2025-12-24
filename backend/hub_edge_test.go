@@ -134,6 +134,10 @@ func TestHubIntegration_InvalidMoves(t *testing.T) {
 	waitForMessage(t, c1, "game_start")
 	waitForMessage(t, c2, "game_start")
 
+	// Drain users_update messages that are broadcast after game start
+	drainWelcome(c1)
+	drainWelcome(c2)
+
 	// Game setup: P1 at (0,0), P2 at (4,4)
 	// P1 turn.
 
@@ -159,6 +163,7 @@ func TestHubIntegration_InvalidMoves(t *testing.T) {
 		case msgBytes := <-c1.send:
 			var m Message
 			json.Unmarshal(msgBytes, &m)
+			t.Logf("Received message type: %s", m.Type)
 			if m.Type == "error" {
 				foundError = true
 			}
