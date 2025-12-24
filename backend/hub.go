@@ -636,7 +636,9 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 
 	// Mark users as in game
 	challenge.FromUser.InGame = true
+	challenge.FromUser.GameID = gameID
 	challenge.ToUser.InGame = true
+	challenge.ToUser.GameID = gameID
 
 	// Send game start to both players
 	p1Msg := Message{
