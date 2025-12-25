@@ -7,3 +7,6 @@ backend/bot-hoster
 backend/virusgame-server
 *.db
 backend/data/
+.claude/skills
+backend/cmd/bot-hoster/bot_client.go
+wasm/ai.wasm

@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+// AIEngineInterface defines the interface that all AI engines must implement
+type AIEngineInterface interface {
+	CalculateMove(state *GameState, player int) (*Move, bool)
+}
+
 // AIEngine handles bot move calculations
 type AIEngine struct {
 	settings        *BotSettings

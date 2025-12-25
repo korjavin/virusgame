@@ -61,7 +61,8 @@ type Bot struct {
 	Cols        int
 
 	// AI
-	AIEngine *AIEngine // NEW
+	AIEngine AIEngineInterface // AI engine (can be Minimax or MCTS)
+	AIType   string            // "minimax" or "mcts" for logging
 	NeutralsUsed bool // Track if neutrals have been used
 
 	// Communication channels
@@ -133,6 +134,17 @@ func createRandomizedBotSettings() *BotSettings {
 		settings.MaterialWeight, settings.MobilityWeight, settings.PositionWeight,
 		settings.RedundancyWeight, settings.CohesionWeight)
 	return settings
+}
+
+// createRandomAIEngine creates either a Minimax or MCTS engine randomly
+func createRandomAIEngine(settings *BotSettings) (AIEngineInterface, string) {
+	// 50/50 chance between minimax and MCTS
+	if rand.Float64() < 0.5 {
+		log.Printf("[AI] Creating Minimax engine")
+		return NewAIEngine(settings), "minimax"
+	}
+	log.Printf("[AI] Creating MCTS engine")
+	return NewMCTSEngine(settings), "mcts"
 }
 
 type LobbyInfo struct {
@@ -419,13 +431,14 @@ func (b *Bot) handleGameStart1v1(msg *Message) {
 		{PlayerIndex: 2, Username: "Player 2", IsBot: false, IsActive: true},
 	}
 
-	// Initialize AI engine with randomized settings for varied gameplay
-	b.AIEngine = NewAIEngine(createRandomizedBotSettings())
+	// Initialize AI engine with randomized settings and random algorithm
+	settings := createRandomizedBotSettings()
+	b.AIEngine, b.AIType = createRandomAIEngine(settings)
 
 	b.mu.Unlock()
 
-	log.Printf("[Bot %s] 1v1 game started as player %d vs %s in game %s",
-		b.Username, b.YourPlayer, msg.OpponentUsername, b.CurrentGame)
+	log.Printf("[Bot %s] 1v1 game started as player %d vs %s in game %s (using %s)",
+		b.Username, b.YourPlayer, msg.OpponentUsername, b.CurrentGame, b.AIType)
 }
 
 func (b *Bot) handleBotWanted(msg *Message) {
@@ -495,17 +508,19 @@ func (b *Bot) handleGameStart(msg *Message) {
 	}
 
 	// Initialize AI engine with bot settings (randomized if not provided)
+	var settings *BotSettings
 	if b.BotSettings != nil {
-		b.AIEngine = NewAIEngine(b.BotSettings)
+		settings = b.BotSettings
 	} else {
 		// Use randomized settings for varied gameplay
-		b.AIEngine = NewAIEngine(createRandomizedBotSettings())
+		settings = createRandomizedBotSettings()
 	}
+	b.AIEngine, b.AIType = createRandomAIEngine(settings)
 
 	b.mu.Unlock()
 
-	log.Printf("[Bot %s] Game started as player %d in game %s (AI ready)",
-		b.Username, b.YourPlayer, b.CurrentGame)
+	log.Printf("[Bot %s] Game started as player %d in game %s (using %s)",
+		b.Username, b.YourPlayer, b.CurrentGame, b.AIType)
 }
 
 func (b *Bot) handleMoveMade(msg *Message) {
