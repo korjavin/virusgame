@@ -53,18 +53,22 @@ func InitDB(dbPath string) {
 	log.Println("Database initialized successfully at", dbPath)
 }
 
-// SaveGame saves the game to the database
-func SaveGame(game *Game, termination string) {
+// SaveGame saves the game to the database. Returns a channel that closes when save is complete (for testing).
+func SaveGame(game *Game, termination string) <-chan struct{} {
+	done := make(chan struct{})
+
 	if db == nil {
 		log.Println("Database not initialized, skipping save")
-		return
+		close(done)
+		return done
 	}
 
 	// Extract data synchronously to avoid race conditions
 	pgnContent, err := generatePGN(game)
 	if err != nil {
 		log.Printf("Error generating PGN: %v", err)
-		return
+		close(done)
+		return done
 	}
 
 	// Get player names
@@ -105,6 +109,8 @@ func SaveGame(game *Game, termination string) {
 	// Run saving in a separate goroutine to avoid blocking the game loop
 	// using ONLY captured local variables
 	go func() {
+		defer close(done)
+
 		// Insert into database
 		insertSQL := `
 		INSERT INTO games (id, started_at, ended_at, rows, cols, player1_name, player2_name, player3_name, player4_name, result, termination, pgn_content)
@@ -132,6 +138,8 @@ func SaveGame(game *Game, termination string) {
 			log.Printf("Game %s saved to database", gameID)
 		}
 	}()
+
+	return done
 }
 func getPlayerNameSafe(player *LobbyPlayer) string {
 	if player.User != nil {
