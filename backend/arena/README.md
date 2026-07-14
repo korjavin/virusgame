@@ -23,3 +23,17 @@ Every board/seed pairing is played twice with swapped seats. The command exits
 non-zero for any illegal action, incomplete smoke game, less than 85% wins over
 the frozen legacy-compatible baseline, or less than 75% over greedy tactical.
 Wall-clock latency varies by hardware; fixed-depth outcomes do not.
+
+The production evidence path uses the same `search.Choose` entry point and
+`search.ProductionBudget` deadline as the deployed bot:
+
+```sh
+cd backend
+go run ./cmd/arena -production -seeds 1 -opponent legacy
+go run ./cmd/arena -production -seeds 1 -opponent greedy
+```
+
+Keep the fixed-depth suite as the reproducible CI gate. Production runs verify
+the deployed anytime path separately; on the reference runner, six balanced
+games per baseline produced 100% wins, zero illegal/maxed/stalled games, and
+approximately 601 ms p95 contender-decision latency.

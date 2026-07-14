@@ -12,9 +12,19 @@ import (
 func main() {
 	seeds := flag.Int("seeds", 10, "fixed seeds per board and seat")
 	depth := flag.Int("depth", 3, "deterministic action depth")
+	production := flag.Bool("production", false, "use the deployed anytime search path and budget")
+	opponent := flag.String("opponent", "all", "opponent to run: all, random, legacy, or greedy")
 	flag.Parse()
 	boards := []arena.Board{{Rows: 5, Cols: 5}, {Rows: 6, Cols: 6}, {Rows: 8, Cols: 8}}
 	contender := arena.Tournament(*depth)
+	mode := fmt.Sprintf("fixed-depth=%d", *depth)
+	if *production {
+		contender = arena.Production()
+		mode = "production-budget"
+	}
+	if *opponent != "all" && *opponent != "random" && *opponent != "legacy" && *opponent != "greedy" {
+		log.Fatalf("unknown opponent %q", *opponent)
+	}
 	legacyPassed, greedyPassed, complete := false, false, true
 	for _, benchmark := range []struct {
 		name    string
@@ -24,11 +34,14 @@ func main() {
 		{name: "legacy", factory: arena.Legacy},
 		{name: "greedy", factory: func(uint64) arena.Agent { return arena.Greedy }},
 	} {
+		if *opponent != "all" && *opponent != benchmark.name {
+			continue
+		}
 		report, err := arena.Balanced(boards, *seeds, contender, benchmark.factory)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("tournament depth=%d opponent=%s boards=5x5,6x6,8x8 seeds=%d seats=balanced %s\n", *depth, benchmark.name, *seeds, report)
+		fmt.Printf("tournament mode=%s opponent=%s boards=5x5,6x6,8x8 seeds=%d seats=balanced %s\n", mode, benchmark.name, *seeds, report)
 		if report.Illegal != 0 || report.Maxed != 0 || report.Stalled != 0 {
 			complete = false
 		}
@@ -55,7 +68,16 @@ func main() {
 			log.Fatalf("%d-player smoke failed", players)
 		}
 	}
-	if !complete || !legacyPassed || !greedyPassed {
-		log.Fatalf("strength gate failed: legacy=%v greedy=%v", legacyPassed, greedyPassed)
+	passed := complete
+	switch *opponent {
+	case "all":
+		passed = passed && legacyPassed && greedyPassed
+	case "legacy":
+		passed = passed && legacyPassed
+	case "greedy":
+		passed = passed && greedyPassed
+	}
+	if !passed {
+		log.Fatalf("strength gate failed: complete=%v legacy=%v greedy=%v", complete, legacyPassed, greedyPassed)
 	}
 }

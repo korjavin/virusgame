@@ -15,8 +15,6 @@ import (
 	gamesearch "virusgame/search"
 )
 
-const botThinkTime = 600 * time.Millisecond
-
 // BotState represents the current state of a bot
 type BotState int
 
@@ -547,7 +545,7 @@ func (b *Bot) startSearch() {
 		return
 	}
 	b.cancelSearchLocked()
-	ctx, cancel := context.WithTimeout(context.Background(), botThinkTime)
+	ctx, cancel := context.WithTimeout(context.Background(), gamesearch.ProductionBudget)
 	b.searchCancel = cancel
 	b.searchVersion = b.positionVersion
 	version := b.positionVersion

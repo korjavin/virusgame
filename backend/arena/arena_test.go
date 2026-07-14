@@ -1,12 +1,33 @@
 package arena
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
 
 	"virusgame/game"
+	"virusgame/search"
 )
+
+func TestProductionPathDeadlineAndLegality(t *testing.T) {
+	state, err := game.New(5, 5, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	result, ok := search.Choose(context.Background(), state)
+	elapsed := time.Since(started)
+	if !ok {
+		t.Fatal("production search returned no action")
+	}
+	if _, err := state.Apply(result.Action); err != nil {
+		t.Fatalf("production search returned illegal action: %v", err)
+	}
+	if elapsed > search.ProductionBudget+250*time.Millisecond {
+		t.Fatalf("production search exceeded bounded deadline: %s", elapsed)
+	}
+}
 
 func TestStrengthGate(t *testing.T) {
 	boards := []Board{{Rows: 5, Cols: 5}, {Rows: 6, Cols: 6}}

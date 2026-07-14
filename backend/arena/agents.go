@@ -14,6 +14,17 @@ func Tournament(depth int) Agent {
 	}
 }
 
+// Production exercises the exact anytime search path and deadline used by the
+// deployed bot. Keep deterministic Tournament agents for reproducible CI.
+func Production() Agent {
+	return func(state game.State) (game.Action, bool) {
+		ctx, cancel := context.WithTimeout(context.Background(), search.ProductionBudget)
+		defer cancel()
+		result, ok := search.Choose(ctx, state)
+		return result.Action, ok
+	}
+}
+
 func Random(seed uint64) Agent {
 	if seed == 0 {
 		seed = 1

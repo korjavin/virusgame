@@ -10,7 +10,9 @@ import (
 )
 
 const (
-	defaultThinkTime = 500 * time.Millisecond
+	// ProductionBudget is the single move-search budget used by both the
+	// deployed bot and production-path strength benchmarks.
+	ProductionBudget = 600 * time.Millisecond
 	maxDepth         = 64
 	infScore         = 1 << 60
 )
@@ -66,7 +68,7 @@ func Choose(ctx context.Context, state game.State) (Result, bool) {
 	}
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, defaultThinkTime)
+		ctx, cancel = context.WithTimeout(ctx, ProductionBudget)
 		defer cancel()
 	}
 
