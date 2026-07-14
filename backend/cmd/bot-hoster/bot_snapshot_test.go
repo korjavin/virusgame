@@ -57,23 +57,3 @@ func TestBotStoresAuthoritativeSnapshotAndRejectsOtherGame(t *testing.T) {
 		t.Fatal("rejected snapshot corrupted stored position")
 	}
 }
-
-func TestLegacyAdapterCarriesCompleteDecisionState(t *testing.T) {
-	position, _ := game.New(4, 4, 3)
-	snapshot := position.Snapshot()
-	snapshot.NeutralUsed[1] = true
-	snapshot.Current = 2
-	snapshot.MovesLeft = 1
-	position, err := game.FromSnapshot(snapshot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	state := legacyGameState(position, []GamePlayerInfo{{PlayerIndex: 1}, {PlayerIndex: 2}, {PlayerIndex: 3}}, 2)
-	if position.CurrentPlayer() != 2 || position.MovesLeft() != 1 || !position.NeutralUsed(2) ||
-		!state.NeutralsUsed {
-		t.Fatalf("decision state incomplete: %+v", position.Snapshot())
-	}
-	if state.PlayerBases[2] != (CellPos{Row: 0, Col: 3}) {
-		t.Fatalf("base mapping is not 1-based: %+v", state.PlayerBases)
-	}
-}

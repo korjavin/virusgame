@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"virusgame/game"
+	gamesearch "virusgame/search"
 )
+
+const botThinkTime = 600 * time.Millisecond
 
 // BotState represents the current state of a bot
 type BotState int
@@ -52,22 +56,28 @@ type Bot struct {
 	CurrentLobby string
 	CurrentGame  string
 	YourPlayer   int
-	BotSettings  *BotSettings
 
 	// Game state received authoritatively from the server.
 	Position    game.State
 	GamePlayers []GamePlayerInfo
 
-	// AI
-	AIEngine AIEngineInterface // AI engine (can be Minimax or MCTS)
-	AIType   string            // "minimax" or "mcts" for logging
-
 	// Communication channels
-	send chan []byte
+	send chan outboundMessage
 	done chan bool
 
 	// Synchronization
-	mu sync.RWMutex
+	mu              sync.RWMutex
+	positionVersion uint64
+	searchVersion   uint64
+	searchCancel    context.CancelFunc
+	choose          func(context.Context, game.State) (gamesearch.Result, bool)
+}
+
+type outboundMessage struct {
+	data       []byte
+	gameID     string
+	version    uint64
+	gameAction bool
 }
 
 // Import Message and other types from parent package
@@ -102,6 +112,7 @@ type Message struct {
 	Snapshot         *game.Snapshot `json:"snapshot,omitempty"`
 }
 
+// BotSettings is retained only to decode the additive legacy wire field; production ignores every value.
 type BotSettings struct {
 	MaterialWeight   float64 `json:"materialWeight"`
 	MobilityWeight   float64 `json:"mobilityWeight"`
@@ -109,40 +120,6 @@ type BotSettings struct {
 	RedundancyWeight float64 `json:"redundancyWeight"`
 	CohesionWeight   float64 `json:"cohesionWeight"`
 	SearchDepth      int     `json:"searchDepth"`
-}
-
-// randomizeWeight adds ±50% randomization to a weight value
-func randomizeWeight(baseWeight float64) float64 {
-	// Generate random factor between 0.5 and 1.5 (±50%)
-	randomFactor := 0.5 + rand.Float64()
-	return baseWeight * randomFactor
-}
-
-// createRandomizedBotSettings creates bot settings with randomized weights for variety
-func createRandomizedBotSettings() *BotSettings {
-	settings := &BotSettings{
-		MaterialWeight:   randomizeWeight(30.0),
-		MobilityWeight:   randomizeWeight(150.0),
-		PositionWeight:   randomizeWeight(130.0),
-		RedundancyWeight: randomizeWeight(40.0),
-		CohesionWeight:   randomizeWeight(40.0),
-		SearchDepth:      3,
-	}
-	log.Printf("[AI] Randomized bot settings: Material=%.1f, Mobility=%.1f, Position=%.1f, Redundancy=%.1f, Cohesion=%.1f",
-		settings.MaterialWeight, settings.MobilityWeight, settings.PositionWeight,
-		settings.RedundancyWeight, settings.CohesionWeight)
-	return settings
-}
-
-// createRandomAIEngine creates either a Minimax or MCTS engine randomly
-func createRandomAIEngine(settings *BotSettings) (AIEngineInterface, string) {
-	// 50/50 chance between minimax and MCTS
-	if rand.Float64() < 0.5 {
-		log.Printf("[AI] Creating Minimax engine")
-		return NewAIEngine(settings), "minimax"
-	}
-	log.Printf("[AI] Creating MCTS engine")
-	return NewMCTSEngine(settings), "mcts"
 }
 
 type LobbyInfo struct {
@@ -178,8 +155,9 @@ func NewBot(backendURL string, manager *BotManager) *Bot {
 		Manager:    manager,
 		BackendURL: backendURL,
 		State:      BotDisconnected,
-		send:       make(chan []byte, 256),
+		send:       make(chan outboundMessage, 256),
 		done:       make(chan bool),
+		choose:     gamesearch.Choose,
 	}
 }
 
@@ -250,10 +228,18 @@ func (b *Bot) writePump() {
 				return
 			}
 
-			if err := b.WS.WriteMessage(websocket.TextMessage, message); err != nil {
+			b.mu.RLock()
+			valid := !message.gameAction || b.State == BotInGame && b.CurrentGame == message.gameID && b.positionVersion == message.version
+			if !valid {
+				b.mu.RUnlock()
+				continue
+			}
+			if err := b.WS.WriteMessage(websocket.TextMessage, message.data); err != nil {
+				b.mu.RUnlock()
 				log.Printf("[Bot %s] Write error: %v", b.Username, err)
 				return
 			}
+			b.mu.RUnlock()
 
 		case <-ticker.C:
 			// Send ping to keep connection alive
@@ -272,6 +258,8 @@ func (b *Bot) reconnect() bool {
 	log.Printf("[Bot %s] Attempting to reconnect...", b.ID)
 
 	b.mu.Lock()
+	b.cancelSearchLocked()
+	b.positionVersion++
 	b.State = BotDisconnected
 	if b.WS != nil {
 		b.WS.Close()
@@ -298,6 +286,8 @@ func (b *Bot) Disconnect() {
 	if b.State == BotDisconnected {
 		return
 	}
+	b.cancelSearchLocked()
+	b.positionVersion++
 
 	close(b.done)
 
@@ -410,27 +400,12 @@ func (b *Bot) handleGameStart1v1(msg *Message) {
 		log.Printf("[Bot %s] Rejected game start snapshot: %v", b.Username, err)
 		return
 	}
-
-	b.mu.Lock()
-	b.State = BotInGame
-	b.CurrentGame = msg.GameID
-	b.YourPlayer = msg.YourPlayer
-	b.Position = position
-	b.GamePlayers = []GamePlayerInfo{
-		{PlayerIndex: 1, Username: "Player 1", IsBot: false, IsActive: true},
-		{PlayerIndex: 2, Username: "Player 2", IsBot: false, IsActive: true},
-	}
-	settings := createRandomizedBotSettings()
-	b.AIEngine, b.AIType = createRandomAIEngine(settings)
-	isMyTurn := int(position.CurrentPlayer()) == b.YourPlayer
-	gameID := b.CurrentGame
-	b.mu.Unlock()
-
-	log.Printf("[Bot %s] 1v1 game started as player %d vs %s in game %s (using %s)",
-		b.Username, b.YourPlayer, msg.OpponentUsername, b.CurrentGame, b.AIType)
-	if isMyTurn {
-		go b.calculateAndSendMove(gameID)
-	}
+	b.startGame(msg.GameID, msg.YourPlayer, position, []GamePlayerInfo{
+		{PlayerIndex: 1, Username: "Player 1", IsActive: true},
+		{PlayerIndex: 2, Username: "Player 2", IsActive: true},
+	})
+	log.Printf("[Bot %s] 1v1 game started as player %d vs %s in game %s",
+		b.Username, msg.YourPlayer, msg.OpponentUsername, msg.GameID)
 }
 
 func (b *Bot) handleBotWanted(msg *Message) {
@@ -465,30 +440,22 @@ func (b *Bot) handleGameStart(msg *Message) {
 		log.Printf("[Bot %s] Rejected game start snapshot: %v", b.Username, err)
 		return
 	}
+	b.startGame(msg.GameID, msg.YourPlayer, position, msg.GamePlayers)
+	log.Printf("[Bot %s] Game started as player %d in game %s", b.Username, msg.YourPlayer, msg.GameID)
+}
 
+func (b *Bot) startGame(gameID string, player int, position game.State, players []GamePlayerInfo) {
 	b.mu.Lock()
+	b.cancelSearchLocked()
 	b.State = BotInGame
-	b.CurrentGame = msg.GameID
-	b.YourPlayer = msg.YourPlayer
+	b.CurrentGame = gameID
+	b.YourPlayer = player
 	b.Position = position
-	b.GamePlayers = msg.GamePlayers
-
-	var settings *BotSettings
-	if b.BotSettings != nil {
-		settings = b.BotSettings
-	} else {
-		settings = createRandomizedBotSettings()
-	}
-	b.AIEngine, b.AIType = createRandomAIEngine(settings)
-	isMyTurn := int(position.CurrentPlayer()) == b.YourPlayer
-	gameID := b.CurrentGame
+	b.GamePlayers = append([]GamePlayerInfo(nil), players...)
+	b.positionVersion++
+	b.searchVersion = 0
 	b.mu.Unlock()
-
-	log.Printf("[Bot %s] Game started as player %d in game %s (using %s)",
-		b.Username, b.YourPlayer, b.CurrentGame, b.AIType)
-	if isMyTurn {
-		go b.calculateAndSendMove(gameID)
-	}
+	b.startSearch()
 }
 
 func (b *Bot) handleMoveMade(msg *Message) {
@@ -520,14 +487,7 @@ func (b *Bot) handleGameState(msg *Message) {
 		log.Printf("[Bot %s] Rejected game snapshot: %v", b.Username, err)
 		return
 	}
-	b.mu.RLock()
-	isMyTurn := int(b.Position.CurrentPlayer()) == b.YourPlayer && b.Position.MovesLeft() > 0
-	gameID := b.CurrentGame
-	b.mu.RUnlock()
-	if isMyTurn {
-		log.Printf("[Bot %s] My turn! Calculating move...", b.Username)
-		go b.calculateAndSendMove(gameID)
-	}
+	b.startSearch()
 }
 
 func decodeSnapshot(msg *Message) (game.State, error) {
@@ -567,7 +527,12 @@ func (b *Bot) updatePosition(msg *Message) error {
 	if b.CurrentGame == "" || msg.GameID != b.CurrentGame {
 		return fmt.Errorf("snapshot game %q does not match current game %q", msg.GameID, b.CurrentGame)
 	}
+	if reflect.DeepEqual(b.Position.Snapshot(), position.Snapshot()) {
+		return nil
+	}
+	b.cancelSearchLocked()
 	b.Position = position
+	b.positionVersion++
 	for index := range b.GamePlayers {
 		player := game.Player(b.GamePlayers[index].PlayerIndex)
 		b.GamePlayers[index].IsActive = position.Active(player)
@@ -575,55 +540,75 @@ func (b *Bot) updatePosition(msg *Message) error {
 	return nil
 }
 
-// calculateAndSendMove runs AI to find best move and sends it
-func (b *Bot) calculateAndSendMove(gameID string) {
+func (b *Bot) startSearch() {
+	b.mu.Lock()
+	if b.State != BotInGame || int(b.Position.CurrentPlayer()) != b.YourPlayer || b.Position.MovesLeft() == 0 || b.Position.GameOver() || b.searchVersion == b.positionVersion {
+		b.mu.Unlock()
+		return
+	}
+	b.cancelSearchLocked()
+	ctx, cancel := context.WithTimeout(context.Background(), botThinkTime)
+	b.searchCancel = cancel
+	b.searchVersion = b.positionVersion
+	version := b.positionVersion
+	gameID := b.CurrentGame
+	position := b.Position
+	choose := b.choose
+	b.mu.Unlock()
+	go b.calculateAndQueueAction(ctx, choose, position, gameID, version)
+}
+
+func (b *Bot) cancelSearchLocked() {
+	if b.searchCancel != nil {
+		b.searchCancel()
+		b.searchCancel = nil
+	}
+}
+
+func (b *Bot) calculateAndQueueAction(ctx context.Context, choose func(context.Context, game.State) (gamesearch.Result, bool), position game.State, gameID string, version uint64) {
+	result, ok := choose(ctx, position)
+	if !ok {
+		return
+	}
+	message := actionMessage(gameID, result.Action)
+	data, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("[Bot %s] Failed to marshal action: %v", b.Username, err)
+		return
+	}
 	b.mu.RLock()
-	state := legacyGameState(b.Position, b.GamePlayers, b.YourPlayer)
-	player := b.YourPlayer
-	aiEngine := b.AIEngine
+	valid := b.State == BotInGame && b.CurrentGame == gameID && b.positionVersion == version && int(b.Position.CurrentPlayer()) == b.YourPlayer
 	b.mu.RUnlock()
-
-	if aiEngine == nil {
-		log.Printf("[Bot %s] ERROR: AI engine not initialized!", b.Username)
+	if !valid {
 		return
 	}
-
-	// Calculate move (may take 500ms - 2s)
-	move, ok := aiEngine.CalculateMove(state, player)
-
-	if !ok || move == nil {
-		log.Printf("[Bot %s] No valid moves available! Waiting for server to handle elimination.", b.Username)
-		// Don't send anything - server will detect no valid moves and eliminate this player
-		return
+	select {
+	case b.send <- outboundMessage{data: data, gameID: gameID, version: version, gameAction: true}:
+		log.Printf("[Bot %s] Queued action at depth %d after %d nodes", b.Username, result.Depth, result.Nodes)
+	default:
+		log.Printf("[Bot %s] Action queue full; waiting for the next authoritative snapshot", b.Username)
 	}
+}
 
-	// Send move based on type
-	if move.Type == MoveTypeNeutral {
-		msg := Message{
-			Type:   "neutrals",
-			GameID: gameID,
-			Cells:  move.Cells,
-		}
-		b.sendMessage(&msg)
-
-		log.Printf("[Bot %s] Sent NEUTRAL move with %d cells", b.Username, len(move.Cells))
-	} else {
-		// Standard Move
-		rowPtr := move.Row
-		colPtr := move.Col
-		msg := Message{
-			Type:   "move",
-			GameID: gameID,
-			Row:    &rowPtr,
-			Col:    &colPtr,
-		}
-		b.sendMessage(&msg)
-		log.Printf("[Bot %s] Sent move: (%d, %d)", b.Username, move.Row, move.Col)
+func actionMessage(gameID string, action game.Action) *Message {
+	if action.Kind == game.PlaceNeutrals {
+		return &Message{Type: "neutrals", GameID: gameID, Cells: []CellPos{
+			{Row: action.Neutrals[0].Row, Col: action.Neutrals[0].Col},
+			{Row: action.Neutrals[1].Row, Col: action.Neutrals[1].Col},
+		}}
 	}
+	row, col := action.Target.Row, action.Target.Col
+	return &Message{Type: "move", GameID: gameID, Row: &row, Col: &col}
 }
 
 func (b *Bot) handleGameEnd(msg *Message) {
 	b.mu.Lock()
+	if msg.GameID != "" && msg.GameID != b.CurrentGame {
+		b.mu.Unlock()
+		return
+	}
+	b.cancelSearchLocked()
+	b.positionVersion++
 	b.State = BotIdle
 	b.CurrentGame = ""
 	b.CurrentLobby = ""
@@ -643,6 +628,8 @@ func (b *Bot) handlePlayerEliminated(msg *Message) {
 
 func (b *Bot) handleLobbyClosed(msg *Message) {
 	b.mu.Lock()
+	b.cancelSearchLocked()
+	b.positionVersion++
 	b.State = BotIdle
 	b.CurrentLobby = ""
 	b.mu.Unlock()
@@ -651,10 +638,7 @@ func (b *Bot) handleLobbyClosed(msg *Message) {
 }
 
 // JoinLobby sends a join_lobby message
-func (b *Bot) JoinLobby(lobbyID string, requestID string, botSettings *BotSettings) {
-	b.mu.Lock()
-	b.BotSettings = botSettings
-	b.mu.Unlock()
+func (b *Bot) JoinLobby(lobbyID string, requestID string, _ *BotSettings) {
 
 	msg := Message{
 		Type:      "join_lobby",
@@ -675,7 +659,7 @@ func (b *Bot) sendMessage(msg *Message) {
 	}
 
 	select {
-	case b.send <- data:
+	case b.send <- outboundMessage{data: data}:
 	case <-time.After(time.Second):
 		log.Printf("[Bot %s] Send timeout", b.Username)
 	}
