@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"virusgame/game"
 )
 
 // BotState represents the current state of a bot
@@ -53,17 +54,13 @@ type Bot struct {
 	YourPlayer   int
 	BotSettings  *BotSettings
 
-	// Game state (maintained locally like a human client)
-	Board       [][]CellValue
+	// Game state received authoritatively from the server.
+	Position    game.State
 	GamePlayers []GamePlayerInfo
-	PlayerBases [4]CellPos
-	Rows        int
-	Cols        int
 
 	// AI
 	AIEngine AIEngineInterface // AI engine (can be Minimax or MCTS)
 	AIType   string            // "minimax" or "mcts" for logging
-	NeutralsUsed bool // Track if neutrals have been used
 
 	// Communication channels
 	send chan []byte
@@ -95,13 +92,14 @@ type Message struct {
 	GamePlayers      []GamePlayerInfo `json:"gamePlayers,omitempty"`
 	EliminatedPlayer int              `json:"eliminatedPlayer,omitempty"`
 	// 1v1 Challenge fields
-	ChallengeID      string           `json:"challengeId,omitempty"`
-	FromUserID       string           `json:"fromUserId,omitempty"`
-	FromUsername     string           `json:"fromUsername,omitempty"`
-	OpponentID       string           `json:"opponentId,omitempty"`
-	OpponentUsername string           `json:"opponentUsername,omitempty"`
-	PlayerSymbol     string           `json:"playerSymbol,omitempty"`
-	IsMultiplayer    bool             `json:"isMultiplayer,omitempty"`
+	ChallengeID      string         `json:"challengeId,omitempty"`
+	FromUserID       string         `json:"fromUserId,omitempty"`
+	FromUsername     string         `json:"fromUsername,omitempty"`
+	OpponentID       string         `json:"opponentId,omitempty"`
+	OpponentUsername string         `json:"opponentUsername,omitempty"`
+	PlayerSymbol     string         `json:"playerSymbol,omitempty"`
+	IsMultiplayer    bool           `json:"isMultiplayer,omitempty"`
+	Snapshot         *game.Snapshot `json:"snapshot,omitempty"`
 }
 
 type BotSettings struct {
@@ -332,6 +330,9 @@ func (b *Bot) handleMessage(msg *Message) {
 	case "multiplayer_game_start":
 		b.handleGameStart(msg)
 
+	case "game_state":
+		b.handleGameState(msg)
+
 	case "move_made":
 		b.handleMoveMade(msg)
 
@@ -404,41 +405,32 @@ func (b *Bot) declineChallenge(challengeID string) {
 }
 
 func (b *Bot) handleGameStart1v1(msg *Message) {
+	position, err := decodeSnapshot(msg)
+	if err != nil {
+		log.Printf("[Bot %s] Rejected game start snapshot: %v", b.Username, err)
+		return
+	}
+
 	b.mu.Lock()
 	b.State = BotInGame
 	b.CurrentGame = msg.GameID
 	b.YourPlayer = msg.YourPlayer
-	b.Rows = msg.Rows
-	b.Cols = msg.Cols
-
-	// Initialize board for 1v1 game
-	b.Board = make([][]CellValue, b.Rows)
-	for i := range b.Board {
-		b.Board[i] = make([]CellValue, b.Cols)
-	}
-
-	// Set up bases for 1v1
-	b.PlayerBases[0] = CellPos{Row: 0, Col: 0}
-	b.PlayerBases[1] = CellPos{Row: b.Rows - 1, Col: b.Cols - 1}
-
-	// Place bases on board
-    b.Board[b.PlayerBases[0].Row][b.PlayerBases[0].Col] = NewCell(1, CellFlagBase)
-    b.Board[b.PlayerBases[1].Row][b.PlayerBases[1].Col] = NewCell(2, CellFlagBase)
-
-	// Set up game players info for 1v1
+	b.Position = position
 	b.GamePlayers = []GamePlayerInfo{
 		{PlayerIndex: 1, Username: "Player 1", IsBot: false, IsActive: true},
 		{PlayerIndex: 2, Username: "Player 2", IsBot: false, IsActive: true},
 	}
-
-	// Initialize AI engine with randomized settings and random algorithm
 	settings := createRandomizedBotSettings()
 	b.AIEngine, b.AIType = createRandomAIEngine(settings)
-
+	isMyTurn := int(position.CurrentPlayer()) == b.YourPlayer
+	gameID := b.CurrentGame
 	b.mu.Unlock()
 
 	log.Printf("[Bot %s] 1v1 game started as player %d vs %s in game %s (using %s)",
 		b.Username, b.YourPlayer, msg.OpponentUsername, b.CurrentGame, b.AIType)
+	if isMyTurn {
+		go b.calculateAndSendMove(gameID)
+	}
 }
 
 func (b *Bot) handleBotWanted(msg *Message) {
@@ -468,121 +460,127 @@ func (b *Bot) handleLobbyJoined(msg *Message) {
 }
 
 func (b *Bot) handleGameStart(msg *Message) {
+	position, err := decodeSnapshot(msg)
+	if err != nil {
+		log.Printf("[Bot %s] Rejected game start snapshot: %v", b.Username, err)
+		return
+	}
+
 	b.mu.Lock()
 	b.State = BotInGame
 	b.CurrentGame = msg.GameID
 	b.YourPlayer = msg.YourPlayer
-	b.Rows = msg.Rows
-	b.Cols = msg.Cols
+	b.Position = position
 	b.GamePlayers = msg.GamePlayers
 
-	// Initialize board
-	b.Board = make([][]CellValue, b.Rows)
-	for i := range b.Board {
-		b.Board[i] = make([]CellValue, b.Cols)
-	}
-
-	// TODO: Extract PlayerBases from message (might need backend change)
-	// For now, assume standard positions
-	b.PlayerBases[0] = CellPos{Row: 0, Col: 0}
-	b.PlayerBases[1] = CellPos{Row: b.Rows - 1, Col: b.Cols - 1}
-	b.PlayerBases[2] = CellPos{Row: 0, Col: b.Cols - 1}
-	b.PlayerBases[3] = CellPos{Row: b.Rows - 1, Col: 0}
-
-	// Place bases on board
-	if len(b.Board) > b.PlayerBases[0].Row && len(b.Board[0]) > b.PlayerBases[0].Col {
-        b.Board[b.PlayerBases[0].Row][b.PlayerBases[0].Col] = NewCell(1, CellFlagBase)
-	}
-	if len(b.Board) > b.PlayerBases[1].Row && len(b.Board[0]) > b.PlayerBases[1].Col {
-        b.Board[b.PlayerBases[1].Row][b.PlayerBases[1].Col] = NewCell(2, CellFlagBase)
-	}
-	if len(b.GamePlayers) > 2 {
-		if len(b.Board) > b.PlayerBases[2].Row && len(b.Board[0]) > b.PlayerBases[2].Col {
-            b.Board[b.PlayerBases[2].Row][b.PlayerBases[2].Col] = NewCell(3, CellFlagBase)
-		}
-	}
-	if len(b.GamePlayers) > 3 {
-		if len(b.Board) > b.PlayerBases[3].Row && len(b.Board[0]) > b.PlayerBases[3].Col {
-            b.Board[b.PlayerBases[3].Row][b.PlayerBases[3].Col] = NewCell(4, CellFlagBase)
-		}
-	}
-
-	// Initialize AI engine with bot settings (randomized if not provided)
 	var settings *BotSettings
 	if b.BotSettings != nil {
 		settings = b.BotSettings
 	} else {
-		// Use randomized settings for varied gameplay
 		settings = createRandomizedBotSettings()
 	}
 	b.AIEngine, b.AIType = createRandomAIEngine(settings)
-
+	isMyTurn := int(position.CurrentPlayer()) == b.YourPlayer
+	gameID := b.CurrentGame
 	b.mu.Unlock()
 
 	log.Printf("[Bot %s] Game started as player %d in game %s (using %s)",
 		b.Username, b.YourPlayer, b.CurrentGame, b.AIType)
+	if isMyTurn {
+		go b.calculateAndSendMove(gameID)
+	}
 }
 
 func (b *Bot) handleMoveMade(msg *Message) {
 	if msg.Row == nil || msg.Col == nil {
 		return
 	}
-
-	b.mu.Lock()
-	b.applyMove(*msg.Row, *msg.Col, msg.Player)
-	isMyTurn := msg.Player == b.YourPlayer
-	movesLeft := msg.MovesLeft
-	gameID := b.CurrentGame
-	b.mu.Unlock()
-
-	log.Printf("[Bot %s] Move made by player %d at (%d, %d). Moves left: %d",
-		b.Username, msg.Player, *msg.Row, *msg.Col, movesLeft)
-
-	// If it's my turn and I have moves left, calculate next move
-	if isMyTurn && movesLeft > 0 {
-		log.Printf("[Bot %s] Still my turn (%d moves left). Calculating next move...", b.Username, movesLeft)
-		go b.calculateAndSendMove(gameID)
+	if err := b.updatePosition(msg); err != nil {
+		log.Printf("[Bot %s] Rejected move snapshot: %v", b.Username, err)
+		return
 	}
+	log.Printf("[Bot %s] Move made by player %d at (%d, %d). Moves left: %d",
+		b.Username, msg.Player, *msg.Row, *msg.Col, msg.MovesLeft)
 }
 
 func (b *Bot) handleNeutralsPlaced(msg *Message) {
-	b.mu.Lock()
-	b.applyNeutralMove(msg.Cells)
-	// Neutrals end the turn, so we don't need to check for moves left
-	b.mu.Unlock()
-
+	if err := b.updatePosition(msg); err != nil {
+		log.Printf("[Bot %s] Rejected neutral snapshot: %v", b.Username, err)
+		return
+	}
 	log.Printf("[Bot %s] Neutrals placed by player %d (%d cells)", b.Username, msg.Player, len(msg.Cells))
 }
 
 func (b *Bot) handleTurnChange(msg *Message) {
+	b.handleGameState(msg)
+}
+
+func (b *Bot) handleGameState(msg *Message) {
+	if err := b.updatePosition(msg); err != nil {
+		log.Printf("[Bot %s] Rejected game snapshot: %v", b.Username, err)
+		return
+	}
 	b.mu.RLock()
-	isMyTurn := msg.Player == b.YourPlayer
+	isMyTurn := int(b.Position.CurrentPlayer()) == b.YourPlayer && b.Position.MovesLeft() > 0
 	gameID := b.CurrentGame
 	b.mu.RUnlock()
-
 	if isMyTurn {
 		log.Printf("[Bot %s] My turn! Calculating move...", b.Username)
 		go b.calculateAndSendMove(gameID)
 	}
 }
 
+func decodeSnapshot(msg *Message) (game.State, error) {
+	if msg.Snapshot == nil {
+		return game.State{}, fmt.Errorf("missing snapshot")
+	}
+	position, err := game.FromSnapshot(*msg.Snapshot)
+	if err != nil {
+		return game.State{}, err
+	}
+	if msg.Type == "game_start" || msg.Type == "multiplayer_game_start" {
+		players := len(msg.Snapshot.Bases)
+		if msg.YourPlayer < 1 || msg.YourPlayer > players {
+			return game.State{}, fmt.Errorf("yourPlayer must be 1-based and within 1..%d", players)
+		}
+		if msg.Type == "multiplayer_game_start" && len(msg.GamePlayers) != players {
+			return game.State{}, fmt.Errorf("got %d player records for %d-player snapshot", len(msg.GamePlayers), players)
+		}
+		seen := make([]bool, players)
+		for _, player := range msg.GamePlayers {
+			if player.PlayerIndex < 1 || player.PlayerIndex > players || seen[player.PlayerIndex-1] {
+				return game.State{}, fmt.Errorf("playerIndex values must be unique and 1-based")
+			}
+			seen[player.PlayerIndex-1] = true
+		}
+	}
+	return position, nil
+}
+
+func (b *Bot) updatePosition(msg *Message) error {
+	position, err := decodeSnapshot(msg)
+	if err != nil {
+		return err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.CurrentGame == "" || msg.GameID != b.CurrentGame {
+		return fmt.Errorf("snapshot game %q does not match current game %q", msg.GameID, b.CurrentGame)
+	}
+	b.Position = position
+	for index := range b.GamePlayers {
+		player := game.Player(b.GamePlayers[index].PlayerIndex)
+		b.GamePlayers[index].IsActive = position.Active(player)
+	}
+	return nil
+}
+
 // calculateAndSendMove runs AI to find best move and sends it
 func (b *Bot) calculateAndSendMove(gameID string) {
 	b.mu.RLock()
-
-	// Create game state snapshot
-	state := &GameState{
-		Board:        b.copyBoardLocal(b.Board),
-		Rows:         b.Rows,
-		Cols:         b.Cols,
-		PlayerBases:  b.PlayerBases,
-		Players:      b.GamePlayers,
-		NeutralsUsed: b.NeutralsUsed,
-	}
-
+	state := legacyGameState(b.Position, b.GamePlayers, b.YourPlayer)
 	player := b.YourPlayer
 	aiEngine := b.AIEngine
-
 	b.mu.RUnlock()
 
 	if aiEngine == nil {
@@ -608,12 +606,6 @@ func (b *Bot) calculateAndSendMove(gameID string) {
 		}
 		b.sendMessage(&msg)
 
-		// Update local tracking
-		b.mu.Lock()
-		b.NeutralsUsed = true
-		b.applyNeutralMove(move.Cells)
-		b.mu.Unlock()
-
 		log.Printf("[Bot %s] Sent NEUTRAL move with %d cells", b.Username, len(move.Cells))
 	} else {
 		// Standard Move
@@ -630,21 +622,11 @@ func (b *Bot) calculateAndSendMove(gameID string) {
 	}
 }
 
-func (b *Bot) copyBoardLocal(board [][]CellValue) [][]CellValue {
-	newBoard := make([][]CellValue, len(board))
-	for i := range board {
-		newBoard[i] = make([]CellValue, len(board[i]))
-		copy(newBoard[i], board[i])
-	}
-	return newBoard
-}
-
 func (b *Bot) handleGameEnd(msg *Message) {
 	b.mu.Lock()
 	b.State = BotIdle
 	b.CurrentGame = ""
 	b.CurrentLobby = ""
-	b.Board = nil
 	b.mu.Unlock()
 
 	log.Printf("[Bot %s] Game ended. Winner: player %d. Returning to pool.",
@@ -652,14 +634,10 @@ func (b *Bot) handleGameEnd(msg *Message) {
 }
 
 func (b *Bot) handlePlayerEliminated(msg *Message) {
-	b.mu.Lock()
-	for i := range b.GamePlayers {
-		if b.GamePlayers[i].PlayerIndex == msg.EliminatedPlayer {
-			b.GamePlayers[i].IsActive = false
-		}
+	if err := b.updatePosition(msg); err != nil {
+		log.Printf("[Bot %s] Rejected elimination snapshot: %v", b.Username, err)
+		return
 	}
-	b.mu.Unlock()
-
 	log.Printf("[Bot %s] Player %d eliminated", b.Username, msg.EliminatedPlayer)
 }
 
@@ -670,23 +648,6 @@ func (b *Bot) handleLobbyClosed(msg *Message) {
 	b.mu.Unlock()
 
 	log.Printf("[Bot %s] Lobby closed. Returning to pool.", b.Username)
-}
-
-// applyMove updates the local board state
-func (b *Bot) applyMove(row, col, player int) {
-	cell := b.Board[row][col]
-	if cell == 0 {
-		b.Board[row][col] = NewCell(player, CellFlagNormal)
-	} else {
-		b.Board[row][col] = NewCell(player, CellFlagFortified)
-	}
-}
-
-func (b *Bot) applyNeutralMove(cells []CellPos) {
-	for _, cell := range cells {
-		// Set to Killed (Neutral)
-		b.Board[cell.Row][cell.Col] = NewCell(0, CellFlagKilled)
-	}
 }
 
 // JoinLobby sends a join_lobby message

@@ -650,6 +650,8 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 		Rows:             rows,
 		Cols:             cols,
 	}
+	p1Snapshot := gameSnapshot(game)
+	p1Msg.Snapshot = &p1Snapshot
 	h.sendToUser(challenge.FromUser, &p1Msg)
 
 	p2Msg := Message{
@@ -661,6 +663,8 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 		Rows:             rows,
 		Cols:             cols,
 	}
+	p2Snapshot := gameSnapshot(game)
+	p2Msg.Snapshot = &p2Snapshot
 	h.sendToUser(challenge.ToUser, &p2Msg)
 
 	// Clean up challenge
@@ -840,6 +844,8 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 
 		log.Printf("Turn ending for game %s, calling endTurn()", game.ID)
 		h.endTurn(game)
+	} else {
+		h.broadcastToGame(game, &Message{Type: "game_state", GameID: game.ID})
 	}
 }
 
@@ -953,6 +959,8 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		Player: playerNum,
 		Cells:  msg.Cells,
 	}
+	neutralSnapshot := gameSnapshot(game)
+	neutralsMsg.Snapshot = &neutralSnapshot
 
 	if game.IsMultiplayer {
 		// Broadcast to all other players in the game
@@ -1010,6 +1018,8 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		Player:    game.CurrentPlayer,
 		MovesLeft: game.MovesLeft,
 	}
+	turnSnapshot := gameSnapshot(game)
+	turnMsg.Snapshot = &turnSnapshot
 
 	// Send turn change to all players based on game type
 	if game.IsMultiplayer {
@@ -2210,6 +2220,8 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 				IsMultiplayer: true,
 				GamePlayers:   gamePlayerInfos,
 			}
+			startSnapshot := gameSnapshot(game)
+			startMsg.Snapshot = &startSnapshot
 			h.sendToUser(gamePlayers[i].User, &startMsg)
 		}
 	}
@@ -2253,6 +2265,8 @@ func (h *Hub) sendError(user *User, message string) {
 // ========== Multiplayer Game Logic ==========
 
 func (h *Hub) broadcastToGame(game *Game, msg *Message) {
+	snapshot := gameSnapshot(game)
+	msg.Snapshot = &snapshot
 	if game.IsMultiplayer {
 		// Send to all human players in multiplayer game
 		for i := 0; i < 4; i++ {
