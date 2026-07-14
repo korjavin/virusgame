@@ -35,6 +35,25 @@ type searcher struct {
 	nodes uint64
 }
 
+// ChooseDepth performs one deterministic, fully completed action-depth search.
+// It is intended for reproducible benchmarks; production callers should use Choose.
+func ChooseDepth(ctx context.Context, state game.State, depth int) (Result, bool) {
+	if depth < 1 || depth > maxDepth || len(state.LegalActions()) == 0 {
+		return Result{}, false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s := newSearcher(ctx, state)
+	result, complete := s.atDepth(state, depth)
+	if !complete {
+		return Result{}, false
+	}
+	result.Depth = depth
+	result.Nodes = s.nodes
+	return result, true
+}
+
 // Choose returns the best action from the last fully completed iteration. If
 // ctx has no deadline, a production-safe default deadline is applied.
 func Choose(ctx context.Context, state game.State) (Result, bool) {
