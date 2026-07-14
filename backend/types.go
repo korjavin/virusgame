@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"time"
+
+	"virusgame/game"
 )
 
 const (
@@ -89,6 +91,7 @@ type Message struct {
 	EliminatedPlayer int           `json:"eliminatedPlayer,omitempty"`
 	// Bot settings
 	BotSettings   *BotSettings     `json:"botSettings,omitempty"`
+	Snapshot      *game.Snapshot   `json:"snapshot,omitempty"`
 
 	// Chat fields
 	MessageID string `json:"messageId,omitempty"` // Translation key
