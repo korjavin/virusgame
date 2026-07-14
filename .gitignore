@@ -17,3 +17,8 @@ _lastgames_snapshot.json
 # build outputs
 backend/server
 bot-templates/go/gobot
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/
