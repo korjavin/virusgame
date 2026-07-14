@@ -190,6 +190,26 @@ func TestCancellationReturnsLegalFallback(t *testing.T) {
 	}
 }
 
+func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
+	state := mustState(t, 6, 6, 2)
+	a, ok := ChooseDepth(context.Background(), state, 2)
+	if !ok {
+		t.Fatal("fixed-depth search failed")
+	}
+	b, ok := ChooseDepth(context.Background(), state, 2)
+	if !ok || a != b {
+		t.Fatalf("fixed-depth results differ: %+v / %+v", a, b)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, ok := ChooseDepth(ctx, state, 2); ok {
+		t.Fatal("canceled fixed-depth search completed")
+	}
+	if _, ok := ChooseDepth(context.Background(), state, 0); ok {
+		t.Fatal("invalid depth accepted")
+	}
+}
+
 func BenchmarkDepthThree(b *testing.B) {
 	state, _ := game.New(10, 10, 2)
 	for i := 0; i < b.N; i++ {
