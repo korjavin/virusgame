@@ -79,6 +79,8 @@ an `illegal_move` legal-prefix/protocol fixture. The controlled 5×5 and 5×7
 resignation persistence sentinels from the same response are deliberately not
 part of arena evidence. These outcome-selected motifs do not modify either
 frozen strength-corpus split or its group hash.
+Negative causal motif points identify the state before the recorded bad move;
+the following replay action is the queryable historical mistake.
 
 CI gate:
 

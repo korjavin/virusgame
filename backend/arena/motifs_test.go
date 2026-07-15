@@ -38,32 +38,48 @@ func TestProductionMotifsAreFrozenAnnotatedReplayPositions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	causalActions := map[string]ReplayMove{
-		"post-fix-fd-t8-capturable-bridge":       {Kind: "move", Row: 4, Col: 4},
-		"post-fix-e854-t8-capturable-bridge":     {Kind: "move", Row: 3, Col: 3},
-		"post-fix-e7b2-t8-capturable-bridge":     {Kind: "move", Row: 3, Col: 3},
-		"post-fix-6bf-t8-capturable-bridge":      {Kind: "move", Row: 7, Col: 6},
-		"post-fix-6bf-t18-recurrent-bridge":      {Kind: "move", Row: 3, Col: 4},
-		"post-fix-3d-three-exit-mesh":            {Kind: "move", Row: 6, Col: 3},
-		"post-fix-3d-irreversible-base-pressure": {Kind: "move", Row: 1, Col: 1},
-		"post-fix-4558-t12-base-spine-cut":       {Kind: "move", Row: 2, Col: 1},
-		"post-fix-4558-t14-base-spine-cut":       {Kind: "move", Row: 7, Col: 6},
-		"post-fix-4558-t18-base-spine-cut":       {Kind: "move", Row: 0, Col: 1},
+	causalBadActions := map[string]ReplayMove{
+		"post-fix-fd-t8-capturable-bridge":   {Kind: "move", Row: 4, Col: 4},
+		"post-fix-e854-t8-capturable-bridge": {Kind: "move", Row: 3, Col: 3},
+		"post-fix-e7b2-t8-capturable-bridge": {Kind: "move", Row: 3, Col: 3},
+		"post-fix-6bf-t8-capturable-bridge":  {Kind: "move", Row: 7, Col: 6},
+		"post-fix-6bf-t18-recurrent-bridge":  {Kind: "move", Row: 3, Col: 4},
+		"post-fix-4558-t12-base-spine-cut":   {Kind: "move", Row: 2, Col: 1},
+		"post-fix-4558-t14-base-spine-cut":   {Kind: "move", Row: 7, Col: 6},
+		"post-fix-4558-t18-base-spine-cut":   {Kind: "move", Row: 3, Col: 1},
 	}
 	for _, moment := range manifest.Moments {
-		want, ok := causalActions[moment.ID]
+		want, ok := causalBadActions[moment.ID]
 		if !ok {
 			continue
 		}
+		if moment.Polarity != "negative" {
+			t.Fatalf("%s causal bad action is not a negative predecision motif", moment.ID)
+		}
 		replay := replays[moment.SourceID]
-		got := replay.Turns[moment.Turn-1].Actions[moment.AfterActions-1]
+		actions := replay.Turns[moment.Turn-1].Actions
+		if moment.AfterActions < 0 || moment.AfterActions >= len(actions) {
+			t.Fatalf("%s has no recorded next action after predecision point %d", moment.ID, moment.AfterActions)
+		}
+		got := actions[moment.AfterActions]
 		if got.Kind != want.Kind || got.Row != want.Row || got.Col != want.Col {
 			t.Fatalf("%s causal action=%+v, want %+v", moment.ID, got, want)
 		}
-		delete(causalActions, moment.ID)
+		delete(causalBadActions, moment.ID)
 	}
-	if len(causalActions) != 0 {
-		t.Fatalf("missing post-fix causal moments: %v", causalActions)
+	if len(causalBadActions) != 0 {
+		t.Fatalf("missing post-fix causal moments: %v", causalBadActions)
+	}
+	losingSequence := replays["4558d2fe-c22f-4940-8012-8f4f43fac728"].Turns[17].Actions
+	wantLosingSequence := []ReplayMove{{Kind: "move", Row: 3, Col: 1}, {Kind: "move", Row: 2, Col: 0}, {Kind: "move", Row: 0, Col: 1}}
+	if len(losingSequence) != len(wantLosingSequence) {
+		t.Fatalf("4558 T18 actions=%+v, want %+v", losingSequence, wantLosingSequence)
+	}
+	for i, want := range wantLosingSequence {
+		got := losingSequence[i]
+		if got.Kind != want.Kind || got.Row != want.Row || got.Col != want.Col {
+			t.Fatalf("4558 T18 action %d=%+v, want %+v", i+1, got, want)
+		}
 	}
 	for _, moment := range manifest.Moments {
 		if strings.HasPrefix(moment.SourceID, "836204cc-") {
