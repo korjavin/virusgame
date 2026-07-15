@@ -40,6 +40,7 @@ type searcher struct {
 	table              map[uint64]tableEntry
 	nodes, evaluations uint64
 	nodeLimit          uint64
+	eval               evalWorkspace
 }
 
 // ChooseNodeBudget performs deterministic iterative deepening without an
@@ -187,7 +188,7 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 	}
 	if depth == 0 {
 		s.evaluations++
-		return evaluate(state, s.root), true
+		return evaluateWithWorkspace(state, s.root, &s.eval), true
 	}
 	key := stateHash(state)
 	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
@@ -199,7 +200,7 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 	}
 	if len(children) == 0 {
 		s.evaluations++
-		return evaluate(state, s.root), true
+		return evaluateWithWorkspace(state, s.root, &s.eval), true
 	}
 
 	maximizing := state.CurrentPlayer() == s.root
@@ -251,7 +252,7 @@ func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 	}
 	if depth == 0 {
 		s.evaluations++
-		return evaluateAll(state), true
+		return evaluateAllWithWorkspace(state, &s.eval), true
 	}
 	key := stateHash(state)
 	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
@@ -263,7 +264,7 @@ func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 	}
 	if len(children) == 0 {
 		s.evaluations++
-		return evaluateAll(state), true
+		return evaluateAllWithWorkspace(state, &s.eval), true
 	}
 
 	player := state.CurrentPlayer()
