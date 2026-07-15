@@ -26,6 +26,7 @@ type Result struct {
 
 type tableEntry struct {
 	depth  int
+	ply    int
 	values [4]int
 }
 
@@ -40,7 +41,11 @@ type searcher struct {
 // ChooseDepth performs one deterministic, fully completed action-depth search.
 // It is intended for reproducible benchmarks; production callers should use Choose.
 func ChooseDepth(ctx context.Context, state game.State, depth int) (Result, bool) {
-	if depth < 1 || depth > maxDepth || len(state.LegalActions()) == 0 {
+	if depth < 1 || depth > maxDepth {
+		return Result{}, false
+	}
+	fallback, ok := preservingFallback(state)
+	if !ok {
 		return Result{}, false
 	}
 	if ctx == nil {
@@ -49,7 +54,7 @@ func ChooseDepth(ctx context.Context, state game.State, depth int) (Result, bool
 	s := newSearcher(ctx, state)
 	result, complete := s.atDepth(state, depth)
 	if !complete {
-		return Result{}, false
+		return Result{Action: fallback}, false
 	}
 	result.Depth = depth
 	result.Nodes = s.nodes
@@ -59,8 +64,8 @@ func ChooseDepth(ctx context.Context, state game.State, depth int) (Result, bool
 // Choose returns the best action from the last fully completed iteration. If
 // ctx has no deadline, a production-safe default deadline is applied.
 func Choose(ctx context.Context, state game.State) (Result, bool) {
-	actions := state.LegalActions()
-	if len(actions) == 0 {
+	fallback, ok := preservingFallback(state)
+	if !ok {
 		return Result{}, false
 	}
 	if ctx == nil {
@@ -72,7 +77,7 @@ func Choose(ctx context.Context, state game.State) (Result, bool) {
 		defer cancel()
 	}
 
-	best := Result{Action: actions[0]}
+	best := Result{Action: fallback}
 	totalNodes := uint64(0)
 	for depth := 1; depth <= maxDepth; depth++ {
 		s := newSearcher(ctx, state)
@@ -106,15 +111,16 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 	if !ok || len(children) == 0 {
 		return Result{}, ok
 	}
+	children = preservingChildren(children, s.root)
 	best := Result{Action: children[0].action, Score: -infScore}
 	alpha, beta := -infScore, infScore
 	for _, child := range children {
 		var values [4]int
 		var complete bool
 		if s.multi {
-			values, complete = s.maxN(child.state, depth-1)
+			values, complete = s.maxN(child.state, depth-1, 1)
 		} else {
-			values[0], complete = s.minimax(child.state, depth-1, alpha, beta)
+			values[0], complete = s.minimax(child.state, depth-1, alpha, beta, 1)
 		}
 		if !complete {
 			return Result{}, false
@@ -133,16 +139,19 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 	return best, true
 }
 
-func (s *searcher) minimax(state game.State, depth, alpha, beta int) (int, bool) {
+func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, bool) {
 	if !s.running() {
 		return 0, false
 	}
 	s.nodes++
-	if depth == 0 || state.GameOver() {
+	if state.GameOver() {
+		return terminalScore(state, s.root, ply), true
+	}
+	if depth == 0 {
 		return evaluate(state, s.root), true
 	}
 	key := stateHash(state)
-	if entry, ok := s.table[key]; ok && entry.depth >= depth {
+	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
 		return entry.values[0], true
 	}
 	children, complete := s.orderedChildren(state)
@@ -160,7 +169,7 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta int) (int, bool)
 	}
 	cut := false
 	for _, child := range children {
-		score, ok := s.minimax(child.state, depth-1, alpha, beta)
+		score, ok := s.minimax(child.state, depth-1, alpha, beta, ply+1)
 		if !ok {
 			return 0, false
 		}
@@ -187,21 +196,24 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta int) (int, bool)
 	if !cut {
 		var values [4]int
 		values[0] = best
-		s.table[key] = tableEntry{depth: depth, values: values}
+		s.table[key] = tableEntry{depth: depth, ply: ply, values: values}
 	}
 	return best, true
 }
 
-func (s *searcher) maxN(state game.State, depth int) ([4]int, bool) {
+func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 	if !s.running() {
 		return [4]int{}, false
 	}
 	s.nodes++
-	if depth == 0 || state.GameOver() {
+	if state.GameOver() {
+		return terminalScores(state, ply), true
+	}
+	if depth == 0 {
 		return evaluateAll(state), true
 	}
 	key := stateHash(state)
-	if entry, ok := s.table[key]; ok && entry.depth >= depth {
+	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
 		return entry.values, true
 	}
 	children, complete := s.orderedChildren(state)
@@ -216,7 +228,7 @@ func (s *searcher) maxN(state game.State, depth int) ([4]int, bool) {
 	var best [4]int
 	best[player-1] = -infScore
 	for _, child := range children {
-		values, ok := s.maxN(child.state, depth-1)
+		values, ok := s.maxN(child.state, depth-1, ply+1)
 		if !ok {
 			return [4]int{}, false
 		}
@@ -224,8 +236,56 @@ func (s *searcher) maxN(state game.State, depth int) ([4]int, bool) {
 			best = values
 		}
 	}
-	s.table[key] = tableEntry{depth: depth, values: best}
+	s.table[key] = tableEntry{depth: depth, ply: ply, values: best}
 	return best, true
+}
+
+// preservingFallback is deliberately independent of the search context. Even
+// an already-canceled caller gets a legal action that does not immediately
+// eliminate the actor whenever such an action exists.
+func preservingFallback(state game.State) (game.Action, bool) {
+	actions := state.LegalActions()
+	if len(actions) == 0 {
+		return game.Action{}, false
+	}
+	actor := state.CurrentPlayer()
+	for _, action := range actions {
+		next, err := state.Apply(action)
+		if err == nil && next.Active(actor) {
+			return action, true
+		}
+	}
+	return actions[0], true
+}
+
+func preservingChildren(children []child, actor game.Player) []child {
+	for _, candidate := range children {
+		if candidate.state.Active(actor) {
+			kept := children[:0]
+			for _, child := range children {
+				if child.state.Active(actor) {
+					kept = append(kept, child)
+				}
+			}
+			return kept
+		}
+	}
+	return children
+}
+
+func terminalScore(state game.State, player game.Player, ply int) int {
+	if state.Winner() == player {
+		return mateScore - ply
+	}
+	return -mateScore + ply
+}
+
+func terminalScores(state game.State, ply int) [4]int {
+	var scores [4]int
+	for player := game.Player(1); player <= 4; player++ {
+		scores[player-1] = terminalScore(state, player, ply)
+	}
+	return scores
 }
 
 type child struct {
