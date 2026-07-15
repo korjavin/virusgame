@@ -19,6 +19,17 @@ cd backend
 go run ./cmd/arena -seeds 10 -depth 3
 ```
 
+The default `ci` matrix is intentionally small and deterministic. Run the
+broader variable-size and wall-clock gate manually before an engine release:
+
+```sh
+go run ./cmd/arena -matrix full -production -seeds 2
+```
+
+The full matrix includes 5x5, both 5x10 orientations, 8x8, 10x10, 15x20,
+25x25, 50x50, and 50-edge stress rectangles. Reports include wins, illegal,
+stalled and maxed games, searched nodes, completed-turn depth, and latency.
+
 Every board/seed pairing is played twice with swapped seats. The command exits
 non-zero for any illegal action, incomplete smoke game, less than 85% wins over
 the frozen legacy-compatible baseline, or less than 75% over greedy tactical.

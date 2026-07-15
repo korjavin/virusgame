@@ -13,35 +13,50 @@ func main() {
 	seeds := flag.Int("seeds", 10, "fixed seeds per board and seat")
 	depth := flag.Int("depth", 3, "deterministic action depth")
 	production := flag.Bool("production", false, "use the deployed anytime search path and budget")
-	opponent := flag.String("opponent", "all", "opponent to run: all, random, legacy, or greedy")
+	opponent := flag.String("opponent", "all", "opponent to run: all, random, legacy, greedy, base, or mobility")
+	matrix := flag.String("matrix", "ci", "board matrix: ci or full (manual variable-size/time gate)")
 	flag.Parse()
 	boards := []arena.Board{{Rows: 5, Cols: 5}, {Rows: 6, Cols: 6}, {Rows: 8, Cols: 8}}
+	if *matrix == "full" {
+		boards = []arena.Board{
+			{Rows: 5, Cols: 5}, {Rows: 5, Cols: 10}, {Rows: 10, Cols: 5},
+			{Rows: 8, Cols: 8}, {Rows: 10, Cols: 10}, {Rows: 15, Cols: 20},
+			{Rows: 25, Cols: 25}, {Rows: 50, Cols: 50},
+			{Rows: 5, Cols: 50}, {Rows: 50, Cols: 5},
+		}
+	} else if *matrix != "ci" {
+		log.Fatalf("unknown matrix %q", *matrix)
+	}
 	contender := arena.Tournament(*depth)
+	telemetryContender := arena.TelemetryTournament(*depth)
 	mode := fmt.Sprintf("fixed-depth=%d", *depth)
 	if *production {
 		contender = arena.Production()
+		telemetryContender = arena.TelemetryProduction()
 		mode = "production-budget"
 	}
-	if *opponent != "all" && *opponent != "random" && *opponent != "legacy" && *opponent != "greedy" {
+	if *opponent != "all" && *opponent != "random" && *opponent != "legacy" && *opponent != "greedy" && *opponent != "base" && *opponent != "mobility" {
 		log.Fatalf("unknown opponent %q", *opponent)
 	}
 	legacyPassed, greedyPassed, complete := false, false, true
 	for _, benchmark := range []struct {
 		name    string
-		factory arena.OpponentFactory
+		factory arena.TelemetryOpponentFactory
 	}{
-		{name: "random", factory: arena.Random},
-		{name: "legacy", factory: arena.Legacy},
-		{name: "greedy", factory: func(uint64) arena.Agent { return arena.Greedy }},
+		{name: "random", factory: func(seed uint64) arena.TelemetryAgent { return arena.Instrument(arena.Random(seed)) }},
+		{name: "legacy", factory: func(seed uint64) arena.TelemetryAgent { return arena.Instrument(arena.Legacy(seed)) }},
+		{name: "greedy", factory: func(uint64) arena.TelemetryAgent { return arena.Instrument(arena.Greedy) }},
+		{name: "base", factory: func(uint64) arena.TelemetryAgent { return arena.Instrument(arena.BaseAttacker) }},
+		{name: "mobility", factory: func(uint64) arena.TelemetryAgent { return arena.Instrument(arena.MobilityAttacker) }},
 	} {
 		if *opponent != "all" && *opponent != benchmark.name {
 			continue
 		}
-		report, err := arena.Balanced(boards, *seeds, contender, benchmark.factory)
+		report, err := arena.CompareTelemetry(boards, *seeds, telemetryContender, benchmark.factory)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("tournament mode=%s opponent=%s boards=5x5,6x6,8x8 seeds=%d seats=balanced %s\n", mode, benchmark.name, *seeds, report)
+		fmt.Printf("tournament mode=%s matrix=%s opponent=%s boards=%d seeds=%d seats=balanced %s\n", mode, *matrix, benchmark.name, len(boards), *seeds, report)
 		if report.Illegal != 0 || report.Maxed != 0 || report.Stalled != 0 {
 			complete = false
 		}
