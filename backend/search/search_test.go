@@ -2,6 +2,10 @@ package search
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"math/rand"
 	"reflect"
 	"testing"
 	"time"
@@ -190,6 +194,186 @@ func TestCancellationReturnsLegalFallback(t *testing.T) {
 	}
 }
 
+func TestRecordedT8NeverImmediatelySelfEliminates(t *testing.T) {
+	state := recorded4D85T8(t)
+	if got := searchSnapshotFingerprint(t, state); got != "06fdd264ea79e519" {
+		t.Fatalf("T8 fingerprint = %s", got)
+	}
+	losing := game.Action{Kind: game.PlaceNeutrals, Neutrals: [2]game.Pos{{Row: 7, Col: 8}, {Row: 7, Col: 9}}}
+	lost, err := state.Apply(losing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lost.Active(2) || !lost.GameOver() {
+		t.Fatal("recorded neutral action does not reproduce immediate elimination")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for name, choose := range map[string]func() (Result, bool){
+		"production": func() (Result, bool) { return Choose(ctx, state) },
+		"fixed":      func() (Result, bool) { return ChooseDepth(ctx, state, 6) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, ok := choose()
+			if name == "production" && !ok {
+				t.Fatal("production fallback reported no action")
+			}
+			next, err := state.Apply(result.Action)
+			if err != nil {
+				t.Fatalf("fallback is illegal: %+v: %v", result.Action, err)
+			}
+			if !next.Active(2) {
+				t.Fatalf("fallback immediately self-eliminates: %+v (ok=%v)", result.Action, ok)
+			}
+		})
+	}
+
+	result := completedDepth(t, state, 6)
+	next, err := state.Apply(result.Action)
+	if err != nil || !next.Active(2) {
+		t.Fatalf("completed search chose immediate elimination: %+v, active=%v err=%v", result.Action, next.Active(2), err)
+	}
+}
+
+func TestCanceledFallbackPreservesActorAcrossSizesAndPlayers(t *testing.T) {
+	for _, fixture := range []struct {
+		rows, cols, players int
+	}{{5, 5, 2}, {10, 20, 2}, {20, 10, 4}, {30, 30, 2}, {31, 31, 4}, {50, 50, 2}} {
+		state := mustState(t, fixture.rows, fixture.cols, fixture.players)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		result, ok := Choose(ctx, state)
+		if !ok {
+			t.Fatalf("%dx%d/%dp: no fallback", fixture.rows, fixture.cols, fixture.players)
+		}
+		next, err := state.Apply(result.Action)
+		if err != nil || !next.Active(state.CurrentPlayer()) {
+			t.Fatalf("%dx%d/%dp: fallback %+v active=%v err=%v", fixture.rows, fixture.cols, fixture.players, result.Action, next.Active(state.CurrentPlayer()), err)
+		}
+	}
+}
+
+func TestCompletedSearchPreservesActorOnReachableStates(t *testing.T) {
+	var covered [2][3]bool
+	for seed := int64(0); seed < 12; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		state := mustState(t, 5+int(seed%2), 5, 2)
+		for step := 0; step < 60 && !state.GameOver(); step++ {
+			actor := state.CurrentPlayer()
+			if actor <= 2 && state.MovesLeft() >= 1 && state.MovesLeft() <= 3 {
+				covered[actor-1][state.MovesLeft()-1] = true
+			}
+			if hasPreservingSuccessor(state) {
+				result, ok := ChooseDepth(context.Background(), state, 1)
+				if !ok {
+					t.Fatalf("seed %d step %d: depth-one search did not complete", seed, step)
+				}
+				next, err := state.Apply(result.Action)
+				if err != nil || !next.Active(actor) {
+					t.Fatalf("seed %d step %d player %d moves %d: chose %+v active=%v err=%v", seed, step, actor, state.MovesLeft(), result.Action, next.Active(actor), err)
+				}
+			}
+
+			actions := state.LegalActions()
+			moveCount := 0
+			for moveCount < len(actions) && actions[moveCount].Kind == game.Move {
+				moveCount++
+			}
+			if moveCount == 0 {
+				break
+			}
+			var err error
+			state, err = state.Apply(actions[rng.Intn(moveCount)])
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for player := range covered {
+		for moves := range covered[player] {
+			if !covered[player][moves] {
+				t.Fatalf("missing reachable coverage for player %d with %d moves left", player+1, moves+1)
+			}
+		}
+	}
+}
+
+func TestTerminalScoresPreferFastWinsAndSlowLosses(t *testing.T) {
+	winning, err := game.New(4, 4, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	winningState, _, ok := findWinningMove(t)
+	if !ok {
+		t.Fatal("missing terminal fixture")
+	}
+	for _, action := range winningState.LegalActions() {
+		next, err := winningState.Apply(action)
+		if err == nil && next.GameOver() {
+			winning = next
+			break
+		}
+	}
+	if !winning.GameOver() {
+		t.Fatal("failed to construct terminal state")
+	}
+	winner, loser := winning.Winner(), game.Player(1)
+	if loser == winner {
+		loser = 2
+	}
+	if terminalScore(winning, winner, 2) <= terminalScore(winning, winner, 5) {
+		t.Fatal("later win did not score below faster win")
+	}
+	if terminalScore(winning, loser, 5) <= terminalScore(winning, loser, 2) {
+		t.Fatal("later loss did not score above immediate loss")
+	}
+	vector := terminalScores(winning, 4)
+	for player := game.Player(1); player <= 4; player++ {
+		want := -mateScore + 4
+		if player == winner {
+			want = mateScore - 4
+		}
+		if vector[player-1] != want {
+			t.Fatalf("terminal vector player %d = %d, want %d", player, vector[player-1], want)
+		}
+	}
+}
+
+func TestChooseDepthPrefersShortestForcedWin(t *testing.T) {
+	state := play(t, mustState(t, 3, 3, 2),
+		move(0, 1), move(1, 0), move(1, 1),
+	)
+	result, ok := ChooseDepth(context.Background(), state, 8)
+	if !ok {
+		t.Fatal("forced-win search did not complete")
+	}
+	want := move(1, 1)
+	if result.Action != want || result.Score != mateScore-3 {
+		t.Fatalf("forced win = %+v score %d, want %+v score %d", result.Action, result.Score, want, mateScore-3)
+	}
+}
+
+func TestChooseDepthPrefersLongestForcedLoss(t *testing.T) {
+	state := play(t, mustState(t, 3, 3, 2),
+		move(0, 1), move(1, 0),
+	)
+	result, ok := ChooseDepth(context.Background(), state, 8)
+	if !ok {
+		t.Fatal("forced-loss search did not complete")
+	}
+	if result.Score != -mateScore+8 {
+		t.Fatalf("forced loss score = %d, want %d via %+v", result.Score, -mateScore+8, result.Action)
+	}
+	if result.Action == move(1, 1) {
+		t.Fatalf("selected faster loss %+v", result.Action)
+	}
+	again, ok := ChooseDepth(context.Background(), state, 8)
+	if !ok || again != result {
+		t.Fatalf("forced-loss tie was non-deterministic: %+v / %+v", result, again)
+	}
+}
+
 func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 	state := mustState(t, 6, 6, 2)
 	a, ok := ChooseDepth(context.Background(), state, 2)
@@ -256,6 +440,41 @@ func play(t *testing.T, state game.State, actions ...game.Action) game.State {
 
 func move(row, col int) game.Action {
 	return game.Action{Kind: game.Move, Target: game.Pos{Row: row, Col: col}}
+}
+
+func recorded4D85T8(t *testing.T) game.State {
+	t.Helper()
+	state := mustState(t, 10, 10, 2)
+	return play(t, state,
+		move(1, 1), move(2, 2), move(3, 3),
+		move(8, 8), move(8, 9), move(7, 7),
+		move(4, 2), move(5, 3), move(2, 4),
+		move(6, 6), move(5, 5), move(9, 8),
+		move(4, 4), move(5, 5), move(6, 6),
+		move(7, 9), move(7, 8), move(8, 7),
+		move(7, 7), move(8, 8), move(9, 8),
+	)
+}
+
+func hasPreservingSuccessor(state game.State) bool {
+	actor := state.CurrentPlayer()
+	for _, action := range state.LegalActions() {
+		next, err := state.Apply(action)
+		if err == nil && next.Active(actor) {
+			return true
+		}
+	}
+	return false
+}
+
+func searchSnapshotFingerprint(t *testing.T, state game.State) string {
+	t.Helper()
+	encoded, err := json.Marshal(state.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:8])
 }
 
 func findWinningMove(t *testing.T) (game.State, game.Action, bool) {
