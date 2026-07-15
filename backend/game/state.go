@@ -106,14 +106,10 @@ func (s State) LegalActions() []Action {
 	if s.over || !s.Active(s.current) {
 		return nil
 	}
-	actions := make([]Action, 0)
-	for row := 0; row < s.rows; row++ {
-		for col := 0; col < s.cols; col++ {
-			pos := Pos{row, col}
-			if s.legalMove(s.current, pos) {
-				actions = append(actions, Action{Kind: Move, Target: pos})
-			}
-		}
+	targets := s.moveTargets(s.current)
+	actions := make([]Action, 0, len(targets))
+	for _, pos := range targets {
+		actions = append(actions, Action{Kind: Move, Target: pos})
 	}
 	if s.movesLeft == actionsPerTurn && !s.neutralUsed[s.current-1] {
 		var cells []Pos
@@ -258,14 +254,40 @@ func (s *State) eliminateStuckPlayers() {
 }
 
 func (s State) hasMove(player Player) bool {
-	for row := 0; row < s.rows; row++ {
-		for col := 0; col < s.cols; col++ {
-			if s.legalMove(player, Pos{row, col}) {
-				return true
+	return len(s.moveTargets(player)) > 0
+}
+
+// moveTargets computes a player's connected territory once, then derives its
+// legal frontier in stable board order. This is equivalent to legalMove over
+// every cell without repeating a full connectivity traversal for each cell.
+func (s State) moveTargets(player Player) []Pos {
+	connected := s.connected(player)
+	frontier := make([]bool, len(s.cells))
+	for index, isConnected := range connected {
+		if !isConnected {
+			continue
+		}
+		row, col := index/s.cols, index%s.cols
+		for nextRow := row - 1; nextRow <= row+1; nextRow++ {
+			for nextCol := col - 1; nextCol <= col+1; nextCol++ {
+				pos := Pos{nextRow, nextCol}
+				if !s.inBounds(pos) {
+					continue
+				}
+				cell := s.cells[s.index(pos)]
+				if cell.Kind == Empty || (cell.Kind == Normal && cell.Owner != player) {
+					frontier[s.index(pos)] = true
+				}
 			}
 		}
 	}
-	return false
+	targets := make([]Pos, 0)
+	for index, legal := range frontier {
+		if legal {
+			targets = append(targets, Pos{Row: index / s.cols, Col: index % s.cols})
+		}
+	}
+	return targets
 }
 
 func (s *State) finishIfTerminal() bool {
