@@ -43,6 +43,8 @@ jules remote list --session
 
 Use the session-specific remote inspection commands exposed by `jules remote --help`. Report concise checkpoints. If Jules asks a material product question, stop and route it through the architect; otherwise resolve implementation details from the Bead and repository evidence.
 
+Jules sessions are inexpensive but unstable. Poll them without owner prompting. When a session remains slow, the architect may hedge it with a second independent Jules session using the same authoritative Bead and separate session/branch. Record every session ID; do not let Jules mutate Beads.
+
 ## Integrate
 
 1. Require a draft PR referencing the Bead. If Jules only provides a remote patch, pull it into an isolated worktree/branch; never apply it over the architect's dirty root checkout.
@@ -53,6 +55,9 @@ Use the session-specific remote inspection commands exposed by `jules remote --h
 
 ## Failure handling
 
-- If `jules new` fails, preserve the Bead and report the exact error; do not silently substitute another external service.
+- If `jules new` fails, preserve the Bead and report the exact error.
+- If a session fails or produces no PR, run `jules remote pull --session <id>` without `--apply` from a clean isolated worktree to inspect any patch. Treat it as untrusted evidence: review bounds, protocol acknowledgements, persistence, tests, and completeness before reusing anything.
+- Retry Jules with corrected self-contained context, launch a second Jules attempt, or transfer the same claimed Bead to a direct `develop-codex` executor. Jules attempts are cheap (currently roughly 100/day), so one failed or slow attempt must not stall delivery.
+- Multiple attempts must remain isolated. Select the best result or integrate reviewed pieces on one owned branch; never merge competing PRs blindly.
 - If Jules cannot access Beads/Dolt, the self-contained prompt remains authoritative for its implementation task; the architect alone updates Beads.
 - If the result is unsafe, incomplete, or fails its gate, reject it without merging and record the evidence in the Bead.
