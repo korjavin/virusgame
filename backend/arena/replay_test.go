@@ -24,6 +24,15 @@ func TestAllCapturedProductionGamesReplayWithDistinctOutcomes(t *testing.T) {
 		"419c231b-7e0e-4df9-9bba-7871f758f019": "resignation",
 		"fb5b584f-790d-45ca-9351-a4925010b998": "no_moves",
 		"0c6bf57b-a602-4e2c-87c5-a2fff5de1dff": "no_moves",
+		"fd6627c8-3d46-408d-bd48-17f081e1113b": "no_moves",
+		"3d739acb-0635-4784-9d62-c076788f28be": "no_moves",
+		"e854f8aa-4fc2-4be7-8348-9ae72cdef4d6": "no_moves",
+		"e7b2f1d4-a68f-4f4c-b581-bac7c8a0c380": "no_moves",
+		"6bf1f3aa-aee6-40d8-aa52-011b07a56d07": "no_moves",
+		"4558d2fe-c22f-4940-8012-8f4f43fac728": "no_moves",
+		"913c33f7-1f0c-41ce-9cee-65d3d9688073": "no_moves",
+		"550cfd27-6c5c-48a2-928c-c36354f9db87": "no_moves",
+		"836204cc-7c0d-4d9c-ace3-8aae41fd5e8c": "illegal_move",
 	}
 	fixtures, err := filepath.Glob("testdata/*.json")
 	if err != nil {
@@ -98,6 +107,46 @@ func TestHappyOtterReplayAndCriticalTurns(t *testing.T) {
 	final := states[22]
 	if !final.GameOver() || final.Winner() != 1 {
 		t.Fatalf("final state over=%v winner=%d", final.GameOver(), final.Winner())
+	}
+}
+
+func TestPostFix12x12ReplayTerminalHashes(t *testing.T) {
+	want := map[string]string{
+		"fd6627c8-3d46-408d-bd48-17f081e1113b": "117269c21ce6f629",
+		"3d739acb-0635-4784-9d62-c076788f28be": "2bdd28b436b93c9f",
+		"e854f8aa-4fc2-4be7-8348-9ae72cdef4d6": "64e378ef7c28c1ad",
+		"e7b2f1d4-a68f-4f4c-b581-bac7c8a0c380": "e21221bde99837d8",
+		"6bf1f3aa-aee6-40d8-aa52-011b07a56d07": "aacf14fd6979f2c4",
+		"4558d2fe-c22f-4940-8012-8f4f43fac728": "1e6523f0e84702fc",
+		"913c33f7-1f0c-41ce-9cee-65d3d9688073": "aa34bed517bde90c",
+		"550cfd27-6c5c-48a2-928c-c36354f9db87": "76f133e032952674",
+		"836204cc-7c0d-4d9c-ace3-8aae41fd5e8c": "0a7e17fab1d13ae0",
+	}
+	paths, err := filepath.Glob("testdata/production-12x12-*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		fixture, err := os.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		replay, states, decodeErr := DecodeReplay(fixture)
+		fixture.Close()
+		fingerprint, selected := want[replay.SourceID]
+		if !selected {
+			continue
+		}
+		if decodeErr != nil || replay.Rows != 12 || replay.Cols != 12 {
+			t.Fatalf("%s: replay=%+v err=%v", path, replay, decodeErr)
+		}
+		if got := snapshotFingerprint(t, states[len(replay.Turns)]); got != fingerprint {
+			t.Fatalf("%s final hash=%s, want %s", replay.SourceID, got, fingerprint)
+		}
+		delete(want, replay.SourceID)
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing post-fix fixtures: %v", want)
 	}
 }
 
