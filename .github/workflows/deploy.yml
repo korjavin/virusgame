@@ -6,6 +6,12 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy the selected main-branch commit to production
+        required: true
+        type: boolean
+        default: false
   pull_request:
 
 jobs:
@@ -24,7 +30,16 @@ jobs:
         working-directory: ./backend
         run: go test -v ./...
 
+      - name: Verify deployment event guard
+        run: bash .github/scripts/verify-deploy-workflow.sh
+
   build-and-push:
+    # Pull requests and ordinary manual runs are validation-only. A deployment
+    # requires either a push to main or an explicit main-branch manual request.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.deploy == true))
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -74,4 +89,3 @@ jobs:
         with:
           webhook_url: ${{ secrets.PORTAINER_REDEPLOY_HOOK_BOT }}
           webhook_secret: "trigger"
-
