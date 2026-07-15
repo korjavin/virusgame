@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const defaultBoardSize = 12
+
 // MessageWrapper wraps a message with its client
 type MessageWrapper struct {
 	client  *Client
@@ -574,14 +576,14 @@ func (h *Hub) handleChallenge(from *User, msg *Message) {
 		}
 	}
 
-	// Get board size from message, default to 10x10
+	// Get board size from message, using the product default for omitted or invalid dimensions.
 	rows := msg.Rows
 	cols := msg.Cols
 	if rows < 5 || rows > 50 {
-		rows = 10
+		rows = defaultBoardSize
 	}
 	if cols < 5 || cols > 50 {
-		cols = 10
+		cols = defaultBoardSize
 	}
 
 	challengeID := uuid.New().String()
@@ -1727,10 +1729,10 @@ func (h *Hub) handleCreateLobby(user *User, msg *Message) {
 	rows := msg.Rows
 	cols := msg.Cols
 	if rows < 5 || rows > 50 {
-		rows = 10
+		rows = defaultBoardSize
 	}
 	if cols < 5 || cols > 50 {
-		cols = 10
+		cols = defaultBoardSize
 	}
 
 	lobbyID := uuid.New().String()

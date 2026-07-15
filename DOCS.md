@@ -14,7 +14,7 @@ The objective of the game is to be the last player standing by eliminating your 
     *   Player 2: **O**
     *   Player 3: **△** (Triangle)
     *   Player 4: **□** (Square)
-*   **Grid**: The game is played on a customizable grid (default 10x10).
+*   **Grid**: The game is played on a customizable grid (default 12x12).
 *   **Starting Position**: Each player starts with a single **base cell** in a corner of the board.
 
 ## Gameplay

@@ -12,7 +12,7 @@ The ultimate goal is to have a single "Multiplayer" mode that supports both quic
 
 ### 1. Conceptual Unification (Backend & Frontend)
 - **"Everything is a Lobby":** 
-    - A "Direct Challenge" (1v1) is simply a shortcut to creating a private, 2-player Lobby with specific settings (10x10, standard rules) and auto-inviting the target user.
+    - A "Direct Challenge" (1v1) is simply a shortcut to creating a private, 2-player Lobby with specific settings (12x12 by default, standard rules) and auto-inviting the target user.
     - A "Lobby Game" is just a manually configured Lobby.
 - **Unified Game Start Logic:** 
     - Currently, there are two different start signals: `game_start` (1v1) and `multiplayer_game_start` (Lobby).
