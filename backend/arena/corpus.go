@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"sync"
 
 	"virusgame/game"
 )
@@ -150,13 +151,26 @@ type CorpusReport struct {
 	Interval Interval
 }
 
+type CorpusFilter struct {
+	Track      string
+	Rows, Cols int
+}
+type CorpusProgress struct {
+	Board string
+	Games int
+}
+
 // CompareCorpus plays each identical snapshot with the contender rotated
 // through every player seat. Factories create fresh agents for every suffix so
 // caches or session state cannot leak between cases.
 func CompareCorpus(corpus Corpus, split string, contender, incumbent func() TelemetryAgent) (CorpusReport, error) {
+	return CompareCorpusFiltered(corpus, split, CorpusFilter{}, nil, contender, incumbent)
+}
+
+func CompareCorpusFiltered(corpus Corpus, split string, filter CorpusFilter, progress func(CorpusProgress), contender, incumbent func() TelemetryAgent) (CorpusReport, error) {
 	report := CorpusReport{Split: split, Buckets: make(map[string]Report)}
 	for _, testCase := range corpus.Cases {
-		if testCase.Split != split || testCase.Track == "stress" {
+		if testCase.Split != split || testCase.Track == "stress" || filter.Track != "" && testCase.Track != filter.Track || filter.Rows > 0 && (testCase.State.Rows() != filter.Rows || testCase.State.Cols() != filter.Cols) {
 			continue
 		}
 		for seat := 0; seat < testCase.Players; seat++ {
@@ -172,10 +186,13 @@ func CompareCorpus(corpus Corpus, split string, contender, incumbent func() Tele
 			}
 			focus := game.Player(seat + 1)
 			report.Overall.Add(result, focus)
+			if progress != nil {
+				progress(CorpusProgress{Board: fmt.Sprintf("%dx%d", testCase.State.Rows(), testCase.State.Cols()), Games: report.Overall.Games})
+			}
 			board := fmt.Sprintf("board=%dx%d", testCase.State.Rows(), testCase.State.Cols())
 			seatKey := "seat=" + fmt.Sprint(seat+1)
 			phase := "phase=" + testCase.Phase
-			keys := []string{board, "track=" + testCase.Track, seatKey, phase, board + "/" + seatKey + "/" + phase}
+			keys := []string{board, "track=" + testCase.Track, seatKey, phase, board + "/" + seatKey, board + "/" + seatKey + "/" + phase}
 			for _, stratum := range testCase.Strata {
 				keys = append(keys, "stratum="+stratum)
 			}
@@ -191,6 +208,113 @@ func CompareCorpus(corpus Corpus, split string, contender, incumbent func() Tele
 	}
 	report.Interval = Wilson95(report.Overall.Wins, report.Overall.Games)
 	return report, nil
+}
+
+// CompareCorpusBoards runs deterministic board shards with bounded parallelism
+// and returns their exact additive aggregate.
+func CompareCorpusBoards(corpus Corpus, split, track string, boards []Board, parallel int, progress func(CorpusProgress), contender, incumbent func() TelemetryAgent) (CorpusReport, error) {
+	if parallel < 1 {
+		parallel = 1
+	}
+	type item struct {
+		index  int
+		report CorpusReport
+		err    error
+	}
+	jobs, results := make(chan int), make(chan item, len(boards))
+	var wg sync.WaitGroup
+	var progressMu sync.Mutex
+	shardProgress := progress
+	if progress != nil {
+		shardProgress = func(update CorpusProgress) { progressMu.Lock(); defer progressMu.Unlock(); progress(update) }
+	}
+	for worker := 0; worker < parallel && worker < len(boards); worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for index := range jobs {
+				b := boards[index]
+				r, err := CompareCorpusFiltered(corpus, split, CorpusFilter{Track: track, Rows: b.Rows, Cols: b.Cols}, shardProgress, contender, incumbent)
+				results <- item{index, r, err}
+			}
+		}()
+	}
+	go func() {
+		for index := range boards {
+			jobs <- index
+		}
+		close(jobs)
+		wg.Wait()
+		close(results)
+	}()
+	ordered := make([]CorpusReport, len(boards))
+	for result := range results {
+		if result.err != nil {
+			return CorpusReport{}, result.err
+		}
+		ordered[result.index] = result.report
+	}
+	return AggregateCorpusReports(split, ordered...), nil
+}
+
+func AggregateCorpusReports(split string, shards ...CorpusReport) CorpusReport {
+	result := CorpusReport{Split: split, Buckets: make(map[string]Report)}
+	for _, shard := range shards {
+		addReport(&result.Overall, shard.Overall)
+		for key, report := range shard.Buckets {
+			bucket := result.Buckets[key]
+			addReport(&bucket, report)
+			result.Buckets[key] = bucket
+		}
+	}
+	result.Interval = Wilson95(result.Overall.Wins, result.Overall.Games)
+	return result
+}
+
+func addReport(dst *Report, src Report) {
+	dst.Games += src.Games
+	dst.Wins += src.Wins
+	dst.Losses += src.Losses
+	dst.Draws += src.Draws
+	dst.Eliminations += src.Eliminations
+	dst.Illegal += src.Illegal
+	dst.Decisions += src.Decisions
+	dst.Maxed += src.Maxed
+	dst.Stalled += src.Stalled
+	dst.Nodes += src.Nodes
+	dst.Evaluations += src.Evaluations
+	dst.BudgetShortfalls += src.BudgetShortfalls
+	dst.LegalRootActions += src.LegalRootActions
+	dst.SearchedRootActions += src.SearchedRootActions
+	dst.LegalRootNeutrals += src.LegalRootNeutrals
+	dst.SearchedRootNeutrals += src.SearchedRootNeutrals
+	if src.CompletedTurnDepth > dst.CompletedTurnDepth {
+		dst.CompletedTurnDepth = src.CompletedTurnDepth
+	}
+	dst.Latencies = append(dst.Latencies, src.Latencies...)
+	dst.Elapsed += src.Elapsed
+}
+
+func (r CorpusReport) ValidateSuperiority() error {
+	if r.Overall.Illegal != 0 || r.Overall.Maxed != 0 || r.Overall.Stalled != 0 || r.Overall.WinRate() < 80 {
+		return fmt.Errorf("overall superiority gate failed: %s", r)
+	}
+	for key, bucket := range r.Buckets {
+		if boardSeatKey(key) && bucket.WinRate() < 70 {
+			return fmt.Errorf("board/seat superiority gate failed: %s %s", key, bucket)
+		}
+	}
+	return nil
+}
+
+func boardSeatKey(key string) bool {
+	slash := 0
+	for _, char := range key {
+		if char == '/' {
+			slash++
+		}
+	}
+	return len(key) > 6 && key[:6] == "board=" && slash == 1
 }
 
 func (r CorpusReport) String() string {

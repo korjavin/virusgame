@@ -16,8 +16,12 @@ type Agent func(game.State) (game.Action, bool)
 // the number of whole turns the agent reports as fully searched; zero means
 // that the agent does not expose turn-depth information.
 type DecisionTelemetry struct {
-	Nodes              uint64
-	CompletedTurnDepth int
+	Nodes                                   uint64
+	Evaluations                             uint64
+	CompletedTurnDepth                      int
+	LegalRootActions, SearchedRootActions   int
+	LegalRootNeutrals, SearchedRootNeutrals int
+	BudgetShortfall                         bool
 }
 
 type TelemetryAgent func(game.State) (game.Action, DecisionTelemetry, bool)
@@ -38,28 +42,36 @@ type Match struct {
 }
 
 type GameResult struct {
-	Winner             game.Player
-	Actions            int
-	Decisions          int
-	Eliminations       int
-	Illegal            int
-	Maxed              bool
-	Stalled            bool
-	Latencies          [4][]time.Duration
-	Nodes              [4]uint64
-	CompletedTurnDepth [4]int
-	Elapsed            time.Duration
+	Winner                                  game.Player
+	Actions                                 int
+	Decisions                               int
+	Eliminations                            int
+	Illegal                                 int
+	Maxed                                   bool
+	Stalled                                 bool
+	Latencies                               [4][]time.Duration
+	Nodes                                   [4]uint64
+	Evaluations                             [4]uint64
+	BudgetShortfalls                        [4]int
+	LegalRootActions, SearchedRootActions   [4]int
+	LegalRootNeutrals, SearchedRootNeutrals [4]int
+	CompletedTurnDepth                      [4]int
+	Elapsed                                 time.Duration
 }
 
 type Report struct {
-	Games, Wins, Losses, Draws int
-	Eliminations, Illegal      int
-	Decisions                  int
-	Maxed, Stalled             int
-	Latencies                  []time.Duration
-	Nodes                      uint64
-	CompletedTurnDepth         int
-	Elapsed                    time.Duration
+	Games, Wins, Losses, Draws              int
+	Eliminations, Illegal                   int
+	Decisions                               int
+	Maxed, Stalled                          int
+	Latencies                               []time.Duration
+	Nodes                                   uint64
+	Evaluations                             uint64
+	BudgetShortfalls                        int
+	LegalRootActions, SearchedRootActions   int
+	LegalRootNeutrals, SearchedRootNeutrals int
+	CompletedTurnDepth                      int
+	Elapsed                                 time.Duration
 }
 
 // Probe runs one instrumented decision per board. It is intended for maximum
@@ -79,6 +91,14 @@ func Probe(boards []Board, agent TelemetryAgent) (Report, error) {
 		report.Elapsed += latency
 		report.Latencies = append(report.Latencies, latency)
 		report.Nodes += telemetry.Nodes
+		report.Evaluations += telemetry.Evaluations
+		report.LegalRootActions += telemetry.LegalRootActions
+		report.SearchedRootActions += telemetry.SearchedRootActions
+		report.LegalRootNeutrals += telemetry.LegalRootNeutrals
+		report.SearchedRootNeutrals += telemetry.SearchedRootNeutrals
+		if telemetry.BudgetShortfall {
+			report.BudgetShortfalls++
+		}
 		if telemetry.CompletedTurnDepth > report.CompletedTurnDepth {
 			report.CompletedTurnDepth = telemetry.CompletedTurnDepth
 		}
@@ -137,6 +157,14 @@ func Play(match Match) (GameResult, error) {
 		}
 		result.Latencies[player-1] = append(result.Latencies[player-1], time.Since(decisionStart))
 		result.Nodes[player-1] += telemetry.Nodes
+		result.Evaluations[player-1] += telemetry.Evaluations
+		result.LegalRootActions[player-1] += telemetry.LegalRootActions
+		result.SearchedRootActions[player-1] += telemetry.SearchedRootActions
+		result.LegalRootNeutrals[player-1] += telemetry.LegalRootNeutrals
+		result.SearchedRootNeutrals[player-1] += telemetry.SearchedRootNeutrals
+		if telemetry.BudgetShortfall {
+			result.BudgetShortfalls[player-1]++
+		}
 		if telemetry.CompletedTurnDepth > result.CompletedTurnDepth[player-1] {
 			result.CompletedTurnDepth[player-1] = telemetry.CompletedTurnDepth
 		}
@@ -238,6 +266,12 @@ func (r *Report) Add(result GameResult, focus game.Player) {
 	r.Elapsed += result.Elapsed
 	r.Latencies = append(r.Latencies, result.Latencies[focus-1]...)
 	r.Nodes += result.Nodes[focus-1]
+	r.Evaluations += result.Evaluations[focus-1]
+	r.LegalRootActions += result.LegalRootActions[focus-1]
+	r.SearchedRootActions += result.SearchedRootActions[focus-1]
+	r.LegalRootNeutrals += result.LegalRootNeutrals[focus-1]
+	r.SearchedRootNeutrals += result.SearchedRootNeutrals[focus-1]
+	r.BudgetShortfalls += result.BudgetShortfalls[focus-1]
 	if result.CompletedTurnDepth[focus-1] > r.CompletedTurnDepth {
 		r.CompletedTurnDepth = result.CompletedTurnDepth[focus-1]
 	}

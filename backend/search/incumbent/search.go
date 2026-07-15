@@ -1,5 +1,5 @@
-// Package search chooses Virus actions using deterministic anytime search.
-package search
+// Package incumbent freezes the post-PR58 authoritative search and evaluator.
+package incumbent
 
 import (
 	"context"
@@ -44,10 +44,6 @@ type searcher struct {
 // ChooseNodeBudget performs deterministic iterative deepening without an
 // implicit wall-clock deadline.
 func ChooseNodeBudget(state game.State, limit uint64) (Result, bool) {
-	return chooseNodeBudget(state, limit)
-}
-
-func chooseNodeBudget(state game.State, limit uint64) (Result, bool) {
 	fallback, ok := preservingFallback(state)
 	if !ok || limit == 0 {
 		return Result{}, false
