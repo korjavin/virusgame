@@ -106,14 +106,10 @@ func (s State) LegalActions() []Action {
 	if s.over || !s.Active(s.current) {
 		return nil
 	}
-	actions := make([]Action, 0)
-	for row := 0; row < s.rows; row++ {
-		for col := 0; col < s.cols; col++ {
-			pos := Pos{row, col}
-			if s.legalMove(s.current, pos) {
-				actions = append(actions, Action{Kind: Move, Target: pos})
-			}
-		}
+	targets := s.moveTargets(s.current)
+	actions := make([]Action, 0, len(targets))
+	for _, pos := range targets {
+		actions = append(actions, Action{Kind: Move, Target: pos})
 	}
 	if s.movesLeft == actionsPerTurn && !s.neutralUsed[s.current-1] {
 		var cells []Pos
@@ -172,6 +168,87 @@ func (s State) Apply(action Action) (State, error) {
 	return next, nil
 }
 
+func (s *State) eliminateStuckPlayersGenerated() {
+	seen := make([]bool, len(s.cells))
+	queue := make([]int32, len(s.cells))
+	for player := Player(1); int(player) <= s.players; player++ {
+		if s.Active(player) && !s.hasMoveScratch(player, seen, queue) {
+			s.active[player-1] = false
+			for i := range s.cells {
+				if s.cells[i].Owner == player {
+					s.cells[i] = Cell{}
+				}
+			}
+		}
+	}
+}
+
+func (s State) hasMoveScratch(player Player, seen []bool, queue []int32) bool {
+	clear(seen)
+	base := s.bases[player-1]
+	cell, ok := s.At(base)
+	if !ok || cell.Owner != player || cell.Kind != Base {
+		return false
+	}
+	baseIndex := s.index(base)
+	seen[baseIndex], queue[0] = true, int32(baseIndex)
+	head, tail := 0, 1
+	for head < tail {
+		current := int(queue[head])
+		head++
+		row, col := current/s.cols, current%s.cols
+		for r := row - 1; r <= row+1; r++ {
+			for c := col - 1; c <= col+1; c++ {
+				pos := Pos{r, c}
+				if !s.inBounds(pos) {
+					continue
+				}
+				index := s.index(pos)
+				candidate := s.cells[index]
+				if candidate.Kind == Empty || (candidate.Kind == Normal && candidate.Owner != player) {
+					return true
+				}
+				if !seen[index] && candidate.Owner == player {
+					seen[index], queue[tail] = true, int32(index)
+					tail++
+				}
+			}
+		}
+	}
+	return false
+}
+
+// applyGenerated is the search hot-path transition for an action already
+// emitted by Position. It skips redundant legality traversal but shares the
+// mutation, elimination, terminal, and turn-advance semantics with Apply.
+func (s State) applyGenerated(action Action) State {
+	next := s
+	next.cells = append([]Cell(nil), s.cells...)
+	player := s.current
+	if action.Kind == PlaceNeutrals {
+		next.set(action.Neutrals[0], Cell{Kind: Neutral})
+		next.set(action.Neutrals[1], Cell{Kind: Neutral})
+		next.neutralUsed[player-1] = true
+		next.movesLeft = 0
+	} else {
+		target := s.cells[s.index(action.Target)]
+		kind := Normal
+		if target.Kind == Normal {
+			kind = Fortified
+		}
+		next.set(action.Target, Cell{Owner: player, Kind: kind})
+		next.movesLeft--
+	}
+	next.eliminateStuckPlayersGenerated()
+	if next.finishIfTerminal() {
+		return next
+	}
+	if !next.Active(player) || next.movesLeft == 0 {
+		next.advance(player)
+	}
+	return next
+}
+
 func (s State) legalAction(action Action) bool {
 	if !s.Active(s.current) {
 		return false
@@ -223,10 +300,13 @@ func (s State) connected(player Player) []bool {
 		return seen
 	}
 	seen[s.index(base)] = true
-	queue := []Pos{base}
-	for len(queue) > 0 {
-		pos := queue[0]
-		queue = queue[1:]
+	queue := make([]int32, len(s.cells))
+	queue[0] = int32(s.index(base))
+	head, tail := 0, 1
+	for head < tail {
+		current := int(queue[head])
+		head++
+		pos := Pos{current / s.cols, current % s.cols}
 		for row := pos.Row - 1; row <= pos.Row+1; row++ {
 			for col := pos.Col - 1; col <= pos.Col+1; col++ {
 				next := Pos{row, col}
@@ -236,7 +316,8 @@ func (s State) connected(player Player) []bool {
 				owner, _ := s.At(next)
 				if owner.Owner == player {
 					seen[s.index(next)] = true
-					queue = append(queue, next)
+					queue[tail] = int32(s.index(next))
+					tail++
 				}
 			}
 		}
@@ -258,14 +339,59 @@ func (s *State) eliminateStuckPlayers() {
 }
 
 func (s State) hasMove(player Player) bool {
-	for row := 0; row < s.rows; row++ {
-		for col := 0; col < s.cols; col++ {
-			if s.legalMove(player, Pos{row, col}) {
-				return true
+	connected := s.connected(player)
+	for index, yes := range connected {
+		if !yes {
+			continue
+		}
+		row, col := index/s.cols, index%s.cols
+		for nextRow := row - 1; nextRow <= row+1; nextRow++ {
+			for nextCol := col - 1; nextCol <= col+1; nextCol++ {
+				pos := Pos{nextRow, nextCol}
+				if !s.inBounds(pos) {
+					continue
+				}
+				cell := s.cells[s.index(pos)]
+				if cell.Kind == Empty || (cell.Kind == Normal && cell.Owner != player) {
+					return true
+				}
 			}
 		}
 	}
 	return false
+}
+
+// moveTargets computes a player's connected territory once, then derives its
+// legal frontier in stable board order. This is equivalent to legalMove over
+// every cell without repeating a full connectivity traversal for each cell.
+func (s State) moveTargets(player Player) []Pos {
+	connected := s.connected(player)
+	frontier := make([]bool, len(s.cells))
+	for index, isConnected := range connected {
+		if !isConnected {
+			continue
+		}
+		row, col := index/s.cols, index%s.cols
+		for nextRow := row - 1; nextRow <= row+1; nextRow++ {
+			for nextCol := col - 1; nextCol <= col+1; nextCol++ {
+				pos := Pos{nextRow, nextCol}
+				if !s.inBounds(pos) {
+					continue
+				}
+				cell := s.cells[s.index(pos)]
+				if cell.Kind == Empty || (cell.Kind == Normal && cell.Owner != player) {
+					frontier[s.index(pos)] = true
+				}
+			}
+		}
+	}
+	targets := make([]Pos, 0)
+	for index, legal := range frontier {
+		if legal {
+			targets = append(targets, Pos{Row: index / s.cols, Col: index % s.cols})
+		}
+	}
+	return targets
 }
 
 func (s *State) finishIfTerminal() bool {
