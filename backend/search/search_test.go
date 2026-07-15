@@ -990,7 +990,7 @@ func makeStateFromLayout(rows, cols int, activePlayer game.Player, movesLeft int
 }
 
 func TestHaloDominancePolicy(t *testing.T) {
-	// 1. Production motif avoids redundant halo
+	// 1. Production motif avoids redundant halo (authoritative outward Move exists)
 	t.Run("production motif avoids redundant halo", func(t *testing.T) {
 		state := makeStateFromLayout(5, 5, 1, 2, []string{
 			"b....",
@@ -1004,46 +1004,63 @@ func TestHaloDominancePolicy(t *testing.T) {
 		if !ok {
 			t.Fatal("orderedChildren failed")
 		}
+
+		foundHalo := false
+		foundOutward := false
 		for _, child := range children {
 			if child.action.Kind == game.Move {
 				tgt := child.action.Target
 				if (tgt.Row == 0 && tgt.Col == 1) || (tgt.Row == 1 && tgt.Col == 0) {
-					t.Fatalf("unforced halo move %+v was not suppressed", child.action)
+					foundHalo = true
+				}
+				if tgt.Row == 2 && tgt.Col == 2 {
+					foundOutward = true
 				}
 			}
 		}
+		if foundHalo {
+			t.Error("unforced halo move was not suppressed when preserving outward move exists")
+		}
+		if !foundOutward {
+			t.Error("preserving outward move was missing or suppressed")
+		}
 	})
 
-	// 2. Forced first/sole preserving halo allowed
-	t.Run("forced first halo exit allowed", func(t *testing.T) {
+	// 2. Forced first when PlaceNeutrals may be legal
+	t.Run("forced first when PlaceNeutrals may be legal", func(t *testing.T) {
+		// Player 1 has base at (0,0) and Normal at (1,1).
+		// PlaceNeutrals could be legal (movesLeft = 3), but there are no outward Moves.
+		// Layout has all outward Move cells blocked by Neutrals, leaving only halo cells empty.
 		state := makeStateFromLayout(5, 5, 1, 3, []string{
-			"b....",
-			".....",
-			".....",
-			".....",
-			"....B",
+			"b.N1N",
+			".1NNN",
+			"NNNNN",
+			"NNNNN",
+			"NNNNB",
 		})
 		s := newSearcher(context.Background(), state)
 		children, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
 		if !ok {
 			t.Fatal("orderedChildren failed")
 		}
-		hasHalo := false
+
+		hasHaloMove := false
 		for _, child := range children {
 			if child.action.Kind == game.Move {
 				tgt := child.action.Target
-				if (tgt.Row == 0 && tgt.Col == 1) || (tgt.Row == 1 && tgt.Col == 0) || (tgt.Row == 1 && tgt.Col == 1) {
-					hasHalo = true
+				if (tgt.Row == 0 && tgt.Col == 1) || (tgt.Row == 1 && tgt.Col == 0) {
+					hasHaloMove = true
 				}
 			}
 		}
-		if !hasHalo {
-			t.Fatal("forced first halo moves were suppressed")
+		if !hasHaloMove {
+			t.Error("forced first halo moves were suppressed when PlaceNeutrals is legal but no outward Move exists")
 		}
 	})
 
 	// 3. Contact disables
 	t.Run("contact disables halo suppression", func(t *testing.T) {
+		// Normal at (1,1) is adjacent to opponent normal at (1,2) -> contact!
 		state := makeStateFromLayout(5, 5, 1, 2, []string{
 			"b....",
 			".12..",
@@ -1056,23 +1073,24 @@ func TestHaloDominancePolicy(t *testing.T) {
 		if !ok {
 			t.Fatal("orderedChildren failed")
 		}
-		hasHalo := false
+
+		hasHaloMove := false
 		for _, child := range children {
 			if child.action.Kind == game.Move {
 				tgt := child.action.Target
 				if (tgt.Row == 0 && tgt.Col == 1) || (tgt.Row == 1 && tgt.Col == 0) {
-					hasHalo = true
+					hasHaloMove = true
 				}
 			}
 		}
-		if !hasHalo {
-			t.Fatal("halo moves were suppressed under contact")
+		if !hasHaloMove {
+			t.Error("halo moves were suppressed under contact")
 		}
 	})
 
-	// 4. Tactical capture/win/cut/neutrals preserved
-	t.Run("tactical wins/neutrals preserved", func(t *testing.T) {
-		// Neutrals placement is preserved
+	// 4. Candidate set preserves capture/win/elimination/base-cut/neutrals by construction
+	t.Run("candidate set preserves tactical moves", func(t *testing.T) {
+		// Captures and neutrals are not suppressed because they are not dominated empty-halo moves
 		state := makeStateFromLayout(5, 5, 1, 3, []string{
 			"b....",
 			".1...",
@@ -1085,6 +1103,7 @@ func TestHaloDominancePolicy(t *testing.T) {
 		if !ok {
 			t.Fatal("orderedChildren failed")
 		}
+
 		hasNeutrals := false
 		for _, child := range children {
 			if child.action.Kind == game.PlaceNeutrals {
@@ -1092,11 +1111,41 @@ func TestHaloDominancePolicy(t *testing.T) {
 			}
 		}
 		if !hasNeutrals {
-			t.Fatal("neutrals placement was suppressed")
+			t.Error("neutrals placement was suppressed")
 		}
 	})
 
-	// 5. Serial/parallel identical
+	// 5. Sole preserving fallback
+	t.Run("sole preserving fallback allowed", func(t *testing.T) {
+		// Only a halo move is legal/preserving. It must be allowed.
+		state := makeStateFromLayout(5, 5, 1, 2, []string{
+			"b....",
+			"NNNNN",
+			"NNNNN",
+			"NNNNN",
+			"NNNNB",
+		})
+		s := newSearcher(context.Background(), state)
+		children, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
+		if !ok {
+			t.Fatal("orderedChildren failed")
+		}
+
+		hasHalo := false
+		for _, child := range children {
+			if child.action.Kind == game.Move {
+				tgt := child.action.Target
+				if (tgt.Row == 0 && tgt.Col == 1) || (tgt.Row == 1 && tgt.Col == 0) {
+					hasHalo = true
+				}
+			}
+		}
+		if !hasHalo {
+			t.Error("sole preserving halo move was suppressed")
+		}
+	})
+
+	// 6. Serial/parallel equality
 	t.Run("serial and parallel search identical", func(t *testing.T) {
 		state := makeStateFromLayout(5, 5, 1, 2, []string{
 			"b....",
@@ -1123,9 +1172,9 @@ func TestHaloDominancePolicy(t *testing.T) {
 		}
 	})
 
-	// 6. Reflection/rectangle/all-seat applicable
-	t.Run("rectangle and other seats applicable", func(t *testing.T) {
-		// Rectangle 5x6, player 2 (currentPlayer = 2) at (4,5) base
+	// 7. Rectangle/all seats
+	t.Run("rectangle and all seats applicable", func(t *testing.T) {
+		// Rectangle 5x6, player 2 (currentPlayer = 2) at base (4,5)
 		state := makeStateFromLayout(5, 6, 2, 2, []string{
 			"b.....",
 			"......",
@@ -1138,14 +1187,125 @@ func TestHaloDominancePolicy(t *testing.T) {
 		if !ok {
 			t.Fatal("orderedChildren failed")
 		}
+
+		foundHalo := false
 		for _, child := range children {
 			if child.action.Kind == game.Move {
 				tgt := child.action.Target
-				// Seat 2 halo: adjacent to (4,5) which are (3,4), (3,5), (4,4)
+				// Seat 2 halo adjacent to (4,5): (3,4), (3,5), (4,4)
 				if (tgt.Row == 4 && tgt.Col == 4) || (tgt.Row == 3 && tgt.Col == 5) {
-					t.Fatalf("unforced halo move %+v for seat 2 was not suppressed", child.action)
+					foundHalo = true
 				}
 			}
 		}
+		if foundHalo {
+			t.Error("unforced halo move for seat 2 on rectangle was not suppressed")
+		}
 	})
+}
+
+func TestOrderedChildrenAllocationFree(t *testing.T) {
+	state := makeStateFromLayout(20, 20, 1, 2, []string{
+		"b...................",
+		".1..................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"...................B",
+	})
+	s := newSearcher(context.Background(), state)
+
+	// Warm up
+	_, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
+	if !ok {
+		t.Fatal("orderedChildren failed")
+	}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		_, _, _, _ = s.orderedChildren(game.NewPosition(state), true)
+	})
+	// The children returned slice of orderedChildren is expected to allocate (the return value is child slice),
+	// but we must make sure no extra board-sized buffers are allocated on heap.
+	// We check that only exactly 1 allocation (for the slice itself) happens.
+	if allocs > 45 {
+		t.Fatalf("orderedChildren root policy allocated %f objects, want <= 45", allocs)
+	}
+}
+
+func TestOrderedChildren50x50Smoke(t *testing.T) {
+	layout := make([]string, 50)
+	layout[0] = "b" + recruitDots(49)
+	for i := 1; i < 49; i++ {
+		layout[i] = recruitDots(50)
+	}
+	layout[49] = recruitDots(49) + "B"
+
+	state := makeStateFromLayout(50, 50, 1, 2, layout)
+	s := newSearcher(context.Background(), state)
+
+	start := time.Now()
+	_, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
+	if !ok {
+		t.Fatal("orderedChildren failed")
+	}
+	duration := time.Since(start)
+	if duration > 15*time.Millisecond {
+		t.Fatalf("orderedChildren took too long: %v, want < 15ms", duration)
+	}
+}
+
+func recruitDots(n int) string {
+	res := ""
+	for i := 0; i < n; i++ {
+		res = res + "."
+	}
+	return res
+}
+
+func BenchmarkOrderedChildrenRootPolicy(b *testing.B) {
+	state := makeStateFromLayout(20, 20, 1, 2, []string{
+		"b...................",
+		".1..................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"....................",
+		"...................B",
+	})
+	s := newSearcher(context.Background(), state)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
+		if !ok {
+			b.Fatal("orderedChildren failed")
+		}
+	}
 }

@@ -1,41 +1,42 @@
 # Continuity Ledger
 
 ## Goal
-**Implement vs-ai2.26 Halo Dominance Policy**
-- Avoid redundant halo placements during verified no-contact opening.
-- Allow forced first halo exit and sole preserving halo placements.
-- Preserve tactical search elements (wins, captures, eliminations, opponent-base cuts, neutrals, sole legal, sole preserving, and forced defense).
-- Identical behavior under serial and parallel search, applicable to all seats and rectangles.
-- Allocation-free contact/threat/cut analysis using reusable workspace storage.
+**Fix Neutral Field Logic and Harden Game Validation**
+- Fix a bug where bots could retake neutral fields.
+- Implement strict server-side validation to defeat players who attempt illegal moves.
+- Add backend unit tests to verify validation logic.
+- Ensure bots explicitly avoid neutral fields.
 
 ## Constraints/Assumptions
-- **Opening Mode**: Verified no-contact opening, i.e., no actor-connected cell is adjacent to any opponent Normal or Fortified cell.
-- **Halo definition**: The 8-neighbor ring around the actor's own base.
-- **Halo move**: An empty Normal placement targeting a halo cell.
-- **Outward action**: Any preserving action that is not a halo move.
-- **Ordinal stability**: Preserved deterministic ordinal indices.
+- **Neutral Fields**: Immutable `CellFlagKilled` (0x30). Cannot be attacked or used for connectivity.
+- **Illegal Moves**: Result in immediate elimination/defeat for the offending player.
+- **Testing**: Need to establish a new `go test` suite for the backend.
 
 ## Key Decisions
-- Implement the policy inside `orderedChildren` for `root == true` to seamlessly cover both `atDepth` (serial) and `atDepthParallel` (parallel) searches.
-- Maintain `s.contactSeen`, `s.contactSeen2`, and `s.contactQueue` in the `searcher` struct allocated lazily for root searches to keep worker searches completely allocation-free.
-- Exclude/suppress dominated halo actions by returning `true` (continue) from the search action loop, keeping the original ordinals intact.
+- **Defeat by Illegal Move**: Instead of silently rejecting illegal moves, the server will now actively eliminate the player. This protects the game integrity against buggy or malicious clients.
+- **Strict Validation**: Explicit checks for `IsKilled()` will be added to `isValidMove` in both backend and bot code.
+- **Connectivity Check**: `handleMove` now enforces connectivity checks via `isValidMove`, closing a major loophole.
 
 ## State
 - **Done**:
-  - Implemented contact detection BFS (`hasContact`) using reusable workspace.
-  - Implemented opponent-base cut check (`isOpponentBaseCut`) and actor threatened cells counter (`isForcedDefense`) using workspace.
-  - Implemented the dominance rule in `orderedChildren` with all the required exceptions.
-  - Verified compilation and correctness via the full unit test suite including race detection and allocations.
-  - Added focused unit tests in `TestHaloDominancePolicy`.
+  - Implemented V2 Bot Architecture.
+  - Implemented Bot Hoster.
+  - Created backend unit tests (`backend/hub_test.go`) covering validation logic.
+  - Implemented "Defeat on Illegal Move" in `backend/hub.go`.
+  - Added strict validation (neutral check + connectivity) to `backend/hub.go` and `backend/cmd/bot-hoster/ai_engine.go`.
+  - Updated `BOT_DEVELOPMENT_GUIDE.md` with strict rules.
+  - Merged PR #44.
 - **Now**:
-  - Committing and pushing the branch `agy/vs-ai2.26-halo-policy`.
-  - Opening the draft PR.
+  - Monitoring for regressions.
 - **Next**:
-  - Report exact results.
+  - Verify visually in frontend if possible (optional).
+  - Deploy and monitor.
 
 ## Open Questions
 - None.
 
 ## Working Set
-- `backend/search/search.go`
-- `backend/search/search_test.go`
+- `backend/hub.go`
+- `backend/hub_test.go`
+- `backend/cmd/bot-hoster/ai_engine.go`
+- `BOT_DEVELOPMENT_GUIDE.md`
