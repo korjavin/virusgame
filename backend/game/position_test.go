@@ -43,6 +43,36 @@ func TestPositionExactActionsAndApplyMatchAuthoritativeOracle(t *testing.T) {
 	}
 }
 
+func TestPositionMatureSeeded1v1FrontierEquivalence(t *testing.T) {
+	rng := rand.New(rand.NewSource(550020260715))
+	boards := [][2]int{{5, 50}, {50, 5}, {19, 37}, {50, 50}}
+	for _, board := range boards {
+		for game := 0; game < 4; game++ {
+			state, err := New(board[0], board[1], 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for ply := 0; ply < 120 && !state.GameOver(); ply++ {
+				want := slowMoveTargets(state, state.CurrentPlayer())
+				position := NewPosition(state)
+				if !reflect.DeepEqual(position.moves, want) {
+					t.Fatalf("%dx%d game %d ply %d mature frontier divergence", board[0], board[1], game, ply)
+				}
+				if len(want) == 0 {
+					break
+				}
+				action := Action{Kind: Move, Target: want[rng.Intn(len(want))]}
+				oracle, oracleErr := state.Apply(action)
+				got, gotErr := position.Apply(action)
+				if oracleErr != gotErr || !reflect.DeepEqual(got.State().Snapshot(), oracle.Snapshot()) {
+					t.Fatalf("%dx%d game %d ply %d successor divergence", board[0], board[1], game, ply)
+				}
+				state = oracle
+			}
+		}
+	}
+}
+
 func TestSearchActionsRetainTacticalNeutralPairs(t *testing.T) {
 	state, err := New(5, 5, 2)
 	if err != nil {
@@ -55,19 +85,20 @@ func TestSearchActionsRetainTacticalNeutralPairs(t *testing.T) {
 	state.set(Pos{3, 3}, Cell{Owner: 2, Kind: Normal})
 
 	position := NewPosition(state)
-	tactical := position.tacticalNeutrals()
+	tactical, _ := position.tacticalNeutrals(position.ownedNormals())
 	if len(tactical) < 2 {
 		t.Fatalf("expected multiple tactical cells, got %v", tactical)
 	}
 	got := make(map[[2]Pos]bool)
-	for _, action := range position.SearchActions() {
+	position.ForEachSearchAction(func(action Action) bool {
 		if action.Kind == PlaceNeutrals {
 			got[action.Neutrals] = true
 		}
 		if _, err := state.Apply(action); err != nil {
 			t.Fatalf("selective action is illegal: %+v: %v", action, err)
 		}
-	}
+		return true
+	})
 	owned := position.ownedNormals()
 	for i := range owned {
 		for j := i + 1; j < len(owned); j++ {
@@ -84,24 +115,110 @@ func TestSearchActionsRetainTacticalNeutralPairs(t *testing.T) {
 func TestSearchActionsReduceMatureBoardNeutralBranching(t *testing.T) {
 	state := maturePosition50()
 	position := NewPosition(state)
-	actions := position.SearchActions()
 	normalCount := len(position.ownedNormals())
 	exhaustivePairs := normalCount * (normalCount - 1) / 2
 	neutralCount := 0
-	for _, action := range actions {
+	position.ForEachSearchAction(func(action Action) bool {
 		if action.Kind == PlaceNeutrals {
 			neutralCount++
 		}
 		if _, err := state.Apply(action); err != nil {
 			t.Fatalf("search action is illegal: %+v: %v", action, err)
 		}
-	}
+		return true
+	})
 	if exhaustivePairs < 1_000_000 {
 		t.Fatalf("fixture is not mature: only %d exhaustive pairs", exhaustivePairs)
 	}
 	if neutralCount >= 10_000 {
 		t.Fatalf("neutral branching not selective: got %d of %d pairs", neutralCount, exhaustivePairs)
 	}
+}
+
+func TestMatureSearchEnumerationAllocationBudget(t *testing.T) {
+	position := NewPosition(maturePosition50())
+	allocations := testing.AllocsPerRun(10, func() {
+		position.ForEachSearchAction(func(Action) bool { return true })
+	})
+	if allocations > 100 {
+		t.Fatalf("search enumeration allocates %.0f objects, budget is 100", allocations)
+	}
+}
+
+func TestSearchActionsRetainIndependentTwoCellSeparator(t *testing.T) {
+	state, err := New(7, 7, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two solid territories are joined only by the vertical pair (2,2),(3,2).
+	// Removing either cell alone leaves a route through the other, so neither
+	// endpoint is an ordinary articulation point.
+	for row := 0; row <= 4; row++ {
+		for col := 0; col <= 1; col++ {
+			pos := Pos{row, col}
+			if pos != state.bases[0] {
+				state.set(pos, Cell{Owner: 1, Kind: Normal})
+			}
+		}
+	}
+	for row := 1; row <= 4; row++ {
+		for col := 3; col <= 5; col++ {
+			state.set(Pos{row, col}, Cell{Owner: 1, Kind: Normal})
+		}
+	}
+	want := [2]Pos{{2, 2}, {3, 2}}
+	state.set(want[0], Cell{Owner: 1, Kind: Normal})
+	state.set(want[1], Cell{Owner: 1, Kind: Normal})
+	if fixtureDisconnected(state, want[:1]) || fixtureDisconnected(state, want[1:]) {
+		t.Fatal("fixture endpoints must not be single articulation points")
+	}
+	if !fixtureDisconnected(state, want[:]) {
+		t.Fatal("fixture pair does not independently disconnect territory")
+	}
+	position := NewPosition(state)
+	found := false
+	position.ForEachSearchAction(func(action Action) bool {
+		if action.Kind == PlaceNeutrals && action.Neutrals == want {
+			found = true
+		}
+		return true
+	})
+	if !found {
+		t.Fatalf("two-cell separator %v was pruned", want)
+	}
+}
+
+// fixtureDisconnected is a deliberately simple test oracle. It operates on
+// board coordinates and does not call the production articulation/pair code.
+func fixtureDisconnected(state State, removed []Pos) bool {
+	blocked := make(map[Pos]bool, len(removed))
+	for _, pos := range removed {
+		blocked[pos] = true
+	}
+	base := state.bases[0]
+	seen := map[Pos]bool{base: true}
+	queue := []Pos{base}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		for row := current.Row - 1; row <= current.Row+1; row++ {
+			for col := current.Col - 1; col <= current.Col+1; col++ {
+				next := Pos{row, col}
+				cell, ok := state.At(next)
+				if ok && !blocked[next] && !seen[next] && cell.Owner == 1 {
+					seen[next] = true
+					queue = append(queue, next)
+				}
+			}
+		}
+	}
+	for index, cell := range state.cells {
+		pos := Pos{index / state.cols, index % state.cols}
+		if cell.Owner == 1 && !blocked[pos] && !seen[pos] {
+			return true
+		}
+	}
+	return false
 }
 
 func containsPos(cells []Pos, want Pos) bool {
@@ -118,7 +235,25 @@ func BenchmarkMature50x50SearchActions(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = position.SearchActions()
+		position.ForEachSearchAction(func(Action) bool { return true })
+	}
+}
+
+func BenchmarkMature50x50Successors(b *testing.B) {
+	position := NewPosition(maturePosition50())
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		expanded := 0
+		position.ForEachSearchAction(func(action Action) bool {
+			_, err := position.Apply(action)
+			if err != nil {
+				b.Fatalf("illegal search successor: %v", err)
+			}
+			expanded++
+			return expanded < 128
+		})
+		b.ReportMetric(float64(expanded), "successors/op")
 	}
 }
 
