@@ -81,6 +81,78 @@ func TestGeneratedSearchSuccessorsMatchAuthoritativeOracle(t *testing.T) {
 	}
 }
 
+func TestMultiplayerRandomReachableSearchActionsMatchOracle(t *testing.T) {
+	rng := rand.New(rand.NewSource(230260715))
+	seenSeats := [4]bool{}
+	for players := 2; players <= 4; players++ {
+		for sample := 0; sample < 8; sample++ {
+			rows, cols := 5+rng.Intn(46), 5+rng.Intn(46)
+			if sample == 0 {
+				rows, cols = 5, 50
+			} else if sample == 1 {
+				rows, cols = 50, 5
+			}
+			state, err := New(rows, cols, players)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for ply := 0; ply < players*12 && !state.GameOver(); ply++ {
+				seat := state.CurrentPlayer()
+				seenSeats[seat-1] = true
+				position := NewPosition(state)
+				authoritativeMoves := map[Pos]bool{}
+				for _, action := range state.LegalActions() {
+					if action.Kind == Move {
+						authoritativeMoves[action.Target] = true
+					}
+				}
+				generatedMoves := map[Pos]bool{}
+				seen := map[Action]bool{}
+				neutralCount := 0
+				position.ForEachSearchAction(func(action Action) bool {
+					if seen[action] {
+						t.Fatalf("%dx%d/%dp ply %d duplicate action %+v", rows, cols, players, ply, action)
+					}
+					seen[action] = true
+					if action.Kind == Move {
+						generatedMoves[action.Target] = true
+					} else {
+						neutralCount++
+					}
+					want, applyErr := state.Apply(action)
+					if applyErr != nil {
+						t.Fatalf("%dx%d/%dp ply %d generated illegal action %+v: %v", rows, cols, players, ply, action, applyErr)
+					}
+					got := position.ApplySearch(action).State()
+					if !reflect.DeepEqual(got.Snapshot(), want.Snapshot()) {
+						t.Fatalf("%dx%d/%dp ply %d successor divergence for %+v", rows, cols, players, ply, action)
+					}
+					return true
+				})
+				if !reflect.DeepEqual(generatedMoves, authoritativeMoves) {
+					t.Fatalf("%dx%d/%dp ply %d did not preserve every normal move", rows, cols, players, ply)
+				}
+				if neutralCount > 48 {
+					t.Fatalf("%dx%d/%dp ply %d generated %d neutral pairs", rows, cols, players, ply, neutralCount)
+				}
+				moves := state.moveTargets(state.CurrentPlayer())
+				if len(moves) == 0 {
+					break
+				}
+				state, err = state.Apply(Action{Kind: Move, Target: moves[rng.Intn(len(moves))]})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	for seat, seen := range seenSeats {
+		if !seen {
+			t.Fatalf("random reachable coverage missed seat %d", seat+1)
+		}
+	}
+}
+
 func TestPositionMatureSeeded1v1FrontierEquivalence(t *testing.T) {
 	rng := rand.New(rand.NewSource(550020260715))
 	boards := [][2]int{{5, 50}, {50, 5}, {19, 37}, {50, 50}}
@@ -203,15 +275,58 @@ func TestMatureSuccessorAllocationBudget(t *testing.T) {
 	}
 }
 
+func TestMatureMultiplayerSearchAllocationBudgets(t *testing.T) {
+	for _, fixture := range []struct {
+		rows, cols, players int
+	}{{30, 30, 3}, {50, 50, 4}} {
+		position := NewPosition(branchyMultiplayerPosition(fixture.rows, fixture.cols, fixture.players, 1))
+		enumeration := testing.AllocsPerRun(5, func() {
+			position.ForEachSearchAction(func(Action) bool { return true })
+		})
+		if enumeration > 4 {
+			t.Fatalf("%dx%d/%dp enumeration allocates %.0f objects, budget is 4", fixture.rows, fixture.cols, fixture.players, enumeration)
+		}
+		successors := testing.AllocsPerRun(3, func() {
+			expanded := 0
+			position.ForEachSearchAction(func(action Action) bool {
+				_ = position.ApplySearch(action)
+				expanded++
+				return expanded < 128
+			})
+		})
+		if successors > 512 {
+			t.Fatalf("%dx%d/%dp 128 successors allocate %.0f objects, budget is 512", fixture.rows, fixture.cols, fixture.players, successors)
+		}
+	}
+}
+
 func TestSearchActionsRetainIndependentTwoCellSeparator(t *testing.T) {
-	state, err := New(9, 9, 2)
+	for _, players := range []int{2, 4} {
+		state, want := independentSeparatorPosition(t, players)
+		position := NewPosition(state)
+		found := false
+		position.ForEachSearchAction(func(action Action) bool {
+			if action.Kind == PlaceNeutrals && action.Neutrals == want {
+				found = true
+			}
+			return true
+		})
+		if !found {
+			t.Fatalf("%dp two-cell separator %v was starved", players, want)
+		}
+	}
+}
+
+func independentSeparatorPosition(t *testing.T, players int) (State, [2]Pos) {
+	t.Helper()
+	state, err := New(9, 9, players)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Two spatially separate routes connect the left territory to (4,7).
 	// One route passes through u and the other through v; only removing both
-	// disconnects the far territory. u is immediately threatened, making this
-	// general non-adjacent separator tactically relevant.
+	// disconnects the far territory. u is immediately threatened by player 2,
+	// making this general non-adjacent separator tactically relevant.
 	want := [2]Pos{{2, 4}, {5, 4}}
 	owned := []Pos{{0, 1}, {1, 1}, {2, 2}, {2, 3}, want[0], {2, 5}, {3, 6},
 		{3, 2}, {4, 3}, want[1], {5, 5}, {4, 6}, {4, 7}}
@@ -227,16 +342,101 @@ func TestSearchActionsRetainIndependentTwoCellSeparator(t *testing.T) {
 	if !fixtureDisconnected(state, want[:]) {
 		t.Fatal("fixture pair does not independently disconnect territory")
 	}
+	return state, want
+}
+
+func TestMultiplayerMatureNeutralCandidatesAreBoundedAndDeterministic(t *testing.T) {
+	for players := 2; players <= 4; players++ {
+		for seat := Player(1); int(seat) <= players; seat++ {
+			state := matureMultiplayerPosition(23, 31, players, seat)
+			position := NewPosition(state)
+			collect := func() []Action {
+				var result []Action
+				position.ForEachSearchAction(func(action Action) bool {
+					if action.Kind == PlaceNeutrals {
+						result = append(result, action)
+					}
+					return true
+				})
+				return result
+			}
+			first, second := collect(), collect()
+			if !reflect.DeepEqual(first, second) {
+				t.Fatalf("%dp seat %d neutral candidates are nondeterministic", players, seat)
+			}
+			if len(first) == 0 || len(first) > 48 {
+				t.Fatalf("%dp seat %d generated %d neutral candidates", players, seat, len(first))
+			}
+			seen := map[Action]bool{}
+			for _, action := range first {
+				if seen[action] {
+					t.Fatalf("%dp seat %d duplicate neutral action %+v", players, seat, action)
+				}
+				seen[action] = true
+				if _, err := state.Apply(action); err != nil {
+					t.Fatalf("%dp seat %d illegal neutral action %+v: %v", players, seat, action, err)
+				}
+			}
+		}
+	}
+}
+
+func TestNeutralCandidateClassesCannotStarveEachOther(t *testing.T) {
+	state := matureMultiplayerPosition(15, 17, 4, 1)
 	position := NewPosition(state)
-	found := false
+	owned := position.ownedNormals()
+	connected := state.connected(1)
+	cuts := append([]bool(nil), articulationCells(state, connected, -1, newArticulationScratch(len(state.cells)))...)
+	threatened := make([]bool, len(state.cells))
+	for opponent := Player(2); opponent <= 4; opponent++ {
+		for _, target := range state.moveTargets(opponent) {
+			cell := state.cells[state.index(target)]
+			if cell.Owner == 1 && cell.Kind == Normal {
+				threatened[state.index(target)] = true
+			}
+		}
+	}
+	defensive := make([]Pos, 0)
+	for _, pos := range owned {
+		if adjacent(pos, state.bases[0]) || threatened[state.index(pos)] || cuts[state.index(pos)] {
+			defensive = append(defensive, pos)
+		}
+	}
+	fillers := robustFillers(state, owned, cuts, threatened, defensive, 2)
+	if len(fillers) != 2 {
+		t.Fatalf("fixture has %d robust fillers, want 2", len(fillers))
+	}
+	foundFillers := [2]bool{}
+	coveredDefensive := map[Pos]bool{}
 	position.ForEachSearchAction(func(action Action) bool {
-		if action.Kind == PlaceNeutrals && action.Neutrals == want {
-			found = true
+		if action.Kind != PlaceNeutrals {
+			return true
+		}
+		for index, filler := range fillers {
+			if action.Neutrals[0] == filler || action.Neutrals[1] == filler {
+				foundFillers[index] = true
+			}
+		}
+		for _, cell := range defensive {
+			if action.Neutrals[0] == cell || action.Neutrals[1] == cell {
+				coveredDefensive[cell] = true
+			}
 		}
 		return true
 	})
-	if !found {
-		t.Fatalf("two-cell separator %v was pruned", want)
+	for index, found := range foundFillers {
+		if !found {
+			t.Fatalf("robust filler %v was starved as a tactical partner", fillers[index])
+		}
+	}
+	// The generator deliberately selects at most twelve defensive cells. The
+	// fixture has no more than that, so each must retain a representative.
+	if len(defensive) <= 12 {
+		for _, cell := range defensive {
+			if !coveredDefensive[cell] {
+				t.Fatalf("defensive cell %v was starved", cell)
+			}
+		}
 	}
 }
 
@@ -343,6 +543,30 @@ func BenchmarkMature30x30Successors(b *testing.B) {
 	}
 }
 
+func BenchmarkMature50x50FourPlayerSearchActions(b *testing.B) {
+	position := NewPosition(branchyMultiplayerPosition(50, 50, 4, 1))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		position.ForEachSearchAction(func(Action) bool { return true })
+	}
+}
+
+func BenchmarkMature50x50FourPlayerSuccessors(b *testing.B) {
+	position := NewPosition(branchyMultiplayerPosition(50, 50, 4, 1))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		expanded := 0
+		position.ForEachSearchAction(func(action Action) bool {
+			_ = position.ApplySearch(action)
+			expanded++
+			return expanded < 128
+		})
+		b.ReportMetric(float64(expanded), "successors/op")
+	}
+}
+
 func slowLegalActions(s State) []Action {
 	if s.over || !s.Active(s.current) {
 		return nil
@@ -392,6 +616,44 @@ func maturePosition(rows, cols int) State {
 			pos := Pos{row, col}
 			if pos != state.bases[0] {
 				state.set(pos, Cell{Owner: 1, Kind: Normal})
+			}
+		}
+	}
+	return state
+}
+
+func matureMultiplayerPosition(rows, cols, players int, current Player) State {
+	state, _ := New(rows, cols, players)
+	state.current = current
+	base := state.bases[current-1]
+	rowStep, colStep := 1, 1
+	if base.Row != 0 {
+		rowStep = -1
+	}
+	if base.Col != 0 {
+		colStep = -1
+	}
+	for dr := 0; dr < rows*2/3; dr++ {
+		for dc := 0; dc < cols*2/3; dc++ {
+			pos := Pos{base.Row + dr*rowStep, base.Col + dc*colStep}
+			cell, _ := state.At(pos)
+			if cell.Kind != Base {
+				state.set(pos, Cell{Owner: current, Kind: Normal})
+			}
+		}
+	}
+	return state
+}
+
+func branchyMultiplayerPosition(rows, cols, players int, current Player) State {
+	state, _ := New(rows, cols, players)
+	state.current = current
+	for row := 0; row < rows; row++ {
+		for col := 0; col < cols; col++ {
+			pos := Pos{row, col}
+			cell, _ := state.At(pos)
+			if (row+col)%2 == 0 && cell.Kind != Base {
+				state.set(pos, Cell{Owner: current, Kind: Normal})
 			}
 		}
 	}
