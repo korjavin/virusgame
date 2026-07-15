@@ -20,7 +20,7 @@
 // See resetGameState() for the single source of truth for cleanup.
 
 class MultiplayerClient {
-    constructor() {
+    constructor(actionSessionId = null) {
         this.ws = null;
         this.userId = null;
         this.username = null;
@@ -39,6 +39,16 @@ class MultiplayerClient {
         // Move timer
         this.moveTimeLeft = 120;
         this.moveTimerInterval = null;
+        this.actionSessionId = actionSessionId || MultiplayerClient.newActionSessionId();
+        this.nextActionRequestId = 1;
+        this.inFlightAction = null;
+    }
+
+    static newActionSessionId() {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+        return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     }
 
     /**
@@ -55,6 +65,8 @@ class MultiplayerClient {
         this.playerSymbol = null;
         this.isMultiplayerGame = false;
         this.multiplayerMode = false;
+        this.inFlightAction = null;
+        this.updateActionInputLock();
         this.stopMoveTimer();
     }
 
@@ -107,7 +119,9 @@ class MultiplayerClient {
     send(message) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(message));
+            return true;
         }
+        return false;
     }
 
     handleMessage(msg) {
@@ -135,11 +149,18 @@ class MultiplayerClient {
             case 'move_made':
                 this.handleMoveMade(msg);
                 break;
+            case 'action_ack':
+                this.handleActionAck(msg);
+                break;
             case 'neutrals_placed':
                 this.handleNeutralsPlaced(msg);
                 break;
             case 'turn_change':
                 this.handleTurnChange(msg);
+                break;
+            case 'game_state':
+                this.applyAuthoritativeSnapshot(msg.snapshot);
+                this.clearInFlightAction();
                 break;
             case 'game_end':
                 this.handleGameEnd(msg);
@@ -197,6 +218,7 @@ class MultiplayerClient {
 
     handleGameEnd(msg) {
         gameOver = true;
+        this.clearInFlightAction();
         this.stopMoveTimer();
 
         // Hide resign button
@@ -270,6 +292,7 @@ class MultiplayerClient {
 
         // Start new game in multiplayer mode
         this.startMultiplayerGame(msg.rows, msg.cols);
+        this.applyAuthoritativeSnapshot(msg.snapshot);
     }
 
     handleMoveMade(msg) {
@@ -280,6 +303,10 @@ class MultiplayerClient {
         }
 
         console.log('Move made received:', msg, 'movesLeft before:', movesLeft);
+        if (msg.player === this.yourPlayer &&
+            (msg.requestId === this.inFlightAction?.requestId || !msg.requestId)) {
+            this.clearInFlightAction();
+        }
 
         const applyMove = () => {
             const opponent = msg.player;
@@ -320,6 +347,10 @@ class MultiplayerClient {
     }
 
     handleNeutralsPlaced(msg) {
+        if (msg.player === this.yourPlayer &&
+            (msg.requestId === this.inFlightAction?.requestId || !msg.requestId)) {
+            this.clearInFlightAction();
+        }
         const applyNeutrals = () => {
             // Apply opponent's neutral placement
             for (const cell of msg.cells) {
@@ -351,6 +382,7 @@ class MultiplayerClient {
 
     handleTurnChange(msg) {
         console.log('Turn change received:', msg);
+        this.clearInFlightAction();
 
         const applyTurnChange = () => {
             currentPlayer = msg.player;
@@ -396,7 +428,62 @@ class MultiplayerClient {
     }
 
     handleError(msg) {
+        if (!msg.requestId || msg.requestId === this.inFlightAction?.requestId) {
+            this.clearInFlightAction();
+            this.applyAuthoritativeSnapshot(msg.snapshot);
+        }
         this.showNotification('Error', msg.username || 'An error occurred');
+    }
+
+    handleActionAck(msg) {
+        if (msg.requestId === this.inFlightAction?.requestId) {
+            this.applyAuthoritativeSnapshot(msg.snapshot);
+            this.clearInFlightAction();
+        }
+    }
+
+    clearInFlightAction() {
+        this.inFlightAction = null;
+        this.updateActionInputLock();
+        if (typeof updateStatus === 'function' && this.multiplayerMode) updateStatus();
+    }
+
+    updateActionInputLock() {
+        if (typeof document === 'undefined') return;
+        const locked = !!this.inFlightAction;
+        const gameBoardElement = document.getElementById('game-board');
+        const neutralButton = document.getElementById('put-neutrals-button');
+        if (gameBoardElement) {
+            gameBoardElement.classList.toggle('input-locked', locked);
+            gameBoardElement.setAttribute('aria-disabled', locked ? 'true' : 'false');
+        }
+        if (neutralButton) neutralButton.disabled = locked;
+    }
+
+    applyAuthoritativeSnapshot(snapshot) {
+        if (!snapshot || !Array.isArray(snapshot.board)) return;
+        const flags = [CellFlag.NORMAL, CellFlag.NORMAL, CellFlag.BASE, CellFlag.FORTIFIED, CellFlag.KILLED];
+        board = snapshot.board.map(snapshotRow => snapshotRow.map(cell => {
+            const kind = cell?.kind ?? cell?.Kind;
+            const owner = cell?.owner ?? cell?.Owner;
+            if (!cell || kind === 0) return EMPTY;
+            if (kind === 4) return createCell(0, CellFlag.KILLED);
+            return createCell(owner, flags[kind]);
+        }));
+        rows = snapshot.rows;
+        cols = snapshot.cols;
+        currentPlayer = snapshot.currentPlayer ?? snapshot.CurrentPlayer;
+        movesLeft = snapshot.movesLeft;
+        gameOver = snapshot.gameOver;
+        playerBases = (snapshot.bases || []).map(base => ({row: base.Row ?? base.row, col: base.Col ?? base.col}));
+        if (playerBases[0]) player1Base = {...playerBases[0]};
+        if (playerBases[1]) player2Base = {...playerBases[1]};
+        playerNeutralsUsed = [...(snapshot.neutralUsed || [])];
+        while (playerNeutralsUsed.length < 4) playerNeutralsUsed.push(false);
+        player1NeutralsUsed = !!playerNeutralsUsed[0];
+        player2NeutralsUsed = !!playerNeutralsUsed[1];
+        if (typeof renderBoard === 'function') renderBoard();
+        if (typeof updateStatus === 'function') updateStatus();
     }
 
     resetMoveTimer() {
@@ -486,7 +573,7 @@ class MultiplayerClient {
     }
 
     sendMove(row, col) {
-        this.send({
+		return this.sendGameAction({
             type: 'move',
             gameId: this.gameId,
             row: row,
@@ -504,11 +591,25 @@ class MultiplayerClient {
     }
 
     sendNeutrals(cells) {
-        this.send({
+		return this.sendGameAction({
             type: 'neutrals',
             gameId: this.gameId,
             cells: cells,
         });
+    }
+
+    sendGameAction(message) {
+        if (this.inFlightAction) return false;
+        const requestId = `${this.actionSessionId}:${this.nextActionRequestId++}`;
+        if (!this.send({...message, requestId})) return false;
+        this.inFlightAction = {requestId, type: message.type};
+        this.updateActionInputLock();
+        if (typeof updateStatus === 'function') updateStatus();
+        return true;
+    }
+
+    canSendGameAction() {
+        return !this.inFlightAction && this.ws && this.ws.readyState === WebSocket.OPEN;
     }
 
     sendResign() {
@@ -587,6 +688,7 @@ class MultiplayerClient {
 
         // Start multiplayer game with more than 2 players
         this.startMultiplayerGameMode(msg.rows, msg.cols, msg.gamePlayers);
+        this.applyAuthoritativeSnapshot(msg.snapshot);
     }
 
     handlePlayerEliminated(msg) {
@@ -948,4 +1050,8 @@ function initGameMultiplayerMode(rowsVal, colsVal, gamePlayers, yourPlayerIndex)
 
     renderBoard();
     updateStatus();
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {MultiplayerClient};
 }

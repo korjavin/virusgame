@@ -430,6 +430,8 @@ function updateStatus() {
 
     const isMultiplayer = typeof mpClient !== 'undefined' && mpClient.multiplayerMode;
     const inHistoryMode = gameHistory.isHistoryMode();
+    const inputLocked = isMultiplayer && !!mpClient.inFlightAction;
+    if (isMultiplayer) mpClient.updateActionInputLock();
 
     if (isMultiplayer) {
         // Multiplayer mode status
@@ -549,7 +551,8 @@ function updateStatus() {
             }
         }
 
-        putNeutralsButton.style.display = shouldShowButton ? 'inline-block' : 'none';
+        putNeutralsButton.disabled = inputLocked;
+        putNeutralsButton.style.display = shouldShowButton && !inputLocked ? 'inline-block' : 'none';
     }
 }
 
@@ -623,6 +626,7 @@ function handleCellClick(event) {
 
     // In multiplayer mode, check if it's your turn
     if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+        if (!mpClient.canSendGameAction()) return;
         if (currentPlayer !== mpClient.yourPlayer) {
             return; // Not your turn
         }
@@ -700,7 +704,7 @@ function handleCellClick(event) {
     if (movesLeft > 0 && isValidMove(row, col, currentPlayer)) {
         // In multiplayer mode, send to server and wait for response
         if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
-            mpClient.sendMove(row, col);
+            if (!mpClient.sendMove(row, col)) return;
             // Don't apply locally - wait for server's move_made message
             // Optimistically decrement to prevent spam clicks
             movesLeft--;
@@ -882,6 +886,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (putNeutralsButton) {
         putNeutralsButton.addEventListener('click', () => {
+            if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode && !mpClient.canSendGameAction()) return;
             // If already in neutral mode, clicking again cancels it (only if no cells placed yet)
             if (neutralMode && neutralsPlaced === 0) {
                 // Reset neutral placement state
