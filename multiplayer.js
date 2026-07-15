@@ -428,8 +428,12 @@ class MultiplayerClient {
     }
 
     handleError(msg) {
-        if (!msg.requestId || msg.requestId === this.inFlightAction?.requestId) {
+        const matchesPending = !!this.inFlightAction && msg.requestId === this.inFlightAction.requestId;
+        const authoritativeResync = !!this.inFlightAction && !msg.requestId && !!msg.snapshot && msg.gameId === this.gameId;
+        if (matchesPending || authoritativeResync) {
             this.clearInFlightAction();
+            this.applyAuthoritativeSnapshot(msg.snapshot);
+        } else if (!this.inFlightAction && msg.snapshot && msg.gameId === this.gameId) {
             this.applyAuthoritativeSnapshot(msg.snapshot);
         }
         this.showNotification('Error', msg.username || 'An error occurred');

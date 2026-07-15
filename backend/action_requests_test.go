@@ -90,6 +90,23 @@ func TestInvalidRequestIDIsRejectedWithoutMutation(t *testing.T) {
 	}
 }
 
+func TestOutsiderCannotProbeGameSnapshotWithMalformedActions(t *testing.T) {
+	hub, game, _, _ := actionTestGame()
+	outsider := persistenceTestUser("outsider", "Outsider")
+	hub.clients[outsider.Client] = true
+
+	hub.handleMove(outsider, &Message{Type: "move", GameID: game.ID, RequestID: "probe-move"})
+	hub.handleNeutrals(outsider, &Message{Type: "neutrals", GameID: game.ID, RequestID: "probe-neutral", Cells: []CellPos{{-1, -1}}})
+	select {
+	case response := <-outsider.Client.send:
+		t.Fatalf("outsider received game-specific response: %s", response)
+	default:
+	}
+	if len(game.MoveHistory) != 0 || game.GameOver || game.RejectedAttempt != nil {
+		t.Fatalf("outsider mutated game: history=%d over=%v rejection=%#v", len(game.MoveHistory), game.GameOver, game.RejectedAttempt)
+	}
+}
+
 func TestMoveRequestIDConflictIsNonPunitive(t *testing.T) {
 	hub, game, player1, _ := actionTestGame()
 	row, firstCol := 0, 1
@@ -102,6 +119,17 @@ func TestMoveRequestIDConflictIsNonPunitive(t *testing.T) {
 	}
 	if len(game.MoveHistory) != 1 || game.Board[row][secondCol] != 0 || game.GameOver {
 		t.Fatalf("move conflict mutated/punished game: history=%d target=%v over=%v", len(game.MoveHistory), game.Board[row][secondCol], game.GameOver)
+	}
+	hub.handleMove(player1, &Message{Type: "move", GameID: game.ID, Row: &row, Col: &firstCol, RequestID: "conflict", Cells: []CellPos{{1, 1}}})
+	presenceConflict := waitForMessage(t, player1.Client, "error")
+	if presenceConflict == nil || !strings.Contains(presenceConflict.Username, "different content") {
+		t.Fatalf("move ignored-field conflict response = %#v", presenceConflict)
+	}
+	newID := "extraneous-move-cells"
+	hub.handleMove(player1, &Message{Type: "move", GameID: game.ID, Row: &row, Col: &secondCol, RequestID: newID, Cells: []CellPos{{1, 1}}})
+	schemaError := waitForMessage(t, player1.Client, "error")
+	if schemaError == nil || schemaError.RequestID != newID || !strings.Contains(schemaError.Username, "must not contain") {
+		t.Fatalf("move strict-schema response = %#v", schemaError)
 	}
 	if game.MoveTimer != nil {
 		game.MoveTimer.Stop()
@@ -211,6 +239,17 @@ func TestNeutralRequestIDConflictIsNonPunitive(t *testing.T) {
 	}
 	if len(game.MoveHistory) != 1 || game.GameOver {
 		t.Fatalf("neutral conflict mutated/punished game: history=%#v over=%v", game.MoveHistory, game.GameOver)
+	}
+	row := 0
+	hub.handleNeutrals(player1, &Message{Type: "neutrals", GameID: game.ID, RequestID: "neutral-conflict", Cells: first, Row: &row})
+	presenceConflict := waitForMessage(t, player1.Client, "error")
+	if presenceConflict == nil || !strings.Contains(presenceConflict.Username, "different content") {
+		t.Fatalf("neutral target-presence conflict response = %#v", presenceConflict)
+	}
+	hub.handleNeutrals(player1, &Message{Type: "neutrals", GameID: game.ID, RequestID: "extraneous-neutral-target", Cells: first, Row: &row})
+	schemaError := waitForMessage(t, player1.Client, "error")
+	if schemaError == nil || !strings.Contains(schemaError.Username, "must not contain") {
+		t.Fatalf("neutral strict-schema response = %#v", schemaError)
 	}
 	if game.MoveTimer != nil {
 		game.MoveTimer.Stop()

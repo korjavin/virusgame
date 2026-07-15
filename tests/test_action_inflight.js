@@ -52,6 +52,8 @@ client.handleActionAck({type: 'action_ack', requestId: 'different'});
 assert.ok(client.inFlightAction, 'unrelated acknowledgement must not unlock input');
 client.handleError({type: 'error', requestId: 'stale', username: 'stale'});
 assert.ok(client.inFlightAction, 'stale error must not unlock current input');
+client.handleError({type: 'error', username: 'unrelated generic error'});
+assert.ok(client.inFlightAction, 'unrelated error without a request ID must not unlock delayed action');
 assert.strictEqual(boardElement.locked, true);
 client.handleActionAck({type: 'action_ack', requestId: 'test-session:1'});
 assert.strictEqual(client.inFlightAction, null);

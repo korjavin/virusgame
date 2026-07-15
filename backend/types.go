@@ -207,10 +207,7 @@ type actionRequestHistory struct {
 }
 
 type actionRequestRecord struct {
-	Type  string
-	Row   int
-	Col   int
-	Cells [2]CellPos
+	Fingerprint [32]byte
 }
 
 // RejectedAttempt is captured before an illegal action mutates the game. The

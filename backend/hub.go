@@ -199,17 +199,16 @@ func (game *Game) hasActionRequest(player int, requestID string) bool {
 }
 
 func actionRequestRecordFor(message *Message) actionRequestRecord {
-	record := actionRequestRecord{Type: message.Type}
-	if message.Row != nil {
-		record.Row = *message.Row
-	}
-	if message.Col != nil {
-		record.Col = *message.Col
-	}
-	if len(message.Cells) == 2 {
-		record.Cells = [2]CellPos{message.Cells[0], message.Cells[1]}
-	}
-	return record
+	// Include both action variants and pointer presence. This makes a request ID
+	// identify one exact semantic payload, including fields invalid for its type.
+	payload := struct {
+		Type  string    `json:"type"`
+		Row   *int      `json:"row"`
+		Col   *int      `json:"col"`
+		Cells []CellPos `json:"cells"`
+	}{message.Type, message.Row, message.Col, message.Cells}
+	encoded, _ := json.Marshal(payload)
+	return actionRequestRecord{Fingerprint: sha256.Sum256(encoded)}
 }
 
 func (game *Game) actionRequestReplay(player int, message *Message) (exists, matches bool) {
@@ -268,6 +267,27 @@ func validActionRequestID(requestID string) bool {
 		return false
 	}
 	return true
+}
+
+func playerNumberForUser(game *Game, user *User) int {
+	if game == nil || user == nil {
+		return 0
+	}
+	if game.IsMultiplayer {
+		for index, player := range game.Players {
+			if player != nil && player.User != nil && player.User.ID == user.ID {
+				return index + 1
+			}
+		}
+		return 0
+	}
+	if game.Player1 != nil && game.Player1.ID == user.ID {
+		return 1
+	}
+	if game.Player2 != nil && game.Player2.ID == user.ID {
+		return 2
+	}
+	return 0
 }
 
 func (h *Hub) handleConnect(client *Client) {
@@ -839,44 +859,15 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		return
 	}
 
-	// Check Row and Col are provided
-	if msg.Row == nil || msg.Col == nil {
-		log.Printf("Move message missing row or col")
-		h.rejectAction(user, game, msg.RequestID, "Move is missing row or column")
+	// Prove membership before returning any game-specific response or snapshot.
+	playerNum := playerNumberForUser(game, user)
+	if playerNum == 0 {
 		return
-	}
-
-	row := *msg.Row
-	col := *msg.Col
-
-	// Find player number for this user
-	var playerNum int
-	if game.IsMultiplayer {
-		// Find player in multiplayer game
-		for i := 0; i < 4; i++ {
-			if game.Players[i] != nil && game.Players[i].User != nil && game.Players[i].User.ID == user.ID {
-				playerNum = i + 1
-				break
-			}
-		}
-		if playerNum == 0 {
-			return // User not in this game
-		}
-	} else {
-		// Legacy 1v1 mode
-		if game.Player1.ID == user.ID {
-			playerNum = 1
-		} else if game.Player2.ID == user.ID {
-			playerNum = 2
-		} else {
-			return
-		}
 	}
 	if !validActionRequestID(msg.RequestID) {
 		h.rejectAction(user, game, msg.RequestID, "Invalid action request ID")
 		return
 	}
-
 	if exists, matches := game.actionRequestReplay(playerNum, msg); exists {
 		if matches {
 			h.acknowledgeAction(user, game, msg.RequestID)
@@ -885,6 +876,19 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		}
 		return
 	}
+	if msg.Row == nil || msg.Col == nil {
+		log.Printf("Move message missing row or col")
+		h.rejectAction(user, game, msg.RequestID, "Move is missing row or column")
+		return
+	}
+	if len(msg.Cells) != 0 {
+		h.rejectAction(user, game, msg.RequestID, "Move must not contain neutral cells")
+		return
+	}
+
+	row := *msg.Row
+	col := *msg.Col
+
 	if game.CurrentPlayer != playerNum || game.GameOver {
 		h.rejectAction(user, game, msg.RequestID, "It is not this player's turn")
 		return
@@ -1005,31 +1009,10 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		return
 	}
 
-	var playerNum int
-
-	// Determine player number based on game type
-	if game.IsMultiplayer {
-		// Multiplayer lobby game (3-4 players)
-		found := false
-		for i, player := range game.Players {
-			if player != nil && player.User != nil && player.User.ID == user.ID {
-				playerNum = i + 1
-				found = true
-				break
-			}
-		}
-		if !found {
-			return
-		}
-	} else {
-		// 1v1 game
-		if game.Player1 != nil && game.Player1.ID == user.ID {
-			playerNum = 1
-		} else if game.Player2 != nil && game.Player2.ID == user.ID {
-			playerNum = 2
-		} else {
-			return
-		}
+	// Prove membership before returning any game-specific response or snapshot.
+	playerNum := playerNumberForUser(game, user)
+	if playerNum == 0 {
+		return
 	}
 	if !validActionRequestID(msg.RequestID) {
 		h.rejectAction(user, game, msg.RequestID, "Invalid action request ID")
@@ -1044,8 +1027,8 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		}
 		return
 	}
-	if game.CurrentPlayer != playerNum || game.GameOver {
-		h.rejectAction(user, game, msg.RequestID, "It is not this player's turn")
+	if msg.Row != nil || msg.Col != nil {
+		h.rejectAction(user, game, msg.RequestID, "Neutrals must not contain a move target")
 		return
 	}
 
@@ -1053,6 +1036,10 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 	if len(msg.Cells) != 2 {
 		log.Printf("Neutrals invalid: must supply exactly 2 cells (got %d)", len(msg.Cells))
 		h.rejectAction(user, game, msg.RequestID, "Neutrals must contain exactly two cells")
+		return
+	}
+	if game.CurrentPlayer != playerNum || game.GameOver {
+		h.rejectAction(user, game, msg.RequestID, "It is not this player's turn")
 		return
 	}
 	if msg.Cells[0] == msg.Cells[1] {
