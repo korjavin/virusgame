@@ -5,14 +5,11 @@ import "virusgame/game"
 const mateScore = 1_000_000_000
 
 const (
-	baseOpeningUtility = 80
-	baseAnchorUtility  = 420
-	// decisiveCutBonus rewards the single most-severing base cut a player can
-	// execute against an opponent, scaled by the square of the severed fraction
-	// so a near-total sever near the opponent base dominates diffuse minor
-	// contact. Frozen from matched proactive-cut and base-siege motifs; a larger
-	// value made the searcher overrun its own extension survivability.
-	decisiveCutBonus = 900
+	// Frozen from matched corridor and forced-defense regressions. A larger
+	// quiet-structure penalty displaced an immediate rectangular cut defense.
+	latentCutPenaltyCap = 600
+	baseOpeningUtility  = 80
+	baseAnchorUtility   = 420
 )
 
 type playerMetrics struct {
@@ -22,6 +19,7 @@ type playerMetrics struct {
 	baseExits, baseOpenings    int
 	baseNormalExits            int
 	baseAnchors, baseThreat    int
+	latentCutLoss              int
 	threatened, threatenedLoss int
 	threatTempo                int
 	articulation               []bool
@@ -118,6 +116,7 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			normalized(m.mobility, area, 1) + normalized(m.captures, area, 1) -
 			normalized(m.disconnected, owned, 1) +
 			baseExitUtility(m.baseNormalExits) + baseOpeningUtility*m.baseOpenings + baseAnchorUtility*m.baseAnchors -
+			min(latentCutPenaltyCap, ratio(m.latentCutLoss, max(1, m.connected))) -
 			650*m.baseThreat*m.threatTempo -
 			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
 			m.threatTempo*ratio(m.threatened, max(1, m.connected))
@@ -141,22 +140,12 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			if opponent == player || !state.Active(opponent) {
 				continue
 			}
-			oppConnected := max(1, metrics[opponent-1].connected)
-			maxSever := 0
 			for index, cut := range metrics[opponent-1].articulation {
 				if cut && adjacentConnected(state, index, own.connectedCells) {
-					sever := ratio(int(metrics[opponent-1].cutLoss[index]), oppConnected)
-					raw[player-1] += 150 + sever/2
-					if sever > maxSever {
-						maxSever = sever
-					}
+					loss := int(metrics[opponent-1].cutLoss[index])
+					raw[player-1] += 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
 				}
 			}
-			// Prize the single decisive base cut: severing a large fraction of an
-			// opponent threatens elimination, whereas many minor tendril cuts do
-			// not. Squaring the severed fraction focuses the reward on the cut
-			// that actually wins rather than diffuse contact breadth.
-			raw[player-1] += decisiveCutBonus * maxSever * maxSever / 1_000_000
 		}
 	}
 
@@ -271,6 +260,9 @@ func analyzeWithConnectivity(state game.State, player game.Player, cells []game.
 				}
 				if m.connectedCells[index] {
 					m.connected++
+					if cell.Kind == game.Normal && m.articulation[index] {
+						m.latentCutLoss += int(m.cutLoss[index])
+					}
 				} else {
 					m.disconnected++
 				}

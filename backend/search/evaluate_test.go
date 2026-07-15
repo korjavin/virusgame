@@ -47,71 +47,44 @@ func TestThreatenedCutUsesBaseRootedComponentLoss(t *testing.T) {
 	}
 }
 
-func TestDecisiveBaseCutOutranksDiffuseContact(t *testing.T) {
-	// With identical opponent material, the attacker (player 1) must prefer the
-	// position where it threatens a decisive near-total base cut over one where
-	// the opponent is structurally redundant with no large single cut. This is
-	// the tactical-base-cut signal the diffuse flat-floor reward failed to
-	// prioritize.
-	p1 := func(row, col int) placedCell {
+func TestLatentCutLiabilityPrefersRedundantCorridor(t *testing.T) {
+	normal := func(row, col int) placedCell {
 		return placedCell{game.Pos{Row: row, Col: col}, game.Cell{Owner: 1, Kind: game.Normal}}
 	}
-	p2 := func(row, col int) placedCell {
-		return placedCell{game.Pos{Row: row, Col: col}, game.Cell{Owner: 2, Kind: game.Normal}}
+	tendril := structuralState(t, 8, 8, 2, []placedCell{
+		normal(0, 1), normal(1, 0), normal(1, 1), normal(2, 2),
+		placedCell{game.Pos{Row: 3, Col: 3}, game.Cell{Owner: 1, Kind: game.Normal}},
+		placedCell{game.Pos{Row: 4, Col: 4}, game.Cell{Owner: 1, Kind: game.Normal}},
+	})
+	redundant := structuralState(t, 8, 8, 2, []placedCell{normal(0, 1), normal(1, 0), normal(1, 1), normal(1, 2), normal(2, 1), normal(2, 2)})
+	thin, robust := analyze(tendril, 1), analyze(redundant, 1)
+	if thin.normal != robust.normal || thin.fortified != robust.fortified || thin.baseExits != robust.baseExits || thin.baseOpenings != robust.baseOpenings {
+		t.Fatal("material mismatch")
 	}
-	// Player 1 arm reaching the opponent corner, connected to base (0,0).
-	arm := []placedCell{p1(1, 1), p1(2, 2), p1(3, 3), p1(4, 4), p1(5, 5), p1(6, 6)}
-	// Decisive: opponent base (7,7) with a single-file tail; (7,6) is the sole
-	// base exit, so its capture severs the entire tail.
-	decisive := structuralState(t, 8, 8, 2, append(append([]placedCell{}, arm...),
-		p2(7, 6), p2(7, 5), p2(7, 4), p2(7, 3)))
-	// Redundant: the same four opponent normals in a two-connected block with no
-	// single-cut articulation; the attacker touches it but can sever nothing.
-	redundant := structuralState(t, 8, 8, 2, append(append([]placedCell{}, arm...),
-		p2(7, 6), p2(6, 7), p2(6, 6), p2(6, 5)))
-
-	dec, red := analyze(decisive, 2), analyze(redundant, 2)
-	if dec.normal != red.normal || dec.connected != red.connected {
-		t.Fatalf("opponent material mismatch decisive=%+v redundant=%+v", dec, red)
+	if thin.latentCutLoss != 9 || robust.latentCutLoss != 0 {
+		t.Fatalf("liability thin=%d robust=%d want9/0", thin.latentCutLoss, robust.latentCutLoss)
 	}
-	_, maxDec, _ := diagOffensiveScores(decisive, 1)
-	_, maxRed, _ := diagOffensiveScores(redundant, 1)
-	if maxDec <= maxRed {
-		t.Fatalf("decisive max sever not larger: decisive=%d redundant=%d", maxDec, maxRed)
+	if evaluate(redundant, 1) <= evaluate(tendril, 1) {
+		t.Fatalf("redundant score=%d tendril=%d", evaluate(redundant, 1), evaluate(tendril, 1))
 	}
-	// The decisive-cut term must contribute real weight (unlike the saturated
-	// latent-cut penalty it replaced), so a near-total sever is worth hundreds.
-	if bonus := decisiveCutBonus * maxDec * maxDec / 1_000_000; bonus < 400 {
-		t.Fatalf("decisive-cut bonus %d is not materially sized (maxSever=%d)", bonus, maxDec)
-	}
-	if evaluate(decisive, 1) <= evaluate(redundant, 1) {
-		t.Fatalf("decisive base cut not preferred: decisive=%d redundant=%d", evaluate(decisive, 1), evaluate(redundant, 1))
+	if gotThin, gotRobust := evaluate(tendril, 1), evaluate(redundant, 1); gotThin != 3389 || gotRobust != 3864 {
+		t.Fatalf("causal scores=%d/%d want frozen3389/3864", gotThin, gotRobust)
 	}
 }
 
-// diagOffensiveScores reports, for the attacking player against every opponent,
-// the summed breadth reward and the single largest severed fraction
-// (thousandths). It mirrors the offensive terms in evaluateAllWithWorkspace and
-// is used to prove the decisive-cut term causally.
-func diagOffensiveScores(state game.State, player game.Player) (breadthSum, maxSever, adjacencies int) {
-	own := analyze(state, player)
-	for opp := game.Player(1); opp <= 4; opp++ {
-		if opp == player || !state.Active(opp) {
-			continue
-		}
-		om := analyze(state, opp)
-		for index, cut := range om.articulation {
-			if cut && adjacentConnected(state, index, own.connectedCells) {
-				sever := ratio(int(om.cutLoss[index]), max(1, om.connected))
-				breadthSum += 150 + sever/2
-				adjacencies++
-				if sever > maxSever {
-					maxSever = sever
-				}
-			}
-		}
+func TestRemovingBackupIncreasesLiabilityBySeverableMass(t *testing.T) {
+	common := []placedCell{
+		{game.Pos{Row: 1, Col: 1}, game.Cell{Owner: 1, Kind: game.Fortified}},
+		{game.Pos{Row: 1, Col: 2}, game.Cell{Owner: 1, Kind: game.Normal}},
+		{game.Pos{Row: 2, Col: 2}, game.Cell{Owner: 1, Kind: game.Normal}},
+		{game.Pos{Row: 3, Col: 2}, game.Cell{Owner: 1, Kind: game.Normal}},
 	}
-	return breadthSum, maxSever, adjacencies
+	backed := structuralState(t, 8, 8, 2, append(common, placedCell{game.Pos{Row: 2, Col: 1}, game.Cell{Owner: 1, Kind: game.Normal}}))
+	cut := structuralState(t, 8, 8, 2, common)
+	a, b := analyze(backed, 1), analyze(cut, 1)
+	if delta := b.latentCutLoss - a.latentCutLoss; delta != 2 {
+		t.Fatalf("liability %d -> %d delta=%d want severable mass 2", a.latentCutLoss, b.latentCutLoss, delta)
+	}
 }
 
 func TestDiminishingCapturableBaseHalo(t *testing.T) {
@@ -160,7 +133,7 @@ func TestStructuralSignalsTransposeOnRectangles(t *testing.T) {
 	})
 	transposed := transposeState(t, state)
 	a, b := analyze(state, 1), analyze(transposed, 1)
-	if a.baseNormalExits != b.baseNormalExits || a.baseOpenings != b.baseOpenings || evaluate(state, 1) != evaluate(transposed, 1) {
+	if a.latentCutLoss != b.latentCutLoss || a.baseNormalExits != b.baseNormalExits || a.baseOpenings != b.baseOpenings || evaluate(state, 1) != evaluate(transposed, 1) {
 		t.Fatalf("transpose metrics/score differ: %+v score%d / %+v score%d", a, evaluate(state, 1), b, evaluate(transposed, 1))
 	}
 }
@@ -171,7 +144,7 @@ func TestStructuralSignalsAreSymmetricAcrossMultiplayerSeats(t *testing.T) {
 	for seat := game.Player(1); seat <= 4; seat++ {
 		state := seatStructuralState(t, seat)
 		m := analyze(state, seat)
-		got := [4]int{m.baseNormalExits, m.baseOpenings, m.baseAnchors}
+		got := [4]int{m.latentCutLoss, m.baseNormalExits, m.baseOpenings, m.baseAnchors}
 		score := evaluate(state, seat)
 		if seat == 1 {
 			wantMetrics, wantScore = got, score
@@ -193,7 +166,7 @@ func TestStructuralSignalsReflectAcrossAllCornerSeats(t *testing.T) {
 		t.Run(fixture.name, func(t *testing.T) {
 			state := reflectState(t, source, fixture.horizontal)
 			got := analyze(state, fixture.seat)
-			if got.baseNormalExits != want.baseNormalExits || got.baseOpenings != want.baseOpenings || evaluate(state, fixture.seat) != wantScore {
+			if got.latentCutLoss != want.latentCutLoss || got.baseNormalExits != want.baseNormalExits || got.baseOpenings != want.baseOpenings || evaluate(state, fixture.seat) != wantScore {
 				t.Fatalf("seat%d reflection differs metrics=%+v score=%d want=%+v/%d", fixture.seat, got, evaluate(state, fixture.seat), want, wantScore)
 			}
 		})
@@ -441,7 +414,7 @@ func TestEvaluateWorkspaceMatchesOriginMainOracle(t *testing.T) {
 		}
 	}
 	// Frozen after the causal vs-ai2.26 evaluator change.
-	const oracle = "4d8fb7a6fd4a0b00fe6dfe9b135bc318c55cd6f22d7b8d3db4eaaca84b48b5de"
+	const oracle = "5f767c9a31c46365269cf99d50b4b820a421b78795b319f0727159ab2e252311"
 	if got := fmt.Sprintf("%x", hash.Sum(nil)); got != oracle {
 		t.Fatalf("workspace evaluator digest = %s, want frozen vs-ai2.26 oracle %s", got, oracle)
 	}
@@ -480,7 +453,7 @@ func TestEvaluateWorkspaceGoldenStates(t *testing.T) {
 		{"contact-threatened-cut", contact, [4]int{2036, -2036, -500000000, -500000000}},
 		{"neutral", neutral, [4]int{-2324, 2324, -500000000, -500000000}},
 		{"terminal", terminal, [4]int{mateScore, -mateScore, -mateScore, -mateScore}},
-		{"eliminated", eliminated, [4]int{-500000000, 706, -706, -500000000}},
+		{"eliminated", eliminated, [4]int{-500000000, 917, -917, -500000000}},
 	} {
 		workspace := evalWorkspace{}
 		if got := evaluateAllWithWorkspace(fixture.state, &workspace); got != fixture.want {
