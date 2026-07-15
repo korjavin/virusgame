@@ -155,6 +155,7 @@ func TestEvaluate50x50AllocationBudget(t *testing.T) {
 }
 
 func BenchmarkEvaluate10x10(b *testing.B) { benchmarkEvaluate(b, 10, 10) }
+func BenchmarkEvaluate30x30(b *testing.B) { benchmarkEvaluate(b, 30, 30) }
 func BenchmarkEvaluate50x50(b *testing.B) { benchmarkEvaluate(b, 50, 50) }
 
 func benchmarkEvaluate(b *testing.B, rows, cols int) {
