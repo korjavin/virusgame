@@ -5,12 +5,16 @@ import "virusgame/game"
 const mateScore = 1_000_000_000
 
 type playerMetrics struct {
-	connected, disconnected int
-	normal, fortified       int
-	mobility, captures      int
-	baseExits, baseAnchors  int
-	articulation            []bool
-	connectedCells          []bool
+	connected, disconnected    int
+	normal, fortified          int
+	mobility, captures         int
+	baseExits, baseOpenings    int
+	baseAnchors, baseThreat    int
+	threatened, threatenedLoss int
+	threatTempo                int
+	articulation               []bool
+	cutLoss                    []int
+	connectedCells             []bool
 }
 
 func evaluate(state game.State, player game.Player) int {
@@ -41,9 +45,19 @@ func evaluateAll(state game.State) [4]int {
 		active++
 		metrics[player-1] = analyze(state, player)
 		m := metrics[player-1]
-		raw[player-1] = 40*m.connected - 25*m.disconnected + 12*m.normal +
-			55*m.fortified + 18*m.mobility + 35*m.captures +
-			35*m.baseExits + 45*m.baseAnchors
+		area := state.Rows() * state.Cols()
+		owned := m.normal + m.fortified + 1 // include the base
+		raw[player-1] = normalized(m.connected, area, 10) +
+			normalized(m.normal, area, 30) + normalized(m.fortified, area, 6) +
+			normalized(m.mobility, area, 1) + normalized(m.captures, area, 1) -
+			normalized(m.disconnected, owned, 1) +
+			180*m.baseExits + 80*m.baseOpenings + 240*m.baseAnchors -
+			650*m.baseThreat*m.threatTempo -
+			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
+			m.threatTempo*ratio(m.threatened, max(1, m.connected))
+		if m.baseExits+m.baseOpenings == 0 {
+			raw[player-1] -= 5000
+		}
 		if !state.NeutralUsed(player) {
 			raw[player-1] += 20
 		}
@@ -57,18 +71,14 @@ func evaluateAll(state game.State) [4]int {
 			continue
 		}
 		own := &metrics[player-1]
-		for index, cut := range own.articulation {
-			if cut && threatenedBy(state, index, player, metrics) {
-				raw[player-1] -= 140
-			}
-		}
 		for opponent := game.Player(1); opponent <= 4; opponent++ {
 			if opponent == player || !state.Active(opponent) {
 				continue
 			}
 			for index, cut := range metrics[opponent-1].articulation {
 				if cut && adjacentConnected(state, index, own.connectedCells) {
-					raw[player-1] += 160
+					loss := metrics[opponent-1].cutLoss[index]
+					raw[player-1] += 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
 				}
 			}
 		}
@@ -96,11 +106,18 @@ func evaluateAll(state game.State) [4]int {
 
 func analyze(state game.State, player game.Player) playerMetrics {
 	size := state.Rows() * state.Cols()
+	var opponentConnected [4][]bool
+	for opponent := game.Player(1); opponent <= 4; opponent++ {
+		if opponent != player && state.Active(opponent) {
+			opponentConnected[opponent-1] = connectedCells(state, opponent)
+		}
+	}
 	m := playerMetrics{
 		connectedCells: connectedCells(state, player),
 		articulation:   make([]bool, size),
+		cutLoss:        make([]int, size),
 	}
-	m.articulation = articulationPoints(state, player, m.connectedCells)
+	m.articulation, m.cutLoss = articulationPoints(state, player, m.connectedCells)
 	targets := make([]bool, size)
 	base := basePos(state, player)
 	for row := 0; row < state.Rows(); row++ {
@@ -121,6 +138,12 @@ func analyze(state game.State, player game.Player) playerMetrics {
 					m.disconnected++
 				}
 			}
+			if m.connectedCells[index] && cell.Kind == game.Normal && threatenedByConnected(state, index, player, opponentConnected) {
+				m.threatened++
+				if m.articulation[index] {
+					m.threatenedLoss += m.cutLoss[index]
+				}
+			}
 			if !m.connectedCells[index] {
 				continue
 			}
@@ -139,14 +162,35 @@ func analyze(state game.State, player game.Player) playerMetrics {
 	}
 	for _, pos := range neighbors(state, base) {
 		cell, _ := state.At(pos)
-		if cell.Kind == game.Empty || cell.Kind == game.Normal {
+		index := pos.Row*state.Cols() + pos.Col
+		switch {
+		case cell.Owner == player && m.connectedCells[index]:
 			m.baseExits++
-		}
-		if cell.Owner == player && cell.Kind == game.Fortified {
-			m.baseAnchors++
+			if cell.Kind == game.Fortified {
+				m.baseAnchors++
+			}
+		case cell.Kind == game.Empty:
+			m.baseOpenings++
+		case cell.Kind == game.Normal && cell.Owner != player:
+			// An enemy normal is a legal capture from the base, but is a
+			// contested opening rather than owned escape structure.
+			m.baseOpenings++
+			if threatenedByConnected(state, indexFor(state, base), player, opponentConnected) {
+				m.baseThreat++
+			}
 		}
 	}
+	m.threatTempo = threatTempo(state, player)
 	return m
+}
+
+// threatTempo makes an unresolved attack more urgent as the defender spends
+// its turn, and fully urgent while an opponent still has actions available.
+func threatTempo(state game.State, player game.Player) int {
+	if state.CurrentPlayer() == player {
+		return max(1, 4-state.MovesLeft())
+	}
+	return max(1, state.MovesLeft())
 }
 
 func connectedCells(state game.State, player game.Player) []bool {
@@ -173,12 +217,14 @@ func connectedCells(state game.State, player game.Player) []bool {
 	return seen
 }
 
-func articulationPoints(state game.State, player game.Player, connected []bool) []bool {
+func articulationPoints(state game.State, player game.Player, connected []bool) ([]bool, []int) {
 	size := len(connected)
 	discovery := make([]int, size)
 	low := make([]int, size)
 	parent := make([]int, size)
 	result := make([]bool, size)
+	cutLoss := make([]int, size)
+	subtree := make([]int, size)
 	for i := range parent {
 		parent[i] = -1
 	}
@@ -187,6 +233,7 @@ func articulationPoints(state game.State, player game.Player, connected []bool) 
 	visit = func(index int) {
 		time++
 		discovery[index], low[index] = time, time
+		subtree[index] = 1
 		children := 0
 		pos := game.Pos{Row: index / state.Cols(), Col: index % state.Cols()}
 		for _, next := range neighbors(state, pos) {
@@ -198,16 +245,23 @@ func articulationPoints(state game.State, player game.Player, connected []bool) 
 				children++
 				parent[nextIndex] = index
 				visit(nextIndex)
+				subtree[index] += subtree[nextIndex]
 				if low[nextIndex] < low[index] {
 					low[index] = low[nextIndex]
 				}
 				if parent[index] == -1 && children > 1 || parent[index] != -1 && low[nextIndex] >= discovery[index] {
 					result[index] = true
+					cutLoss[index] += subtree[nextIndex]
 				}
 			} else if nextIndex != parent[index] && discovery[nextIndex] < low[index] {
 				low[index] = discovery[nextIndex]
 			}
 		}
+	}
+	base := basePos(state, player)
+	baseIndex := indexFor(state, base)
+	if baseIndex >= 0 && baseIndex < size && connected[baseIndex] {
+		visit(baseIndex)
 	}
 	for index, live := range connected {
 		if live && discovery[index] == 0 {
@@ -219,21 +273,46 @@ func articulationPoints(state game.State, player game.Player, connected []bool) 
 			cell, _ := state.At(game.Pos{Row: index / state.Cols(), Col: index % state.Cols()})
 			if cell.Kind != game.Normal || cell.Owner != player {
 				result[index] = false
+				cutLoss[index] = 0
+			} else {
+				// Capturing the cut cell loses the cell itself as well as every
+				// downstream component separated from the base.
+				cutLoss[index]++
 			}
 		}
 	}
-	return result
+	return result, cutLoss
 }
 
-func threatenedBy(state game.State, index int, player game.Player, metrics [4]playerMetrics) bool {
+func threatenedByConnected(state game.State, index int, player game.Player, connected [4][]bool) bool {
 	pos := game.Pos{Row: index / state.Cols(), Col: index % state.Cols()}
 	for opponent := game.Player(1); opponent <= 4; opponent++ {
-		if opponent != player && state.Active(opponent) && adjacentConnected(state, index, metrics[opponent-1].connectedCells) {
-			cell, _ := state.At(pos)
-			return cell.Kind == game.Normal
+		if opponent == player || !state.Active(opponent) {
+			continue
+		}
+		for _, neighbor := range neighbors(state, pos) {
+			if connected[opponent-1] != nil && connected[opponent-1][indexFor(state, neighbor)] {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func indexFor(state game.State, pos game.Pos) int { return pos.Row*state.Cols() + pos.Col }
+
+func ratio(value, denominator int) int {
+	if value <= 0 || denominator <= 0 {
+		return 0
+	}
+	return value * 1000 / denominator
+}
+
+func normalized(value, denominator, weight int) int {
+	if value <= 0 || denominator <= 0 || weight <= 0 {
+		return 0
+	}
+	return value * weight * 1000 / denominator
 }
 
 func adjacentConnected(state game.State, index int, connected []bool) bool {
