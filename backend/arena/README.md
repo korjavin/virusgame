@@ -72,6 +72,16 @@ They remain outside aggregate strength win rates because they were selected
 after observing production outcomes; including them would bias the arena. They
 are frozen train-only regression evidence for later structural translations.
 
+The post-self-elimination-fix 12×12 set adds eight authoritative `no_moves`
+games (`fd6627c8…`, `3d739acb…`, `e854f8aa…`, `e7b2f1d4…`, `6bf1f3aa…`,
+`4558d2fe…`, `913c33f7…`, and `550cfd27…`). `836204cc…` is retained only as
+an `illegal_move` legal-prefix/protocol fixture. The controlled 5×5 and 5×7
+resignation persistence sentinels from the same response are deliberately not
+part of arena evidence. These outcome-selected motifs do not modify either
+frozen strength-corpus split or its group hash.
+Negative causal motif points identify the state before the recorded bad move;
+the following replay action is the queryable historical mistake.
+
 CI gate:
 
 ```sh
