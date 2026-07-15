@@ -31,6 +31,7 @@ func main() {
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(hub, w, r)
 	})
+	http.Handle("/last_games", recentGamesHandler(db))
 
 	// Determine static files directory
 	// In Docker: files are in /app
