@@ -1,5 +1,5 @@
-// Package search chooses Virus actions using deterministic anytime search.
-package search
+// Package incumbent freezes the post-PR58 authoritative search and evaluator.
+package incumbent
 
 import (
 	"context"
