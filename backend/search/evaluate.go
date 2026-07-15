@@ -13,8 +13,15 @@ type playerMetrics struct {
 	threatened, threatenedLoss int
 	threatTempo                int
 	articulation               []bool
-	cutLoss                    []int
+	cutLoss                    []uint16
 	connectedCells             []bool
+}
+
+type analysisScratch struct {
+	targets        []bool
+	discovery, low []uint16
+	parent         []int16
+	subtree        []uint16
 }
 
 func evaluate(state game.State, player game.Player) int {
@@ -35,6 +42,9 @@ func evaluateAll(state game.State) [4]int {
 	}
 
 	var metrics [4]playerMetrics
+	cells := snapshotCells(state)
+	connected := allConnected(state, cells)
+	scratch := newAnalysisScratch(state.Rows() * state.Cols())
 	var raw [4]int
 	active := 0
 	for player := game.Player(1); player <= 4; player++ {
@@ -43,7 +53,7 @@ func evaluateAll(state game.State) [4]int {
 			continue
 		}
 		active++
-		metrics[player-1] = analyze(state, player)
+		metrics[player-1] = analyzeWithConnectivity(state, player, cells, connected, &scratch)
 		m := metrics[player-1]
 		area := state.Rows() * state.Cols()
 		owned := m.normal + m.fortified + 1 // include the base
@@ -77,7 +87,7 @@ func evaluateAll(state game.State) [4]int {
 			}
 			for index, cut := range metrics[opponent-1].articulation {
 				if cut && adjacentConnected(state, index, own.connectedCells) {
-					loss := metrics[opponent-1].cutLoss[index]
+					loss := int(metrics[opponent-1].cutLoss[index])
 					raw[player-1] += 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
 				}
 			}
@@ -106,25 +116,67 @@ func evaluateAll(state game.State) [4]int {
 
 func analyze(state game.State, player game.Player) playerMetrics {
 	size := state.Rows() * state.Cols()
-	var opponentConnected [4][]bool
-	for opponent := game.Player(1); opponent <= 4; opponent++ {
-		if opponent != player && state.Active(opponent) {
-			opponentConnected[opponent-1] = connectedCells(state, opponent)
+	cells := snapshotCells(state)
+	connected := allConnected(state, cells)
+	scratch := newAnalysisScratch(size)
+	return analyzeWithConnectivity(state, player, cells, connected, &scratch)
+}
+
+func snapshotCells(state game.State) []game.Cell {
+	cells := make([]game.Cell, state.Rows()*state.Cols())
+	for row := 0; row < state.Rows(); row++ {
+		for col := 0; col < state.Cols(); col++ {
+			index := row*state.Cols() + col
+			cells[index], _ = state.At(game.Pos{Row: row, Col: col})
 		}
 	}
-	m := playerMetrics{
-		connectedCells: connectedCells(state, player),
-		articulation:   make([]bool, size),
-		cutLoss:        make([]int, size),
+	return cells
+}
+
+func allConnected(state game.State, cells []game.Cell) [4][]bool {
+	var connected [4][]bool
+	queue := make([]int, len(cells))
+	for opponent := game.Player(1); opponent <= 4; opponent++ {
+		if state.Active(opponent) {
+			connected[opponent-1] = connectedCells(state, cells, opponent, queue)
+		}
 	}
-	m.articulation, m.cutLoss = articulationPoints(state, player, m.connectedCells)
-	targets := make([]bool, size)
+	return connected
+}
+
+func newAnalysisScratch(size int) analysisScratch {
+	return analysisScratch{
+		targets: make([]bool, size), discovery: make([]uint16, size),
+		low: make([]uint16, size), parent: make([]int16, size), subtree: make([]uint16, size),
+	}
+}
+
+func (scratch *analysisScratch) reset() {
+	clear(scratch.targets)
+	clear(scratch.discovery)
+	clear(scratch.low)
+	clear(scratch.subtree)
+	for index := range scratch.parent {
+		scratch.parent[index] = -1
+	}
+}
+
+func analyzeWithConnectivity(state game.State, player game.Player, cells []game.Cell, connected [4][]bool, scratch *analysisScratch) playerMetrics {
+	size := state.Rows() * state.Cols()
+	scratch.reset()
+	m := playerMetrics{
+		connectedCells: connected[player-1],
+		articulation:   make([]bool, size),
+		cutLoss:        make([]uint16, size),
+	}
+	m.articulation, m.cutLoss = articulationPoints(state, player, cells, m.connectedCells, scratch)
+	targets := scratch.targets
 	base := basePos(state, player)
 	for row := 0; row < state.Rows(); row++ {
 		for col := 0; col < state.Cols(); col++ {
 			pos := game.Pos{Row: row, Col: col}
 			index := row*state.Cols() + col
-			cell, _ := state.At(pos)
+			cell := cells[index]
 			if cell.Owner == player {
 				switch cell.Kind {
 				case game.Normal:
@@ -138,18 +190,21 @@ func analyze(state game.State, player game.Player) playerMetrics {
 					m.disconnected++
 				}
 			}
-			if m.connectedCells[index] && cell.Kind == game.Normal && threatenedByConnected(state, index, player, opponentConnected) {
+			if m.connectedCells[index] && cell.Kind == game.Normal && threatenedByConnected(state, index, player, connected) {
 				m.threatened++
 				if m.articulation[index] {
-					m.threatenedLoss += m.cutLoss[index]
+					m.threatenedLoss += int(m.cutLoss[index])
 				}
 			}
 			if !m.connectedCells[index] {
 				continue
 			}
-			for _, neighbor := range neighbors(state, pos) {
-				target, _ := state.At(neighbor)
+			var nearby [8]game.Pos
+			count := neighbors(state, pos, &nearby)
+			for i := 0; i < count; i++ {
+				neighbor := nearby[i]
 				targetIndex := neighbor.Row*state.Cols() + neighbor.Col
+				target := cells[targetIndex]
 				if !targets[targetIndex] && (target.Kind == game.Empty || target.Kind == game.Normal && target.Owner != player) {
 					targets[targetIndex] = true
 					m.mobility++
@@ -160,9 +215,12 @@ func analyze(state game.State, player game.Player) playerMetrics {
 			}
 		}
 	}
-	for _, pos := range neighbors(state, base) {
-		cell, _ := state.At(pos)
+	var nearby [8]game.Pos
+	count := neighbors(state, base, &nearby)
+	for i := 0; i < count; i++ {
+		pos := nearby[i]
 		index := pos.Row*state.Cols() + pos.Col
+		cell := cells[index]
 		switch {
 		case cell.Owner == player && m.connectedCells[index]:
 			m.baseExits++
@@ -175,7 +233,7 @@ func analyze(state game.State, player game.Player) playerMetrics {
 			// An enemy normal is a legal capture from the base, but is a
 			// contested opening rather than owned escape structure.
 			m.baseOpenings++
-			if threatenedByConnected(state, indexFor(state, base), player, opponentConnected) {
+			if threatenedByConnected(state, indexFor(state, base), player, connected) {
 				m.baseThreat++
 			}
 		}
@@ -193,42 +251,46 @@ func threatTempo(state game.State, player game.Player) int {
 	return max(1, state.MovesLeft())
 }
 
-func connectedCells(state game.State, player game.Player) []bool {
+func connectedCells(state game.State, cells []game.Cell, player game.Player, queue []int) []bool {
 	seen := make([]bool, state.Rows()*state.Cols())
 	base := basePos(state, player)
-	cell, ok := state.At(base)
-	if !ok || cell.Owner != player || cell.Kind != game.Base {
+	cell := cells[indexFor(state, base)]
+	if cell.Owner != player || cell.Kind != game.Base {
 		return seen
 	}
-	seen[base.Row*state.Cols()+base.Col] = true
-	queue := []game.Pos{base}
-	for len(queue) > 0 {
-		pos := queue[0]
-		queue = queue[1:]
-		for _, next := range neighbors(state, pos) {
+	baseIndex := base.Row*state.Cols() + base.Col
+	seen[baseIndex] = true
+	queue[0] = baseIndex
+	head, tail := 0, 1
+	for head < tail {
+		index := queue[head]
+		head++
+		pos := game.Pos{Row: index / state.Cols(), Col: index % state.Cols()}
+		var nearby [8]game.Pos
+		count := neighbors(state, pos, &nearby)
+		for i := 0; i < count; i++ {
+			next := nearby[i]
 			index := next.Row*state.Cols() + next.Col
-			owner, _ := state.At(next)
+			owner := cells[index]
 			if !seen[index] && owner.Owner == player {
 				seen[index] = true
-				queue = append(queue, next)
+				queue[tail] = index
+				tail++
 			}
 		}
 	}
 	return seen
 }
 
-func articulationPoints(state game.State, player game.Player, connected []bool) ([]bool, []int) {
+func articulationPoints(state game.State, player game.Player, cells []game.Cell, connected []bool, scratch *analysisScratch) ([]bool, []uint16) {
 	size := len(connected)
-	discovery := make([]int, size)
-	low := make([]int, size)
-	parent := make([]int, size)
+	discovery := scratch.discovery
+	low := scratch.low
+	parent := scratch.parent
 	result := make([]bool, size)
-	cutLoss := make([]int, size)
-	subtree := make([]int, size)
-	for i := range parent {
-		parent[i] = -1
-	}
-	time := 0
+	cutLoss := make([]uint16, size)
+	subtree := scratch.subtree
+	time := uint16(0)
 	var visit func(int)
 	visit = func(index int) {
 		time++
@@ -236,14 +298,17 @@ func articulationPoints(state game.State, player game.Player, connected []bool) 
 		subtree[index] = 1
 		children := 0
 		pos := game.Pos{Row: index / state.Cols(), Col: index % state.Cols()}
-		for _, next := range neighbors(state, pos) {
+		var nearby [8]game.Pos
+		count := neighbors(state, pos, &nearby)
+		for i := 0; i < count; i++ {
+			next := nearby[i]
 			nextIndex := next.Row*state.Cols() + next.Col
 			if !connected[nextIndex] {
 				continue
 			}
 			if discovery[nextIndex] == 0 {
 				children++
-				parent[nextIndex] = index
+				parent[nextIndex] = int16(index)
 				visit(nextIndex)
 				subtree[index] += subtree[nextIndex]
 				if low[nextIndex] < low[index] {
@@ -253,7 +318,7 @@ func articulationPoints(state game.State, player game.Player, connected []bool) 
 					result[index] = true
 					cutLoss[index] += subtree[nextIndex]
 				}
-			} else if nextIndex != parent[index] && discovery[nextIndex] < low[index] {
+			} else if nextIndex != int(parent[index]) && discovery[nextIndex] < low[index] {
 				low[index] = discovery[nextIndex]
 			}
 		}
@@ -270,7 +335,7 @@ func articulationPoints(state game.State, player game.Player, connected []bool) 
 	}
 	for index, cut := range result {
 		if cut {
-			cell, _ := state.At(game.Pos{Row: index / state.Cols(), Col: index % state.Cols()})
+			cell := cells[index]
 			if cell.Kind != game.Normal || cell.Owner != player {
 				result[index] = false
 				cutLoss[index] = 0
@@ -290,7 +355,10 @@ func threatenedByConnected(state game.State, index int, player game.Player, conn
 		if opponent == player || !state.Active(opponent) {
 			continue
 		}
-		for _, neighbor := range neighbors(state, pos) {
+		var nearby [8]game.Pos
+		count := neighbors(state, pos, &nearby)
+		for i := 0; i < count; i++ {
+			neighbor := nearby[i]
 			if connected[opponent-1] != nil && connected[opponent-1][indexFor(state, neighbor)] {
 				return true
 			}
@@ -317,7 +385,10 @@ func normalized(value, denominator, weight int) int {
 
 func adjacentConnected(state game.State, index int, connected []bool) bool {
 	pos := game.Pos{Row: index / state.Cols(), Col: index % state.Cols()}
-	for _, neighbor := range neighbors(state, pos) {
+	var nearby [8]game.Pos
+	count := neighbors(state, pos, &nearby)
+	for i := 0; i < count; i++ {
+		neighbor := nearby[i]
 		if connected[neighbor.Row*state.Cols()+neighbor.Col] {
 			return true
 		}
@@ -338,14 +409,15 @@ func basePos(state game.State, player game.Player) game.Pos {
 	}
 }
 
-func neighbors(state game.State, pos game.Pos) []game.Pos {
-	result := make([]game.Pos, 0, 8)
+func neighbors(state game.State, pos game.Pos, result *[8]game.Pos) int {
+	count := 0
 	for row := pos.Row - 1; row <= pos.Row+1; row++ {
 		for col := pos.Col - 1; col <= pos.Col+1; col++ {
 			if row >= 0 && row < state.Rows() && col >= 0 && col < state.Cols() && (row != pos.Row || col != pos.Col) {
-				result = append(result, game.Pos{Row: row, Col: col})
+				result[count] = game.Pos{Row: row, Col: col}
+				count++
 			}
 		}
 	}
-	return result
+	return count
 }

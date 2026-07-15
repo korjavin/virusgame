@@ -147,19 +147,54 @@ func TestLocalBaseSafetyIsStableAcrossBoardSizes(t *testing.T) {
 	}
 }
 
+func TestEvaluate50x50AllocationBudget(t *testing.T) {
+	state := matureEvaluationState(t, 50, 50)
+	if allocations := testing.AllocsPerRun(100, func() { _ = evaluate(state, 1) }); allocations > 30 {
+		t.Fatalf("evaluate allocations = %.0f, want at most 30", allocations)
+	}
+}
+
 func BenchmarkEvaluate10x10(b *testing.B) { benchmarkEvaluate(b, 10, 10) }
 func BenchmarkEvaluate50x50(b *testing.B) { benchmarkEvaluate(b, 50, 50) }
 
 func benchmarkEvaluate(b *testing.B, rows, cols int) {
-	state, err := game.New(rows, cols, 2)
-	if err != nil {
-		b.Fatal(err)
-	}
+	state := matureEvaluationState(b, rows, cols)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		_ = evaluate(state, 1)
 	}
+}
+
+type testFataler interface {
+	Helper()
+	Fatal(args ...any)
+}
+
+func matureEvaluationState(t testFataler, rows, cols int) game.State {
+	t.Helper()
+	state, err := game.New(rows, cols, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	turns := min(7, (min(rows, cols)-2)/6)
+	for turn := 0; turn < turns; turn++ {
+		for step := 1; step <= 3; step++ {
+			distance := turn*3 + step
+			state, err = state.Apply(move(distance, distance))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		for step := 1; step <= 3; step++ {
+			distance := turn*3 + step
+			state, err = state.Apply(move(rows-1-distance, cols-1-distance))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return state
 }
 
 func absInt(value int) int {
