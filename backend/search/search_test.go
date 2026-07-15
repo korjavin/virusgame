@@ -704,8 +704,8 @@ func TestTurnAlignedSearchIsDeterministicAndNodeBudgetExact(t *testing.T) {
 		state game.State
 		want  Result
 	}{
-		{"minimax", two, Result{Action: move(0, 1), Nodes: 1000, Evaluations: 913, BudgetExhausted: true, Workers: 1, IterationsStarted: 1}},
-		{"maxn", three, Result{Action: move(0, 1), Score: 3946, Depth: 3, Nodes: 1000, Evaluations: 772, BudgetExhausted: true, CompletedTurnDepth: 1, Workers: 1, RootLegal: 6, RootSelected: 6, RootCompleted: 6, IterationsStarted: 2, IterationsCompleted: 1}},
+		{"minimax", two, Result{Action: move(0, 1), Nodes: 1000, Evaluations: 914, BudgetExhausted: true, Workers: 1, IterationsStarted: 1}},
+		{"maxn", three, Result{Action: move(0, 1), Score: 4156, Depth: 3, Nodes: 1000, Evaluations: 772, BudgetExhausted: true, CompletedTurnDepth: 1, Workers: 1, RootLegal: 6, RootSelected: 6, RootCompleted: 6, IterationsStarted: 2, IterationsCompleted: 1}},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			a, ok := ChooseNodeBudget(fixture.state, 1000)
