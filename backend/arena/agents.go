@@ -7,10 +7,31 @@ import (
 	"virusgame/search"
 )
 
+// Instrument adapts a baseline that has no search counters.
+func Instrument(agent Agent) TelemetryAgent {
+	return func(state game.State) (game.Action, DecisionTelemetry, bool) {
+		action, ok := agent(state)
+		return action, DecisionTelemetry{}, ok
+	}
+}
+
 func Tournament(depth int) Agent {
 	return func(state game.State) (game.Action, bool) {
 		result, ok := search.ChooseDepth(context.Background(), state, depth)
 		return result.Action, ok
+	}
+}
+
+// TelemetryTournament is the fixed-depth CI agent with deterministic search
+// counters. CompletedTurnDepth is a conservative lower bound derived from the
+// root's remaining actions in the current turn.
+func TelemetryTournament(depth int) TelemetryAgent {
+	return func(state game.State) (game.Action, DecisionTelemetry, bool) {
+		result, ok := search.ChooseDepth(context.Background(), state, depth)
+		return result.Action, DecisionTelemetry{
+			Nodes:              result.Nodes,
+			CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth),
+		}, ok
 	}
 }
 
@@ -23,6 +44,25 @@ func Production() Agent {
 		result, ok := search.Choose(ctx, state)
 		return result.Action, ok
 	}
+}
+
+func TelemetryProduction() TelemetryAgent {
+	return func(state game.State) (game.Action, DecisionTelemetry, bool) {
+		ctx, cancel := context.WithTimeout(context.Background(), search.ProductionBudget)
+		defer cancel()
+		result, ok := search.Choose(ctx, state)
+		return result.Action, DecisionTelemetry{
+			Nodes:              result.Nodes,
+			CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth),
+		}, ok
+	}
+}
+
+func completedTurns(movesLeft, actionDepth int) int {
+	if actionDepth < movesLeft {
+		return 0
+	}
+	return 1 + (actionDepth-movesLeft)/3
 }
 
 func Random(seed uint64) Agent {
@@ -85,6 +125,72 @@ func Greedy(state game.State) (game.Action, bool) {
 			score += 10_000
 		}
 		score -= opponentBaseDistance(state, actor, action.Target)
+		if score > bestScore {
+			best, bestScore = action, score
+		}
+	}
+	return best, true
+}
+
+// BaseAttacker is a tactical baseline that values immediate captures and a
+// direct route to the opponent base. It is deliberately simpler than search,
+// but punishes engines that expand without defending their base chain.
+func BaseAttacker(state game.State) (game.Action, bool) {
+	actions := state.LegalActions()
+	if len(actions) == 0 {
+		return game.Action{}, false
+	}
+	actor := state.CurrentPlayer()
+	best, bestScore := actions[0], -1<<60
+	for _, action := range actions {
+		if action.Kind == game.PlaceNeutrals {
+			continue
+		}
+		target, _ := state.At(action.Target)
+		next, err := state.Apply(action)
+		if err != nil {
+			continue
+		}
+		score := -100 * opponentBaseDistance(state, actor, action.Target)
+		if target.Kind == game.Normal && target.Owner != actor {
+			score += 20_000
+		}
+		if next.GameOver() && next.Winner() == actor {
+			score += 1_000_000
+		}
+		if score > bestScore {
+			best, bestScore = action, score
+		}
+	}
+	return best, true
+}
+
+// MobilityAttacker is a tactical baseline that chooses the successor with the
+// fewest legal replies for the opponent, then prefers captures. It exposes
+// shallow cut and confinement weaknesses without sharing production search.
+func MobilityAttacker(state game.State) (game.Action, bool) {
+	actions := state.LegalActions()
+	if len(actions) == 0 {
+		return game.Action{}, false
+	}
+	actor := state.CurrentPlayer()
+	best, bestScore := actions[0], -1<<60
+	for _, action := range actions {
+		next, err := state.Apply(action)
+		if err != nil {
+			continue
+		}
+		score := immediateMobility(next, actor)
+		if next.CurrentPlayer() != actor {
+			score -= 50 * len(next.LegalActions())
+		}
+		target, _ := state.At(action.Target)
+		if action.Kind == game.Move && target.Kind == game.Normal && target.Owner != actor {
+			score += 10_000
+		}
+		if next.GameOver() && next.Winner() == actor {
+			score += 1_000_000
+		}
 		if score > bestScore {
 			best, bestScore = action, score
 		}

@@ -11,25 +11,39 @@ import (
 
 type Agent func(game.State) (game.Action, bool)
 
+// DecisionTelemetry is emitted by search-aware agents. CompletedTurnDepth is
+// the number of whole turns the agent reports as fully searched; zero means
+// that the agent does not expose turn-depth information.
+type DecisionTelemetry struct {
+	Nodes              uint64
+	CompletedTurnDepth int
+}
+
+type TelemetryAgent func(game.State) (game.Action, DecisionTelemetry, bool)
+
 type Board struct{ Rows, Cols int }
 type OpponentFactory func(seed uint64) Agent
+type TelemetryOpponentFactory func(seed uint64) TelemetryAgent
 
 type Match struct {
-	Rows, Cols int
-	Agents     []Agent
-	MaxActions int
+	Rows, Cols      int
+	Agents          []Agent
+	TelemetryAgents []TelemetryAgent
+	MaxActions      int
 }
 
 type GameResult struct {
-	Winner       game.Player
-	Actions      int
-	Decisions    int
-	Eliminations int
-	Illegal      int
-	Maxed        bool
-	Stalled      bool
-	Latencies    [4][]time.Duration
-	Elapsed      time.Duration
+	Winner             game.Player
+	Actions            int
+	Decisions          int
+	Eliminations       int
+	Illegal            int
+	Maxed              bool
+	Stalled            bool
+	Latencies          [4][]time.Duration
+	Nodes              [4]uint64
+	CompletedTurnDepth [4]int
+	Elapsed            time.Duration
 }
 
 type Report struct {
@@ -38,17 +52,54 @@ type Report struct {
 	Decisions                  int
 	Maxed, Stalled             int
 	Latencies                  []time.Duration
+	Nodes                      uint64
+	CompletedTurnDepth         int
 	Elapsed                    time.Duration
 }
 
+// Probe runs one instrumented decision per board. It is intended for maximum
+// dimension legality/deadline stress, not as a competitive strength claim.
+func Probe(boards []Board, agent TelemetryAgent) (Report, error) {
+	var report Report
+	for _, board := range boards {
+		state, err := game.New(board.Rows, board.Cols, 2)
+		if err != nil {
+			return report, err
+		}
+		started := time.Now()
+		action, telemetry, ok := agent(state)
+		latency := time.Since(started)
+		report.Games++
+		report.Decisions++
+		report.Elapsed += latency
+		report.Latencies = append(report.Latencies, latency)
+		report.Nodes += telemetry.Nodes
+		if telemetry.CompletedTurnDepth > report.CompletedTurnDepth {
+			report.CompletedTurnDepth = telemetry.CompletedTurnDepth
+		}
+		if !ok {
+			report.Stalled++
+			continue
+		}
+		if _, err := state.Apply(action); err != nil {
+			report.Illegal++
+		}
+	}
+	return report, nil
+}
+
 func Play(match Match) (GameResult, error) {
-	if len(match.Agents) < 2 || len(match.Agents) > 4 {
+	agentCount := len(match.Agents)
+	if len(match.TelemetryAgents) > 0 {
+		agentCount = len(match.TelemetryAgents)
+	}
+	if agentCount < 2 || agentCount > 4 || len(match.Agents) > 0 && len(match.TelemetryAgents) > 0 {
 		return GameResult{}, fmt.Errorf("need 2-4 agents")
 	}
 	if match.MaxActions <= 0 {
 		match.MaxActions = match.Rows * match.Cols * 12
 	}
-	state, err := game.New(match.Rows, match.Cols, len(match.Agents))
+	state, err := game.New(match.Rows, match.Cols, agentCount)
 	if err != nil {
 		return GameResult{}, err
 	}
@@ -60,8 +111,19 @@ func Play(match Match) (GameResult, error) {
 		before := activeCount(state)
 		decisionStart := time.Now()
 		result.Decisions++
-		action, ok := match.Agents[player-1](state)
+		var action game.Action
+		var telemetry DecisionTelemetry
+		var ok bool
+		if len(match.TelemetryAgents) > 0 {
+			action, telemetry, ok = match.TelemetryAgents[player-1](state)
+		} else {
+			action, ok = match.Agents[player-1](state)
+		}
 		result.Latencies[player-1] = append(result.Latencies[player-1], time.Since(decisionStart))
+		result.Nodes[player-1] += telemetry.Nodes
+		if telemetry.CompletedTurnDepth > result.CompletedTurnDepth[player-1] {
+			result.CompletedTurnDepth[player-1] = telemetry.CompletedTurnDepth
+		}
 		if !ok {
 			if len(legal) > 0 {
 				result.Illegal++
@@ -82,6 +144,34 @@ func Play(match Match) (GameResult, error) {
 	result.Winner = state.Winner()
 	result.Maxed = !state.GameOver() && result.Actions >= match.MaxActions
 	return result, nil
+}
+
+// Compare runs a balanced incumbent comparison and gives the relationship an
+// explicit name for CLI/report consumers.
+func Compare(boards []Board, seeds int, contender Agent, incumbent OpponentFactory) (Report, error) {
+	return Balanced(boards, seeds, contender, incumbent)
+}
+
+// CompareTelemetry is Compare with per-decision search instrumentation. Plain
+// baselines can be adapted with Instrument.
+func CompareTelemetry(boards []Board, seeds int, contender TelemetryAgent, incumbent TelemetryOpponentFactory) (Report, error) {
+	var report Report
+	for boardIndex, board := range boards {
+		for seed := 1; seed <= seeds; seed++ {
+			for seat := 0; seat < 2; seat++ {
+				agents := []TelemetryAgent{contender, incumbent(uint64(boardIndex*10_000 + seed))}
+				if seat == 1 {
+					agents[0], agents[1] = agents[1], agents[0]
+				}
+				result, err := Play(Match{Rows: board.Rows, Cols: board.Cols, TelemetryAgents: agents})
+				if err != nil {
+					return report, err
+				}
+				report.Add(result, game.Player(seat+1))
+			}
+		}
+	}
+	return report, nil
 }
 
 // Balanced runs every board/seed twice with the contender in each seat.
@@ -112,6 +202,10 @@ func (r *Report) Add(result GameResult, focus game.Player) {
 	r.Decisions += result.Decisions
 	r.Elapsed += result.Elapsed
 	r.Latencies = append(r.Latencies, result.Latencies[focus-1]...)
+	r.Nodes += result.Nodes[focus-1]
+	if result.CompletedTurnDepth[focus-1] > r.CompletedTurnDepth {
+		r.CompletedTurnDepth = result.CompletedTurnDepth[focus-1]
+	}
 	if result.Maxed {
 		r.Maxed++
 	}
@@ -160,9 +254,9 @@ func (r Report) Throughput() float64 {
 }
 
 func (r Report) String() string {
-	return fmt.Sprintf("games=%d wins=%d losses=%d draws=%d win_rate=%.1f%% eliminations=%d illegal=%d maxed=%d stalled=%d decisions=%d p50=%s p95=%s max=%s decisions/s=%.1f",
+	return fmt.Sprintf("games=%d wins=%d losses=%d draws=%d win_rate=%.1f%% eliminations=%d illegal=%d maxed=%d stalled=%d decisions=%d nodes=%d completed_turn_depth=%d p50=%s p95=%s max=%s decisions/s=%.1f",
 		r.Games, r.Wins, r.Losses, r.Draws, r.WinRate(), r.Eliminations, r.Illegal, r.Maxed, r.Stalled,
-		r.Decisions, r.Percentile(50), r.Percentile(95), r.MaxLatency(), r.Throughput())
+		r.Decisions, r.Nodes, r.CompletedTurnDepth, r.Percentile(50), r.Percentile(95), r.MaxLatency(), r.Throughput())
 }
 
 func activeCount(state game.State) int {
