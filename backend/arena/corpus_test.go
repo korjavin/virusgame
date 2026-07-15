@@ -16,6 +16,7 @@ func TestFrozenCorpusCoverageAndChecksums(t *testing.T) {
 	for _, split := range []string{"train", "heldout"} {
 		competitive, multiplayer, stress := map[string]bool{}, map[string]bool{}, map[string]bool{}
 		competitivePlayers, competitiveMoves := map[string]map[game.Player]bool{}, map[string]map[int]bool{}
+		competitivePhases, competitiveStrata, competitiveTrajectories := map[string]map[string]bool{}, map[string]map[string]bool{}, map[string]map[string]bool{}
 		players, moves, phases, strata := map[game.Player]bool{}, map[int]bool{}, map[string]bool{}, map[string]bool{}
 		trajectories := map[string]bool{}
 		for _, testCase := range corpus.Cases {
@@ -28,9 +29,15 @@ func TestFrozenCorpusCoverageAndChecksums(t *testing.T) {
 				competitive[key] = true
 				if competitivePlayers[key] == nil {
 					competitivePlayers[key], competitiveMoves[key] = map[game.Player]bool{}, map[int]bool{}
+					competitivePhases[key], competitiveStrata[key], competitiveTrajectories[key] = map[string]bool{}, map[string]bool{}, map[string]bool{}
 				}
 				competitivePlayers[key][testCase.State.CurrentPlayer()] = true
 				competitiveMoves[key][testCase.State.MovesLeft()] = true
+				competitivePhases[key][testCase.Phase] = true
+				competitiveTrajectories[key][testCase.Trajectory] = true
+				for _, stratum := range testCase.Strata {
+					competitiveStrata[key][stratum] = true
+				}
 			case "multiplayer":
 				multiplayer[boardKey(testCase.State)+"p"+strconv.Itoa(testCase.Players)] = true
 			case "stress":
@@ -47,16 +54,16 @@ func TestFrozenCorpusCoverageAndChecksums(t *testing.T) {
 				t.Fatalf("%s failed exact snapshot validation: %v", testCase.ID, err)
 			}
 		}
-		if !reflect.DeepEqual(competitive, wantCompetitive) || !multiplayer["12x12p3"] || !multiplayer["20x20p4"] || !multiplayer["28x28p3"] || !multiplayer["28x28p4"] || !stress["25x25"] || !stress["30x30"] || len(players) != 4 || len(moves) != 3 || !phases["opening"] || !phases["midgame"] || !strata["neutral_available"] || !strata["tactical"] || !strata["base_threat"] || len(trajectories) != 13 {
+		if !reflect.DeepEqual(competitive, wantCompetitive) || !multiplayer["12x12p3"] || !multiplayer["20x20p4"] || !multiplayer["28x28p3"] || !multiplayer["28x28p4"] || !stress["25x25"] || !stress["30x30"] || len(players) != 4 || len(moves) != 3 || !phases["opening"] || !strata["neutral_available"] || !strata["tactical"] || !strata["base_threat"] || len(trajectories) != 20 {
 			t.Fatalf("split %s incomplete: competitive=%v multiplayer=%v stress=%v players=%v moves=%v phases=%v strata=%v trajectories=%d", split, competitive, multiplayer, stress, players, moves, phases, strata, len(trajectories))
 		}
 		for board := range wantCompetitive {
-			if len(competitivePlayers[board]) != 2 || len(competitiveMoves[board]) != 3 {
-				t.Fatalf("split %s board %s lacks player/moves-left coverage: players=%v moves=%v", split, board, competitivePlayers[board], competitiveMoves[board])
+			if len(competitivePlayers[board]) != 2 || len(competitiveMoves[board]) != 3 || len(competitiveTrajectories[board]) != 2 || !competitivePhases[board]["opening"] || !competitivePhases[board]["contact_consolidation"] || !competitivePhases[board]["tactical_base_threat"] || !competitiveStrata[board]["tactical"] || !competitiveStrata[board]["base_threat"] || !competitiveStrata[board]["consolidation_candidate"] {
+				t.Fatalf("split %s board %s lacks coverage: players=%v moves=%v trajectories=%v phases=%v strata=%v", split, board, competitivePlayers[board], competitiveMoves[board], competitiveTrajectories[board], competitivePhases[board], competitiveStrata[board])
 			}
 		}
 	}
-	if corpus.GroupHashes["train"] != "bc7de8478a7ad5392307d01e5a4dfbe4e2143573dd89a694b9776023721c614c" || corpus.GroupHashes["heldout"] != "f6ff85240fb4fb3d8b6c6382bfcc13798f4817b3deae0405e4180facdcdef06a" {
+	if corpus.GroupHashes["train"] != "28c65702a6a9664a609465bd14316fe588acfc7749c47d560c0e27527e53edeb" || corpus.GroupHashes["heldout"] != "063a143c57dfbdbce0a64af60303132650dabad57f432260d8389b39aa4d5529" {
 		t.Fatalf("unexpected frozen group hashes: %v", corpus.GroupHashes)
 	}
 }

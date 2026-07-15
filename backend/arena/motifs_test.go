@@ -38,7 +38,7 @@ func TestProductionMotifsAreFrozenAnnotatedReplayPositions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantTags := []string{"consolidation", "backup_route", "useful_redundant_corridor", "thin_tendril", "base_rooted_vertex_disjoint_corridors", "min_cut_le_3", "attack_chain_counter_capture", "translated_motif", "reflected_motif", "capturable_base_halo", "preserved_empty_escape", "hardened_enemy_foothold", "opponent_base_siege_decision", "neutral_denial_candidate", "avoid_capturable_normal_foothold"}
+	wantTags := []string{"consolidation", "backup_route", "useful_redundant_corridor", "thin_tendril", "base_rooted_vertex_disjoint_corridors", "min_cut_le_3", "attack_chain_counter_capture", "translated_motif", "reflected_motif", "capturable_base_halo", "preserved_empty_escape", "hardened_enemy_foothold", "opponent_base_siege_decision", "neutral_denial_candidate", "avoid_capturable_normal_foothold", "articulation_base_shell", "irreversible_attack", "capturable_placement", "neutral_denial_alternative"}
 	allTags := ""
 	polarities := map[string]int{}
 	for _, moment := range manifest.Moments {

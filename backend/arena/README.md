@@ -27,8 +27,8 @@ suffix, so state cannot leak between samples.
 The corpus was frozen before contender tuning. Its trajectory-group checksums
 are:
 
-- train: `bc7de8478a7ad5392307d01e5a4dfbe4e2143573dd89a694b9776023721c614c`
-- heldout: `f6ff85240fb4fb3d8b6c6382bfcc13798f4817b3deae0405e4180facdcdef06a`
+- train: `28c65702a6a9664a609465bd14316fe588acfc7749c47d560c0e27527e53edeb`
+- heldout: `063a143c57dfbdbce0a64af60303132650dabad57f432260d8389b39aa4d5529`
 
 The competitive 1v1 track covers 5×5, 8×8, 10×10, 12×12, 15×20,
 20×15, and 20×20. Multiplayer strata use three and four players through
@@ -36,10 +36,22 @@ The competitive 1v1 track covers 5×5, 8×8, 10×10, 12×12, 15×20,
 comparisons; boards beyond the strength caps provide legality/deadline evidence
 only.
 
+Every competitive board has two disjoint trajectory families per split. Each
+board contributes bounded opening checkpoints plus phase-directed contact /
+consolidation and tactical base-threat checkpoints; coverage tests enforce
+those properties per board rather than in aggregate.
+
 The generator and declared xorshift seeds live under `arena/cmd/corpusgen`.
 Regeneration changes hashes and requires a new corpus version; it must never
 silently rewrite v1. Use train for development and heldout only for a
-predeclared acceptance run.
+predeclared acceptance run. The CLI defaults to train; heldout must always be
+requested explicitly.
+
+Checkpoints from the same trajectory are intentionally correlated. Wilson
+intervals are descriptive game-level summaries, not independent-sample
+confidence claims, and must be read alongside board, family, seat, and phase
+buckets. A release decision cannot turn adjacent checkpoints into additional
+independent evidence by increasing a repetition counter.
 
 ## Production regressions
 
@@ -56,6 +68,9 @@ backup routes, thin tendrils, base-rooted small cuts, counter-capture exposure,
 harmful own-base halos, opponent-base siege choices, and translated/reflected
 structural tests. These annotations are evaluator inputs, not claims that an
 exact historical move generalizes unchanged to another board.
+They remain outside aggregate strength win rates because they were selected
+after observing production outcomes; including them would bias the arena. They
+are frozen train-only regression evidence for later structural translations.
 
 CI gate:
 

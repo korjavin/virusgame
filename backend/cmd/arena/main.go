@@ -17,7 +17,7 @@ func main() {
 	opponent := flag.String("opponent", "all", "opponent to run: all, random, legacy, greedy, base, or mobility")
 	matrix := flag.String("matrix", "ci", "board matrix: ci or full (manual variable-size/time gate)")
 	corpusPath := flag.String("corpus", "", "frozen strength corpus JSON; replaces repeated empty-board openings")
-	corpusSplit := flag.String("corpus-split", "heldout", "frozen corpus split: train or heldout")
+	corpusSplit := flag.String("corpus-split", "train", "frozen corpus split: train (default) or explicitly requested heldout")
 	flag.Parse()
 	boards := []arena.Board{{Rows: 5, Cols: 5}, {Rows: 6, Cols: 6}, {Rows: 8, Cols: 8}}
 	if *matrix == "full" {
