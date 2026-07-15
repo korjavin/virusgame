@@ -95,8 +95,8 @@ class LobbyManager {
     }
 
     createLobby() {
-        const rows = parseInt(document.getElementById('rows-input').value) || 10;
-        const cols = parseInt(document.getElementById('cols-input').value) || 10;
+        const rows = parseInt(document.getElementById('rows-input').value) || 12;
+        const cols = parseInt(document.getElementById('cols-input').value) || 12;
 
         this.mpClient.send({
             type: 'create_lobby',

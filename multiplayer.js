@@ -458,8 +458,8 @@ class MultiplayerClient {
 
     challengeUser(userId) {
         // Get current board size settings
-        const rows = rowsInput ? parseInt(rowsInput.value) || 10 : 10;
-        const cols = colsInput ? parseInt(colsInput.value) || 10 : 10;
+        const rows = rowsInput ? parseInt(rowsInput.value) || 12 : 12;
+        const cols = colsInput ? parseInt(colsInput.value) || 12 : 12;
 
         this.send({
             type: 'challenge',

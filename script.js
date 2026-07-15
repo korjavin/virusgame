@@ -805,8 +805,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const boardWrapper = document.getElementById('board-wrapper');
         if (boardWrapper) boardWrapper.classList.remove('history-mode');
 
-        rows = parseInt(rowsInput.value);
-        cols = parseInt(colsInput.value);
+        rows = parseInt(rowsInput.value) || 12;
+        cols = parseInt(colsInput.value) || 12;
         aiEnabled = aiEnabledCheckbox.checked;
 
         // Update AI depth from input

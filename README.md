@@ -2,7 +2,7 @@
 
 This is a web-based implementation of the turn-based strategy game "Virus" (also known as "Война вирусов"). It is built using plain HTML, CSS, and JavaScript.
 
-The game is played on a 10x10 grid. Two players, represented by 'X' and 'O', take turns to expand their territory. Each player has three moves per turn, which can be used to place new pieces, kill opponent's pieces, or place neutral pieces.
+The game is played on a customizable grid (12x12 by default). Two players, represented by 'X' and 'O', take turns to expand their territory. Each player has three moves per turn, which can be used to place new pieces, kill opponent's pieces, or place neutral pieces.
 
 ## Rules
 
