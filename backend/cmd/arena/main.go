@@ -4,17 +4,20 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"virusgame/arena"
 )
 
 func main() {
-	seeds := flag.Int("seeds", 10, "fixed seeds per board and seat")
+	seeds := flag.Int("seeds", 10, "random-baseline seeds per empty-board opening; deterministic opponents repeat the same game")
 	depth := flag.Int("depth", 3, "deterministic action depth")
 	production := flag.Bool("production", false, "use the deployed anytime search path and budget")
 	opponent := flag.String("opponent", "all", "opponent to run: all, random, legacy, greedy, base, or mobility")
 	matrix := flag.String("matrix", "ci", "board matrix: ci or full (manual variable-size/time gate)")
+	corpusPath := flag.String("corpus", "", "frozen strength corpus JSON; replaces repeated empty-board openings")
+	corpusSplit := flag.String("corpus-split", "train", "frozen corpus split: train (default) or explicitly requested heldout")
 	flag.Parse()
 	boards := []arena.Board{{Rows: 5, Cols: 5}, {Rows: 6, Cols: 6}, {Rows: 8, Cols: 8}}
 	if *matrix == "full" {
@@ -38,7 +41,7 @@ func main() {
 		log.Fatalf("unknown opponent %q", *opponent)
 	}
 	legacyPassed, greedyPassed, complete := false, false, true
-	for _, benchmark := range []struct {
+	benchmarks := []struct {
 		name    string
 		factory arena.TelemetryOpponentFactory
 	}{
@@ -47,7 +50,38 @@ func main() {
 		{name: "greedy", factory: func(uint64) arena.TelemetryAgent { return arena.Instrument(arena.Greedy) }},
 		{name: "base", factory: func(uint64) arena.TelemetryAgent { return arena.Instrument(arena.BaseAttacker) }},
 		{name: "mobility", factory: func(uint64) arena.TelemetryAgent { return arena.Instrument(arena.MobilityAttacker) }},
-	} {
+	}
+	if *corpusPath != "" {
+		fixture, err := os.Open(*corpusPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		corpus, err := arena.DecodeCorpus(fixture)
+		fixture.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+		for _, benchmark := range benchmarks {
+			if *opponent != "all" && *opponent != benchmark.name {
+				continue
+			}
+			report, err := arena.CompareCorpus(corpus, *corpusSplit,
+				func() arena.TelemetryAgent { return telemetryContender },
+				func() arena.TelemetryAgent { return benchmark.factory(1) },
+			)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("corpus mode=%s opponent=%s %s\n", mode, benchmark.name, report)
+			for _, key := range report.SortedBuckets() {
+				bucket := report.Buckets[key]
+				interval := arena.Wilson95(bucket.Wins, bucket.Games)
+				fmt.Printf("  bucket %s %s wilson95=[%.1f%%,%.1f%%]\n", key, bucket, interval.Low, interval.High)
+			}
+		}
+		return
+	}
+	for _, benchmark := range benchmarks {
 		if *opponent != "all" && *opponent != benchmark.name {
 			continue
 		}

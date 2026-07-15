@@ -5,11 +5,64 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"virusgame/game"
 )
+
+func TestAllCapturedProductionGamesReplayWithDistinctOutcomes(t *testing.T) {
+	expected := map[string]string{
+		"2cccdb97-8f6b-456d-bc76-a97933cc9cd6": "no_moves",
+		"02cfddec-8a18-4522-b99c-092ed8022393": "no_moves",
+		"58b2b9ab-30b4-45e8-bb32-4600300cac55": "no_moves",
+		"2382b58f-c790-4131-b2a2-c200b3cf5e30": "illegal_move",
+		"47e5ba48-cf37-43e2-b364-efd97ce5f233": "no_moves",
+		"ea94a51b-63e9-4c0a-8c36-154a4722eb01": "no_moves",
+		"4d85f7c0-d314-4dce-b3f0-bb7b169c30ef": "no_moves",
+		"419c231b-7e0e-4df9-9bba-7871f758f019": "resignation",
+		"fb5b584f-790d-45ca-9351-a4925010b998": "no_moves",
+		"0c6bf57b-a602-4e2c-87c5-a2fff5de1dff": "no_moves",
+	}
+	fixtures, err := filepath.Glob("testdata/*.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range fixtures {
+		base := filepath.Base(path)
+		if base == "production-motifs-v1.json" || !strings.HasPrefix(base, "production-") && !strings.Contains(base, "happyotter97-") {
+			continue
+		}
+		fixture, err := os.Open(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		replay, states, decodeErr := DecodeReplay(fixture)
+		fixture.Close()
+		if decodeErr != nil {
+			t.Fatalf("%s: %v", path, decodeErr)
+		}
+		want, ok := expected[replay.SourceID]
+		if !ok || replay.Termination != want || len(states) != len(replay.Turns) {
+			t.Fatalf("unexpected fixture %s: replay=%+v states=%d", path, replay, len(states))
+		}
+		delete(expected, replay.SourceID)
+		last := states[len(replay.Turns)]
+		if replay.SourceID == "4d85f7c0-d314-4dce-b3f0-bb7b169c30ef" && (replay.ObservedTurns != 9 || replay.OmittedMoves == 0 || len(replay.Turns) != 8) {
+			t.Fatalf("post-terminal source suffix was not preserved honestly: %+v", replay)
+		}
+		if replay.Termination == "no_moves" && (!last.GameOver() || last.Winner() != replay.Winner) {
+			t.Fatalf("%s no_moves is not an authoritative terminal", path)
+		}
+		if replay.Termination == "illegal_move" && last.GameOver() {
+			t.Fatalf("%s fabricated a strategic terminal for illegal_move", path)
+		}
+	}
+	if len(expected) != 0 {
+		t.Fatalf("missing production fixtures: %v", expected)
+	}
+}
 
 func TestHappyOtterReplayAndCriticalTurns(t *testing.T) {
 	fixture, err := os.Open("testdata/happyotter97-vs-bot1090.json")
@@ -53,6 +106,7 @@ func TestDecodeReplayRejectsDivergence(t *testing.T) {
 		`{"rows":5,"cols":5,"winner":1,"turns":[{"turn":1,"player":2,"actions":[]}]}`,
 		`{"rows":5,"cols":5,"winner":1,"turns":[{"turn":1,"player":1,"actions":[{"kind":"move","row":4,"col":4}]}]}`,
 		`{"rows":5,"cols":5,"winner":1,"turns":[]} trailing`,
+		`{"rows":5,"cols":5,"winner":1,"termination":"invented","turns":[]}`,
 	} {
 		if _, _, err := DecodeReplay(strings.NewReader(fixture)); err == nil {
 			t.Fatalf("accepted divergent replay: %s", fixture)

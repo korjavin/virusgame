@@ -1,0 +1,257 @@
+{
+  "source_id": "0c6bf57b-a602-4e2c-87c5-a2fff5de1dff",
+  "players": [
+    "CalmShark76",
+    "Bot 7403"
+  ],
+  "rows": 10,
+  "cols": 10,
+  "winner": 2,
+  "termination": "no_moves",
+  "observed_turns": 12,
+  "turns": [
+    {
+      "turn": 1,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 3
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 7
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 4
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 4
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 5
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "turn": 10,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        }
+      ]
+    },
+    {
+      "turn": 11,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        }
+      ]
+    },
+    {
+      "turn": 12,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1
+        }
+      ]
+    }
+  ]
+}
