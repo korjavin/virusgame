@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const runtimeDBPath = "data/games.db"
+
 // noCacheMiddleware adds cache-busting headers for JS/CSS files
 func noCacheMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +25,7 @@ func noCacheMiddleware(next http.Handler) http.Handler {
 func main() {
 	// Initialize database
 	// We rely on volume mounts to persist this file
-	InitDB("data/games.db")
+	InitDB(runtimeDBPath)
 
 	hub := newHub()
 	go hub.run()

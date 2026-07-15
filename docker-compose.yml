@@ -19,10 +19,14 @@ services:
       - "traefik.http.middlewares.virusgame-ws.headers.customrequestheaders.Upgrade=websocket"
       - "traefik.http.routers.virusgame.middlewares=virusgame-ws"
     volumes:
-      - ./backend/data:/app/backend/data
+      - virusgame-data:/app/data
     restart: unless-stopped
 
 networks:
   virusgame-network:
     name: ${NETWORK_NAME}
     external: true
+
+volumes:
+  virusgame-data:
+    name: virusgame-games-data

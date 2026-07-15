@@ -54,6 +54,7 @@ docker push ghcr.io/korjavin/virusgame:$(git rev-parse --short HEAD)
 docker run -d \
   --name virusgame \
   -p 8080:8080 \
+  -v virusgame-games-data:/app/data \
   --restart unless-stopped \
   ghcr.io/korjavin/virusgame:latest
 ```
@@ -71,13 +72,47 @@ services:
     container_name: virusgame
     ports:
       - "8080:8080"
+    volumes:
+      - virusgame-data:/app/data
     restart: unless-stopped
+
+volumes:
+  virusgame-data:
+    name: virusgame-games-data
 ```
 
 Deploy:
 ```bash
 docker-compose up -d
 ```
+
+### Persistent game database
+
+The server stores completed games in `/app/data/games.db`. The production
+Compose file mounts the explicitly named Docker volume
+`virusgame-games-data` at `/app/data`, so Portainer stack updates and container
+replacement reuse the same database regardless of the stack checkout path.
+Back up this volume before host migration, and do not run
+`docker compose down -v` unless deleting game history is intentional.
+
+The previous Compose configuration mounted `./backend/data` at
+`/app/backend/data`, but the server wrote to the unmounted `/app/data` directory.
+If an old container using that configuration still exists, copy its database
+before replacing it:
+
+```bash
+docker cp virusgame-backend:/app/data/games.db ./games.db.backup
+docker volume create virusgame-games-data
+docker run --rm \
+  -v virusgame-games-data:/data \
+  -v "$PWD:/backup:ro" \
+  alpine cp /backup/games.db.backup /data/games.db
+```
+
+The nine production games lost during the 2026-07-15 container replacement
+cannot be recovered from the removed container's ephemeral filesystem. Their
+available replay evidence remains in the checked-in regression corpus; future
+completed games are stored in the named volume.
 
 ### Option 3: Docker Compose with Traefik (Current Setup)
 
