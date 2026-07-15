@@ -146,7 +146,7 @@ func (h *Hub) handleIllegalMove(game *Game, player int, reason string) {
 			game.Player2.InGame = false
 		}
 		h.broadcastUserList()
-		SaveGame(game, "illegal_move")
+		PersistGameOnce(game, "illegal_move")
 	}
 
 	// If game continues, we need to end the turn of the eliminated player
@@ -248,6 +248,23 @@ func (h *Hub) handleDisconnect(client *Client) {
 					h.sendToUser(opponent, &msg)
 				}
 
+				winner := 1
+				if game.Player1 != nil && game.Player1.ID == user.ID {
+					winner = 2
+				}
+				game.GameOver = true
+				game.Winner = winner
+				if game.Player1 != nil {
+					game.Player1.InGame = false
+				}
+				if game.Player2 != nil {
+					game.Player2.InGame = false
+				}
+				if !PersistGameOnce(game, "disconnect") {
+					log.Printf("Retaining game %s after disconnect because persistence failed", game.ID)
+					continue
+				}
+
 				delete(h.games, gameID)
 			}
 		}
@@ -286,8 +303,12 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 		h.handleLeaveGame(client.user, msg)
 	case "cleanup_game":
 		h.handleCleanupGame(msg)
-	// Internal messages (from timers - no client)
 	case "move_timeout":
+		// Only timers inside the hub may end a game by timeout. A connected
+		// client must never be able to forge a result or training row.
+		if client != nil {
+			return
+		}
 		h.handleMoveTimeout(msg)
 	// Lobby messages
 	case "create_lobby":
@@ -1143,6 +1164,7 @@ func (h *Hub) handleResign(user *User, msg *Message) {
 		game.Player2.InGame = false
 
 		h.broadcastUserList()
+		PersistGameOnce(game, "resignation")
 
 		log.Printf("Game ended by resignation: %s (winner: player %d)", game.ID, winner)
 	}
@@ -1330,9 +1352,17 @@ func (h *Hub) cleanupStaleGames() {
 		}
 
 		if shouldClean {
-			// Save aborted/abandoned games if not already saved
-			if !game.GameOver && len(game.MoveHistory) > 0 {
-				SaveGame(game, "abandoned")
+			termination := game.persistenceTermination
+			if termination == "" {
+				if game.GameOver {
+					termination = "normal"
+				} else {
+					termination = "abandoned"
+				}
+			}
+			if !PersistGameOnce(game, termination) {
+				log.Printf("Retaining stale game %s because persistence failed", game.ID)
+				continue
 			}
 
 			// Cancel any timers
@@ -1405,6 +1435,25 @@ func (h *Hub) handleMoveTimeout(msg *Message) {
 				h.checkMultiplayerStatus(game)
 			}
 		}
+	} else {
+		if msg.Player != 1 && msg.Player != 2 {
+			return
+		}
+		if (msg.Player == 1 && game.Player1 == nil) || (msg.Player == 2 && game.Player2 == nil) {
+			return
+		}
+
+		game.GameOver = true
+		game.Winner = 3 - msg.Player
+		if game.Player1 != nil {
+			game.Player1.InGame = false
+		}
+		if game.Player2 != nil {
+			game.Player2.InGame = false
+		}
+		h.broadcastToGame(game, &Message{Type: "game_end", GameID: game.ID, Winner: game.Winner})
+		h.broadcastUserList()
+		PersistGameOnce(game, "timeout")
 	}
 }
 
@@ -1452,7 +1501,7 @@ func (h *Hub) checkWinCondition(game *Game) {
 		// Broadcast updated user list
 		h.broadcastUserList()
 
-		SaveGame(game, "normal")
+		PersistGameOnce(game, "normal")
 
 		log.Printf("Game ended: %s (winner: player %d)", game.ID, winner)
 	}
@@ -2435,7 +2484,7 @@ func (h *Hub) endTurn(game *Game) {
 
 			h.broadcastUserList()
 
-			SaveGame(game, "no_moves")
+			PersistGameOnce(game, "no_moves")
 
 			log.Printf("Game ended: %s (winner: player %d, opponent had no moves)", game.ID, game.Winner)
 			return
@@ -2534,7 +2583,7 @@ func (h *Hub) checkMultiplayerStatus(game *Game) {
 
 		h.broadcastUserList()
 
-		SaveGame(game, "normal")
+		PersistGameOnce(game, "normal")
 
 		log.Printf("Multiplayer game ended: %s (winner: player %d)", game.ID, game.Winner)
 
@@ -2646,7 +2695,7 @@ func (h *Hub) eliminateDisconnectedPlayers(game *Game) {
 
 					h.broadcastUserList()
 
-					SaveGame(game, "no_moves")
+					PersistGameOnce(game, "no_moves")
 
 					log.Printf("Game ended: %s (winner: player %d, opponent had no valid moves)", game.ID, game.Winner)
 					return

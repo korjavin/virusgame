@@ -30,11 +30,9 @@ func TestStorage_SaveGame(t *testing.T) {
 		Player2: &User{Username: "P2"},
 	}
 
-	// SaveGame now returns a channel we can wait on
-	done := SaveGame(game, "normal")
-
-	// Wait for save to complete
-	<-done
+	if !PersistGameOnce(game, "normal") {
+		t.Fatal("save failed")
+	}
 
 	// Verify data is in DB
 	var count int
