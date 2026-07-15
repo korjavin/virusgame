@@ -17,14 +17,16 @@ func TestHubIntegration_Disconnect(t *testing.T) {
 	u1 := c1.user
 	userID := u1.ID
 
-	if _, exists := h.users[userID]; !exists {
+	var userExists bool
+	runOnHub(h, func() { _, userExists = h.users[userID] })
+	if !userExists {
 		t.Error("User should exist")
 	}
 
 	h.unregister <- c1
-	time.Sleep(50 * time.Millisecond)
 
-	if _, exists := h.users[userID]; exists {
+	runOnHub(h, func() { _, userExists = h.users[userID] })
+	if userExists {
 		t.Error("User should be removed after disconnect")
 	}
 }
@@ -45,9 +47,9 @@ func TestHubIntegration_DeclineChallenge(t *testing.T) {
 
 	// Challenge
 	sendMessage(h, c1, &Message{
-		Type: "challenge",
+		Type:         "challenge",
 		TargetUserID: u2.ID,
-		Rows: 10, Cols: 10,
+		Rows:         10, Cols: 10,
 	})
 
 	msg := waitForMessage(t, c2, "challenge_received")
@@ -55,13 +57,15 @@ func TestHubIntegration_DeclineChallenge(t *testing.T) {
 
 	// Decline
 	sendMessage(h, c2, &Message{
-		Type: "decline_challenge",
+		Type:        "decline_challenge",
 		ChallengeID: challengeID,
 	})
 
 	waitForMessage(t, c1, "challenge_declined")
 
-	if len(h.challenges) != 0 {
+	var challengeCount int
+	runOnHub(h, func() { challengeCount = len(h.challenges) })
+	if challengeCount != 0 {
 		t.Error("Challenges should be empty")
 	}
 }
@@ -88,7 +92,7 @@ func TestHubIntegration_ChatAndPing(t *testing.T) {
 
 	// Chat in Lobby
 	sendMessage(h, c1, &Message{
-		Type: "lobby_chat",
+		Type:    "lobby_chat",
 		Content: "Hello",
 	})
 
@@ -105,8 +109,8 @@ func TestHubIntegration_ChatAndPing(t *testing.T) {
 	r, c := 5, 5
 	sendMessage(h, c1, &Message{
 		Type: "highlight_cell",
-		Row: &r,
-		Col: &c,
+		Row:  &r,
+		Col:  &c,
 	})
 
 	// Both should receive highlight
@@ -146,7 +150,7 @@ func TestHubIntegration_Bots(t *testing.T) {
 
 	// Re-do with variable capture
 	sendMessage(h, c1, &Message{
-		Type: "add_bot",
+		Type:        "add_bot",
 		BotSettings: &BotSettings{MaterialWeight: 100},
 	})
 	botWanted := waitForMessage(t, c1, "bot_wanted")
@@ -154,8 +158,8 @@ func TestHubIntegration_Bots(t *testing.T) {
 
 	// Bot joins
 	sendMessage(h, botClient, &Message{
-		Type: "join_lobby",
-		LobbyID: lobbyID,
+		Type:      "join_lobby",
+		LobbyID:   lobbyID,
 		RequestID: requestID,
 	})
 
@@ -166,7 +170,7 @@ func TestHubIntegration_Bots(t *testing.T) {
 
 	// Remove Bot (slot 1)
 	sendMessage(h, c1, &Message{
-		Type: "remove_bot",
+		Type:      "remove_bot",
 		SlotIndex: 1,
 	})
 
@@ -205,7 +209,7 @@ func TestHubIntegration_LeaveGame(t *testing.T) {
 
 	// P2 Leaves Game
 	sendMessage(h, c2, &Message{
-		Type: "leave_game",
+		Type:   "leave_game",
 		GameID: gameID,
 	})
 

@@ -18,6 +18,14 @@ type MessageWrapper struct {
 	message *Message
 }
 
+// hubCommand serializes internal maintenance and test fixture work with the
+// Hub event loop. Production state remains owned by run; callers receive an
+// acknowledgement only after their operation is complete.
+type hubCommand struct {
+	apply func()
+	done  chan struct{}
+}
+
 // BotRequest tracks a single bot request to prevent multiple bots from joining
 type BotRequest struct {
 	LobbyID     string
@@ -40,6 +48,7 @@ type Hub struct {
 	register      chan *Client
 	unregister    chan *Client
 	handleMessage chan *MessageWrapper
+	commands      chan hubCommand
 }
 
 func newHub() *Hub {
@@ -55,6 +64,7 @@ func newHub() *Hub {
 		register:      make(chan *Client),
 		unregister:    make(chan *Client),
 		handleMessage: make(chan *MessageWrapper, 256), // Buffered to prevent deadlock when sending internal messages
+		commands:      make(chan hubCommand),
 	}
 }
 
@@ -80,6 +90,9 @@ func (h *Hub) run() {
 			}
 		case wrapper := <-h.handleMessage:
 			h.handleClientMessage(wrapper.client, wrapper.message)
+		case command := <-h.commands:
+			command.apply()
+			close(command.done)
 		case <-challengeTicker.C:
 			h.checkExpiredChallenges()
 		case <-cleanupTicker.C:
