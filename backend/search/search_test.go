@@ -954,7 +954,7 @@ func makeStateFromLayout(rows, cols int, activePlayer game.Player, movesLeft int
 	snap := game.Snapshot{
 		Rows: rows, Cols: cols,
 		Board:       make([][]game.Cell, rows),
-		Bases:       []game.Pos{{0, 0}, {rows - 1, cols - 1}},
+		Bases:       []game.Pos{{Row: 0, Col: 0}, {Row: rows - 1, Col: cols - 1}},
 		Active:      []bool{true, true},
 		NeutralUsed: []bool{false, false},
 		Current:     activePlayer,
@@ -1088,11 +1088,15 @@ func TestHaloDominancePolicy(t *testing.T) {
 		}
 	})
 
-	// 4. Candidate set preserves capture/win/elimination/base-cut/neutrals by construction
-	t.Run("candidate set preserves tactical moves", func(t *testing.T) {
-		// Captures and neutrals are not suppressed because they are not dominated empty-halo moves
+	// 4. Candidate set preserves capture and neutrals by construction
+	t.Run("candidate set preserves capture and neutrals by construction", func(t *testing.T) {
+		// Captures and neutrals are not suppressed because they are not dominated empty-halo moves.
+		// Player 1 has base at (0,0), normal at (1,1).
+		// (0,1) is opponent cell owned by P2 (so Move to (0,1) is a capture).
+		// (1,0) is empty (halo).
+		// (2,2) is empty (outward).
 		state := makeStateFromLayout(5, 5, 1, 3, []string{
-			"b....",
+			"b2...",
 			".1...",
 			"..1..",
 			".....",
@@ -1104,14 +1108,21 @@ func TestHaloDominancePolicy(t *testing.T) {
 			t.Fatal("orderedChildren failed")
 		}
 
+		hasCapture := false
 		hasNeutrals := false
 		for _, child := range children {
+			if child.action.Kind == game.Move && child.action.Target.Row == 0 && child.action.Target.Col == 1 {
+				hasCapture = true
+			}
 			if child.action.Kind == game.PlaceNeutrals {
 				hasNeutrals = true
 			}
 		}
+		if !hasCapture {
+			t.Error("capture targeting the halo was incorrectly suppressed")
+		}
 		if !hasNeutrals {
-			t.Error("neutrals placement was suppressed")
+			t.Error("neutrals placement was incorrectly suppressed")
 		}
 	})
 
@@ -1204,45 +1215,35 @@ func TestHaloDominancePolicy(t *testing.T) {
 	})
 }
 
-func TestOrderedChildrenAllocationFree(t *testing.T) {
-	state := makeStateFromLayout(20, 20, 1, 2, []string{
-		"b...................",
-		".1..................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"....................",
-		"...................B",
-	})
-	s := newSearcher(context.Background(), state)
-
-	// Warm up
-	_, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
-	if !ok {
-		t.Fatal("orderedChildren failed")
+func TestOrderedChildrenNoBoardScaledAllocation(t *testing.T) {
+	get_allocs := func(size int) float64 {
+		layout := make([]string, size)
+		layout[0] = "b" + recruitDots(size-1)
+		for i := 1; i < size-1; i++ {
+			layout[i] = recruitDots(size)
+		}
+		layout[size-1] = recruitDots(size-1) + "B"
+		state := makeStateFromLayout(size, size, 1, 2, layout)
+		s := newSearcher(context.Background(), state)
+		// Warm up
+		_, _, _, _ = s.orderedChildren(game.NewPosition(state), true)
+		return testing.AllocsPerRun(100, func() {
+			_, _, _, _ = s.orderedChildren(game.NewPosition(state), true)
+		})
 	}
 
-	allocs := testing.AllocsPerRun(100, func() {
-		_, _, _, _ = s.orderedChildren(game.NewPosition(state), true)
-	})
-	// The children returned slice of orderedChildren is expected to allocate (the return value is child slice),
-	// but we must make sure no extra board-sized buffers are allocated on heap.
-	// We check that only exactly 1 allocation (for the slice itself) happens.
-	if allocs > 45 {
-		t.Fatalf("orderedChildren root policy allocated %f objects, want <= 45", allocs)
+	// This asserts allocations do NOT grow with board size, not that they are
+	// zero: orderedChildren keeps a fixed nonzero baseline (~35 allocs/op) driven
+	// by the children slice and eval workspace, independent of rows*cols. The
+	// contact scan reuses the searcher's preallocated buffers, so a larger board
+	// must not add allocations.
+	allocs10 := get_allocs(10)
+	allocs20 := get_allocs(20)
+	allocs30 := get_allocs(30)
+
+	if allocs10 != allocs20 || allocs20 != allocs30 {
+		t.Fatalf("orderedChildren allocations scaled with board size: 10x10=%f, 20x20=%f, 30x30=%f",
+			allocs10, allocs20, allocs30)
 	}
 }
 

@@ -635,7 +635,7 @@ func (s *searcher) orderedChildren(position game.Position, root bool) ([]child, 
 					return false
 				}
 				if a.Kind == game.PlaceNeutrals {
-					return true
+					return false
 				}
 				// Check if it is a halo Move targeting an empty cell
 				isHaloMove := false
@@ -693,15 +693,13 @@ func (s *searcher) orderedChildren(position game.Position, root bool) ([]child, 
 		}
 
 		if root && !contactDetected && hasPreservingOutward {
-			// A dominated candidate is only a Move targeting an Empty cell in own-base 8-neighbor halo
-			isDominatedHaloMove := false
+			// Suppress a dominated halo candidate: a Move onto an Empty cell in the
+			// own-base 8-neighbor halo. It cannot remove opponent cells and is itself
+			// capturable, so it can neither win nor eliminate — no forcing guard needed.
 			if action.Kind == game.Move && hasBase && adjacent(action.Target, actorBase) {
 				if cell, ok := state.At(action.Target); ok && cell.Kind == game.Empty {
-					isDominatedHaloMove = true
+					return true // suppress it
 				}
-			}
-			if isDominatedHaloMove {
-				return true // suppress it!
 			}
 		}
 
