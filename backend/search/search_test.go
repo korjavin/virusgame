@@ -949,3 +949,203 @@ func findWinningMove(t *testing.T) (game.State, game.Action, bool) {
 	}
 	return game.State{}, game.Action{}, false
 }
+
+func makeStateFromLayout(rows, cols int, activePlayer game.Player, movesLeft int, layout []string) game.State {
+	snap := game.Snapshot{
+		Rows: rows, Cols: cols,
+		Board:       make([][]game.Cell, rows),
+		Bases:       []game.Pos{{0, 0}, {rows - 1, cols - 1}},
+		Active:      []bool{true, true},
+		NeutralUsed: []bool{false, false},
+		Current:     activePlayer,
+		MovesLeft:   movesLeft,
+	}
+	for r := 0; r < rows; r++ {
+		snap.Board[r] = make([]game.Cell, cols)
+		for c := 0; c < cols; c++ {
+			char := layout[r][c]
+			cell := game.Cell{}
+			switch char {
+			case '1':
+				cell = game.Cell{Owner: 1, Kind: game.Normal}
+			case 'b': // player 1 base
+				cell = game.Cell{Owner: 1, Kind: game.Base}
+			case '2':
+				cell = game.Cell{Owner: 2, Kind: game.Normal}
+			case 'B': // player 2 base
+				cell = game.Cell{Owner: 2, Kind: game.Base}
+			case 'N': // Neutral
+				cell = game.Cell{Kind: game.Neutral}
+			case '.':
+				cell = game.Cell{Kind: game.Empty}
+			}
+			snap.Board[r][c] = cell
+		}
+	}
+	state, err := game.FromSnapshot(snap)
+	if err != nil {
+		panic(err)
+	}
+	return state
+}
+
+func TestHaloDominancePolicy(t *testing.T) {
+	// 1. Production motif avoids redundant halo
+	t.Run("production motif avoids redundant halo", func(t *testing.T) {
+		state := makeStateFromLayout(5, 5, 1, 2, []string{
+			"b....",
+			".1...",
+			".....",
+			".....",
+			"....B",
+		})
+		s := newSearcher(context.Background(), state)
+		children, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
+		if !ok {
+			t.Fatal("orderedChildren failed")
+		}
+		for _, child := range children {
+			if child.action.Kind == game.Move {
+				tgt := child.action.Target
+				if (tgt.Row == 0 && tgt.Col == 1) || (tgt.Row == 1 && tgt.Col == 0) {
+					t.Fatalf("unforced halo move %+v was not suppressed", child.action)
+				}
+			}
+		}
+	})
+
+	// 2. Forced first/sole preserving halo allowed
+	t.Run("forced first halo exit allowed", func(t *testing.T) {
+		state := makeStateFromLayout(5, 5, 1, 3, []string{
+			"b....",
+			".....",
+			".....",
+			".....",
+			"....B",
+		})
+		s := newSearcher(context.Background(), state)
+		children, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
+		if !ok {
+			t.Fatal("orderedChildren failed")
+		}
+		hasHalo := false
+		for _, child := range children {
+			if child.action.Kind == game.Move {
+				tgt := child.action.Target
+				if (tgt.Row == 0 && tgt.Col == 1) || (tgt.Row == 1 && tgt.Col == 0) || (tgt.Row == 1 && tgt.Col == 1) {
+					hasHalo = true
+				}
+			}
+		}
+		if !hasHalo {
+			t.Fatal("forced first halo moves were suppressed")
+		}
+	})
+
+	// 3. Contact disables
+	t.Run("contact disables halo suppression", func(t *testing.T) {
+		state := makeStateFromLayout(5, 5, 1, 2, []string{
+			"b....",
+			".12..",
+			".....",
+			".....",
+			"....B",
+		})
+		s := newSearcher(context.Background(), state)
+		children, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
+		if !ok {
+			t.Fatal("orderedChildren failed")
+		}
+		hasHalo := false
+		for _, child := range children {
+			if child.action.Kind == game.Move {
+				tgt := child.action.Target
+				if (tgt.Row == 0 && tgt.Col == 1) || (tgt.Row == 1 && tgt.Col == 0) {
+					hasHalo = true
+				}
+			}
+		}
+		if !hasHalo {
+			t.Fatal("halo moves were suppressed under contact")
+		}
+	})
+
+	// 4. Tactical capture/win/cut/neutrals preserved
+	t.Run("tactical wins/neutrals preserved", func(t *testing.T) {
+		// Neutrals placement is preserved
+		state := makeStateFromLayout(5, 5, 1, 3, []string{
+			"b....",
+			".1...",
+			"..1..",
+			".....",
+			"....B",
+		})
+		s := newSearcher(context.Background(), state)
+		children, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
+		if !ok {
+			t.Fatal("orderedChildren failed")
+		}
+		hasNeutrals := false
+		for _, child := range children {
+			if child.action.Kind == game.PlaceNeutrals {
+				hasNeutrals = true
+			}
+		}
+		if !hasNeutrals {
+			t.Fatal("neutrals placement was suppressed")
+		}
+	})
+
+	// 5. Serial/parallel identical
+	t.Run("serial and parallel search identical", func(t *testing.T) {
+		state := makeStateFromLayout(5, 5, 1, 2, []string{
+			"b....",
+			".1...",
+			".....",
+			".....",
+			"....B",
+		})
+		sSerial := newSearcher(context.Background(), state)
+		resSerial, okSerial := sSerial.atDepth(state, 3)
+		if !okSerial {
+			t.Fatal("serial search failed")
+		}
+
+		sParallel := newSearcher(context.Background(), state)
+		resParallel, okParallel := sParallel.atDepthParallel(state, 3, 2, resSerial.Action)
+		if !okParallel {
+			t.Fatal("parallel search failed")
+		}
+
+		if resSerial.Action != resParallel.Action || resSerial.Score != resParallel.Score {
+			t.Fatalf("mismatch: serial=%+v (score %d), parallel=%+v (score %d)",
+				resSerial.Action, resSerial.Score, resParallel.Action, resParallel.Score)
+		}
+	})
+
+	// 6. Reflection/rectangle/all-seat applicable
+	t.Run("rectangle and other seats applicable", func(t *testing.T) {
+		// Rectangle 5x6, player 2 (currentPlayer = 2) at (4,5) base
+		state := makeStateFromLayout(5, 6, 2, 2, []string{
+			"b.....",
+			"......",
+			"......",
+			"....2.",
+			".....B",
+		})
+		s := newSearcher(context.Background(), state)
+		children, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
+		if !ok {
+			t.Fatal("orderedChildren failed")
+		}
+		for _, child := range children {
+			if child.action.Kind == game.Move {
+				tgt := child.action.Target
+				// Seat 2 halo: adjacent to (4,5) which are (3,4), (3,5), (4,4)
+				if (tgt.Row == 4 && tgt.Col == 4) || (tgt.Row == 3 && tgt.Col == 5) {
+					t.Fatalf("unforced halo move %+v for seat 2 was not suppressed", child.action)
+				}
+			}
+		}
+	})
+}

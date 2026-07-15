@@ -63,6 +63,9 @@ type searcher struct {
 	nodeLimit          uint64
 	eval               evalWorkspace
 	pvs                bool
+	contactSeen        []bool
+	contactSeen2       []bool
+	contactQueue       []int32
 }
 
 const (
@@ -616,12 +619,51 @@ func (s *searcher) orderedChildren(position game.Position, root bool) ([]child, 
 	beforeActive := activeCount(state)
 	legal := 0
 	legalNeutrals := 0
+
+	var contactDetected bool
+	var legalCount, preservingCount int
+	var hasPreservingNonHalo bool
+	var actorBase game.Pos
+	var hasBase bool
+
+	if root {
+		if s.contactSeen == nil {
+			size := state.Rows() * state.Cols()
+			s.contactSeen = make([]bool, size)
+			s.contactSeen2 = make([]bool, size)
+			s.contactQueue = make([]int32, size)
+		}
+		contactDetected = hasContact(state, actor, s.contactSeen, s.contactQueue)
+		if !contactDetected {
+			actorBase, hasBase = state.Base(actor)
+			position.ForEachLegalAction(func(a game.Action) bool {
+				legalCount++
+				nextPos := position.ApplySearch(a)
+				if nextPos.State().Active(actor) {
+					preservingCount++
+					isHalo := false
+					if a.Kind == game.Move && hasBase && adjacent(a.Target, actorBase) {
+						if cell, ok := state.At(a.Target); ok && cell.Kind == game.Empty {
+							isHalo = true
+						}
+					}
+					if !isHalo {
+						hasPreservingNonHalo = true
+					}
+				}
+				return true
+			})
+		}
+	}
+
+	completed := true
 	position.ForEachSearchAction(func(action game.Action) bool {
 		legal++
 		if action.Kind == game.PlaceNeutrals {
 			legalNeutrals++
 		}
 		if !s.running() {
+			completed = false
 			return false
 		}
 		target, _ := state.At(action.Target)
@@ -644,10 +686,42 @@ func (s *searcher) orderedChildren(position game.Position, root bool) ([]child, 
 		if action.Kind == game.Move {
 			order.pressure = -nearestEnemyBaseDistance(state, actor, action.Target)
 		}
+
+		if root && !contactDetected && hasPreservingNonHalo {
+			isHalo := false
+			if action.Kind == game.Move && hasBase && adjacent(action.Target, actorBase) {
+				if cell, ok := state.At(action.Target); ok && cell.Kind == game.Empty {
+					isHalo = true
+				}
+			}
+			if isHalo {
+				isWin := order.win != 0
+				isElim := order.eliminations > 0
+				isCap := order.capture != 0
+				isSoleLegal := legalCount == 1
+				isSolePreserving := preservingCount == 1
+				isNeutral := action.Kind == game.PlaceNeutrals
+
+				isCut := false
+				if !isWin && !isElim && !isCap && !isSoleLegal && !isSolePreserving && !isNeutral {
+					isCut = isOpponentBaseCut(state, next, actor, action, s.contactSeen, s.contactQueue)
+				}
+
+				isDefense := false
+				if !isWin && !isElim && !isCap && !isSoleLegal && !isSolePreserving && !isNeutral && !isCut {
+					isDefense = isForcedDefense(state, next, actor, s.contactSeen, s.contactSeen2, s.contactQueue)
+				}
+
+				if !isWin && !isElim && !isCap && !isSoleLegal && !isSolePreserving && !isNeutral && !isCut && !isDefense {
+					return true
+				}
+			}
+		}
+
 		children = append(children, child{action: action, position: nextPosition, order: order, ordinal: legal - 1})
 		return true
 	})
-	if legal != len(children) {
+	if !completed {
 		return nil, legal, legalNeutrals, false
 	}
 	sort.SliceStable(children, func(i, j int) bool { return betterOrder(children[i].order, children[j].order) })
@@ -768,4 +842,253 @@ func stateHash(state game.State) uint64 {
 		}
 	}
 	return hash
+}
+
+func adjacent(a, b game.Pos) bool {
+	row := a.Row - b.Row
+	if row < 0 {
+		row = -row
+	}
+	col := a.Col - b.Col
+	if col < 0 {
+		col = -col
+	}
+	return row <= 1 && col <= 1 && a != b
+}
+
+func hasContact(state game.State, actor game.Player, seen []bool, queue []int32) bool {
+	rows, cols := state.Rows(), state.Cols()
+	size := rows * cols
+	clear(seen[:size])
+
+	actorBase, ok := state.Base(actor)
+	if !ok {
+		return false
+	}
+	baseCell, ok := state.At(actorBase)
+	if !ok || baseCell.Owner != actor || baseCell.Kind != game.Base {
+		return false
+	}
+
+	baseIdx := actorBase.Row*cols + actorBase.Col
+	seen[baseIdx] = true
+	queue[0] = int32(baseIdx)
+	head, tail := 0, 1
+
+	for head < tail {
+		curr := int(queue[head])
+		head++
+
+		currPos := game.Pos{Row: curr / cols, Col: curr % cols}
+
+		for r := currPos.Row - 1; r <= currPos.Row+1; r++ {
+			for c := currPos.Col - 1; c <= currPos.Col+1; c++ {
+				if r < 0 || r >= rows || c < 0 || c >= cols || (r == currPos.Row && c == currPos.Col) {
+					continue
+				}
+				neighbor := game.Pos{Row: r, Col: c}
+				nIdx := r*cols + c
+				nCell, _ := state.At(neighbor)
+
+				if nCell.Owner != actor && nCell.Owner != 0 && (nCell.Kind == game.Normal || nCell.Kind == game.Fortified) {
+					return true
+				}
+
+				if !seen[nIdx] && nCell.Owner == actor {
+					seen[nIdx] = true
+					queue[tail] = int32(nIdx)
+					tail++
+				}
+			}
+		}
+	}
+	return false
+}
+
+func countConnectedOpponentCells(state game.State, opponent game.Player, seen []bool, queue []int32) int {
+	rows, cols := state.Rows(), state.Cols()
+	size := rows * cols
+	clear(seen[:size])
+
+	oppBase, ok := state.Base(opponent)
+	if !ok {
+		return 0
+	}
+	baseCell, ok := state.At(oppBase)
+	if !ok || baseCell.Owner != opponent || baseCell.Kind != game.Base {
+		return 0
+	}
+
+	baseIdx := oppBase.Row*cols + oppBase.Col
+	seen[baseIdx] = true
+	queue[0] = int32(baseIdx)
+	head, tail := 0, 1
+	count := 1
+
+	for head < tail {
+		curr := int(queue[head])
+		head++
+
+		currPos := game.Pos{Row: curr / cols, Col: curr % cols}
+
+		for r := currPos.Row - 1; r <= currPos.Row+1; r++ {
+			for c := currPos.Col - 1; c <= currPos.Col+1; c++ {
+				if r < 0 || r >= rows || c < 0 || c >= cols || (r == currPos.Row && c == currPos.Col) {
+					continue
+				}
+				neighbor := game.Pos{Row: r, Col: c}
+				nIdx := r*cols + c
+				nCell, _ := state.At(neighbor)
+
+				if !seen[nIdx] && nCell.Owner == opponent {
+					seen[nIdx] = true
+					queue[tail] = int32(nIdx)
+					tail++
+					count++
+				}
+			}
+		}
+	}
+	return count
+}
+
+func isOpponentBaseCut(state game.State, nextState game.State, actor game.Player, a game.Action, seen []bool, queue []int32) bool {
+	for opp := game.Player(1); opp <= 4; opp++ {
+		if opp == actor || !state.Active(opp) {
+			continue
+		}
+		countBefore := countConnectedOpponentCells(state, opp, seen, queue)
+		countAfter := countConnectedOpponentCells(nextState, opp, seen, queue)
+
+		expectedMax := countBefore
+		if a.Kind == game.Move {
+			targetCell, _ := state.At(a.Target)
+			if targetCell.Owner == opp {
+				expectedMax--
+			}
+		}
+		if countAfter < expectedMax {
+			return true
+		}
+	}
+	return false
+}
+
+func countThreatenedCells(state game.State, actor game.Player, actorConnected []bool, oppConnected []bool, queue []int32) int {
+	rows, cols := state.Rows(), state.Cols()
+	size := rows * cols
+
+	clear(actorConnected[:size])
+	base, ok := state.Base(actor)
+	if !ok {
+		return 0
+	}
+	baseCell, ok := state.At(base)
+	if !ok || baseCell.Owner != actor || baseCell.Kind != game.Base {
+		return 0
+	}
+	baseIdx := base.Row*cols + base.Col
+	actorConnected[baseIdx] = true
+	queue[0] = int32(baseIdx)
+	head, tail := 0, 1
+	for head < tail {
+		curr := int(queue[head])
+		head++
+		currPos := game.Pos{Row: curr / cols, Col: curr % cols}
+		for r := currPos.Row - 1; r <= currPos.Row+1; r++ {
+			for c := currPos.Col - 1; c <= currPos.Col+1; c++ {
+				if r < 0 || r >= rows || c < 0 || c >= cols || (r == currPos.Row && c == currPos.Col) {
+					continue
+				}
+				neighbor := game.Pos{Row: r, Col: c}
+				nIdx := r*cols + c
+				nCell, _ := state.At(neighbor)
+				if !actorConnected[nIdx] && nCell.Owner == actor {
+					actorConnected[nIdx] = true
+					queue[tail] = int32(nIdx)
+					tail++
+				}
+			}
+		}
+	}
+
+	clear(oppConnected[:size])
+	for opp := game.Player(1); opp <= 4; opp++ {
+		if opp == actor || !state.Active(opp) {
+			continue
+		}
+		oppBase, ok := state.Base(opp)
+		if !ok {
+			continue
+		}
+		oppBaseCell, ok := state.At(oppBase)
+		if !ok || oppBaseCell.Owner != opp || oppBaseCell.Kind != game.Base {
+			continue
+		}
+		oppBaseIdx := oppBase.Row*cols + oppBase.Col
+		oppConnected[oppBaseIdx] = true
+		queue[0] = int32(oppBaseIdx)
+		head, tail = 0, 1
+		for head < tail {
+			curr := int(queue[head])
+			head++
+			currPos := game.Pos{Row: curr / cols, Col: curr % cols}
+			for r := currPos.Row - 1; r <= currPos.Row+1; r++ {
+				for c := currPos.Col - 1; c <= currPos.Col+1; c++ {
+					if r < 0 || r >= rows || c < 0 || c >= cols || (r == currPos.Row && c == currPos.Col) {
+						continue
+					}
+					neighbor := game.Pos{Row: r, Col: c}
+					nIdx := r*cols + c
+					nCell, _ := state.At(neighbor)
+					if !oppConnected[nIdx] && nCell.Owner == opp {
+						oppConnected[nIdx] = true
+						queue[tail] = int32(nIdx)
+						tail++
+					}
+				}
+			}
+		}
+	}
+
+	threatCount := 0
+	for r := 0; r < rows; r++ {
+		for c := 0; c < cols; c++ {
+			idx := r*cols + c
+			if actorConnected[idx] {
+				cell, _ := state.At(game.Pos{Row: r, Col: c})
+				if cell.Kind == game.Normal {
+					isAdjOppConnected := false
+					for nr := r - 1; nr <= r+1; nr++ {
+						for nc := c - 1; nc <= c+1; nc++ {
+							if nr < 0 || nr >= rows || nc < 0 || nc >= cols || (nr == r && nc == c) {
+								continue
+							}
+							nIdx := nr*cols + nc
+							if oppConnected[nIdx] {
+								isAdjOppConnected = true
+								break
+							}
+						}
+						if isAdjOppConnected {
+							break
+						}
+					}
+					if isAdjOppConnected {
+						threatCount++
+					}
+				}
+			}
+		}
+	}
+	return threatCount
+}
+
+func isForcedDefense(state game.State, nextState game.State, actor game.Player, seen []bool, seen2 []bool, queue []int32) bool {
+	threatBefore := countThreatenedCells(state, actor, seen, seen2, queue)
+	if threatBefore == 0 {
+		return false
+	}
+	threatAfter := countThreatenedCells(nextState, actor, seen, seen2, queue)
+	return threatAfter < threatBefore
 }
