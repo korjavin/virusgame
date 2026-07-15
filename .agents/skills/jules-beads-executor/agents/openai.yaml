@@ -1,0 +1,4 @@
+interface:
+  display_name: "Jules Beads Executor"
+  short_description: "Delegate a Beads task safely to Jules"
+  default_prompt: "Use $jules-beads-executor to send a claimed Beads task to Jules and integrate its PR safely."
