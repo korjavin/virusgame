@@ -53,22 +53,41 @@ func InitDB(dbPath string) {
 	log.Println("Database initialized successfully at", dbPath)
 }
 
-// SaveGame saves the game to the database. Returns a channel that closes when save is complete (for testing).
-func SaveGame(game *Game, termination string) <-chan struct{} {
-	done := make(chan struct{})
+// PersistGameOnce captures and saves a game's terminal state exactly once.
+// The SQLite write is synchronous so a terminal game is durable before hub
+// cleanup or process shutdown. Failed writes remain retryable.
+func PersistGameOnce(game *Game, termination string) bool {
+	game.persistenceMu.Lock()
+	defer game.persistenceMu.Unlock()
 
+	if game.persisted {
+		return true
+	}
+	if game.persistenceTermination == "" {
+		game.persistenceTermination = termination
+	}
+	if game.EndTime.IsZero() {
+		game.EndTime = time.Now()
+	}
+	if err := saveGame(game, game.persistenceTermination); err != nil {
+		log.Printf("Error saving game %s to database: %v", game.ID, err)
+		return false
+	}
+	game.persisted = true
+	log.Printf("Game %s saved to database", game.ID)
+	return true
+}
+
+// saveGame saves the already-finalized game snapshot to the database.
+func saveGame(game *Game, termination string) error {
 	if db == nil {
-		log.Println("Database not initialized, skipping save")
-		close(done)
-		return done
+		return fmt.Errorf("database not initialized")
 	}
 
 	// Extract data synchronously to avoid race conditions
 	pgnContent, err := generatePGN(game)
 	if err != nil {
-		log.Printf("Error generating PGN: %v", err)
-		close(done)
-		return done
+		return fmt.Errorf("generate move history: %w", err)
 	}
 
 	// Get player names
@@ -104,42 +123,18 @@ func SaveGame(game *Game, termination string) <-chan struct{} {
 	rows := game.Rows
 	cols := game.Cols
 	winner := game.Winner
-	endTime := time.Now()
+	endTime := game.EndTime
 
-	// Run saving in a separate goroutine to avoid blocking the game loop
-	// using ONLY captured local variables
-	go func() {
-		defer close(done)
-
-		// Insert into database
-		insertSQL := `
+	insertSQL := `
 		INSERT INTO games (id, started_at, ended_at, rows, cols, player1_name, player2_name, player3_name, player4_name, result, termination, pgn_content)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`
-
-		_, err = db.Exec(insertSQL,
-			gameID,
-			startTime,
-			endTime,
-			rows,
-			cols,
-			p1Name,
-			p2Name,
-			p3Name,
-			p4Name,
-			winner,
-			termination,
-			pgnContent,
-		)
-
-		if err != nil {
-			log.Printf("Error saving game to database: %v", err)
-		} else {
-			log.Printf("Game %s saved to database", gameID)
-		}
-	}()
-
-	return done
+	_, err = db.Exec(insertSQL,
+		gameID, startTime, endTime, rows, cols,
+		p1Name, p2Name, p3Name, p4Name,
+		winner, termination, pgnContent,
+	)
+	return err
 }
 func getPlayerNameSafe(player *LobbyPlayer) string {
 	if player.User != nil {
@@ -153,9 +148,9 @@ func getPlayerNameSafe(player *LobbyPlayer) string {
 
 // PGN structure definitions
 type PGNTurn struct {
-	Turn    int       `json:"turn"`
-	Player  int       `json:"player"`
-	Moves   []PGNMove `json:"moves"`
+	Turn   int       `json:"turn"`
+	Player int       `json:"player"`
+	Moves  []PGNMove `json:"moves"`
 }
 
 type PGNMove struct {
@@ -178,14 +173,14 @@ func generatePGN(game *Game) (string, error) {
 
 	// The prompt JSON structure:
 	/*
-	[
-	  {
-	    "turn": 1,
-	    "player": 1,
-	    "moves": [ ... ]
-	  },
-	  ...
-	]
+		[
+		  {
+		    "turn": 1,
+		    "player": 1,
+		    "moves": [ ... ]
+		  },
+		  ...
+		]
 	*/
 
 	// We'll iterate through MoveHistory and reconstruct this structure.
@@ -198,16 +193,16 @@ func generatePGN(game *Game) (string, error) {
 
 	// Let's look at `MoveAction` again (to be defined in types.go):
 	/*
-	type MoveAction struct {
-		Player int
-		Type string
-		Row int
-		Col int
-		Cells []CellPos
-		Time time.Time
-		DurationCS int
-		TurnNumber int // Global turn number or per-player turn count?
-	}
+		type MoveAction struct {
+			Player int
+			Type string
+			Row int
+			Col int
+			Cells []CellPos
+			Time time.Time
+			DurationCS int
+			TurnNumber int // Global turn number or per-player turn count?
+		}
 	*/
 
 	// Let's assume we add `TurnNumber` to `MoveAction`.

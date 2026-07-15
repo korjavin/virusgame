@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 
 	"virusgame/game"
@@ -185,6 +186,12 @@ type Game struct {
 	StartTime      time.Time
 	EndTime        time.Time
 	LastActionTime time.Time
+
+	// The first terminal path owns the immutable database snapshot; later
+	// terminal signals observe the same durable row.
+	persistenceMu          sync.Mutex
+	persisted              bool
+	persistenceTermination string
 }
 
 type MoveAction struct {
