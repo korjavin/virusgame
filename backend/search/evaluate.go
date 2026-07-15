@@ -24,11 +24,52 @@ type analysisScratch struct {
 	subtree        []uint16
 }
 
+// evalWorkspace owns the mutable buffers used by one searcher. It is not
+// shared: concurrent root workers must each keep their own workspace.
+type evalWorkspace struct {
+	cells        []game.Cell
+	queue        []int
+	connected    [4][]bool
+	articulation [4][]bool
+	cutLoss      [4][]uint16
+	scratch      analysisScratch
+}
+
+func (w *evalWorkspace) ensure(size int) {
+	w.cells = resize(w.cells, size)
+	w.queue = resize(w.queue, size)
+	for i := range w.connected {
+		w.connected[i] = resize(w.connected[i], size)
+		w.articulation[i] = resize(w.articulation[i], size)
+		w.cutLoss[i] = resize(w.cutLoss[i], size)
+	}
+	w.scratch.targets = resize(w.scratch.targets, size)
+	w.scratch.discovery = resize(w.scratch.discovery, size)
+	w.scratch.low = resize(w.scratch.low, size)
+	w.scratch.parent = resize(w.scratch.parent, size)
+	w.scratch.subtree = resize(w.scratch.subtree, size)
+}
+
+func resize[S ~[]E, E any](buffer S, size int) S {
+	if cap(buffer) < size {
+		return make(S, size)
+	}
+	return buffer[:size]
+}
+
 func evaluate(state game.State, player game.Player) int {
 	return evaluateAll(state)[player-1]
 }
 
 func evaluateAll(state game.State) [4]int {
+	return evaluateAllWithWorkspace(state, &evalWorkspace{})
+}
+
+func evaluateWithWorkspace(state game.State, player game.Player, workspace *evalWorkspace) int {
+	return evaluateAllWithWorkspace(state, workspace)[player-1]
+}
+
+func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int {
 	var utility [4]int
 	if state.GameOver() {
 		for player := game.Player(1); player <= 4; player++ {
@@ -42,9 +83,10 @@ func evaluateAll(state game.State) [4]int {
 	}
 
 	var metrics [4]playerMetrics
-	cells := snapshotCells(state)
-	connected := allConnected(state, cells)
-	scratch := newAnalysisScratch(state.Rows() * state.Cols())
+	size := state.Rows() * state.Cols()
+	workspace.ensure(size)
+	cells := snapshotCellsInto(state, workspace.cells)
+	connected := allConnectedInto(state, cells, workspace)
 	var raw [4]int
 	active := 0
 	for player := game.Player(1); player <= 4; player++ {
@@ -53,7 +95,9 @@ func evaluateAll(state game.State) [4]int {
 			continue
 		}
 		active++
-		metrics[player-1] = analyzeWithConnectivity(state, player, cells, connected, &scratch)
+		index := player - 1
+		metrics[index] = analyzeWithConnectivity(state, player, cells, connected, &workspace.scratch,
+			workspace.articulation[index], workspace.cutLoss[index])
 		m := metrics[player-1]
 		area := state.Rows() * state.Cols()
 		owned := m.normal + m.fortified + 1 // include the base
@@ -116,14 +160,20 @@ func evaluateAll(state game.State) [4]int {
 
 func analyze(state game.State, player game.Player) playerMetrics {
 	size := state.Rows() * state.Cols()
-	cells := snapshotCells(state)
-	connected := allConnected(state, cells)
-	scratch := newAnalysisScratch(size)
-	return analyzeWithConnectivity(state, player, cells, connected, &scratch)
+	workspace := evalWorkspace{}
+	workspace.ensure(size)
+	cells := snapshotCellsInto(state, workspace.cells)
+	connected := allConnectedInto(state, cells, &workspace)
+	index := player - 1
+	return analyzeWithConnectivity(state, player, cells, connected, &workspace.scratch,
+		workspace.articulation[index], workspace.cutLoss[index])
 }
 
 func snapshotCells(state game.State) []game.Cell {
-	cells := make([]game.Cell, state.Rows()*state.Cols())
+	return snapshotCellsInto(state, make([]game.Cell, state.Rows()*state.Cols()))
+}
+
+func snapshotCellsInto(state game.State, cells []game.Cell) []game.Cell {
 	for row := 0; row < state.Rows(); row++ {
 		for col := 0; col < state.Cols(); col++ {
 			index := row*state.Cols() + col
@@ -144,6 +194,17 @@ func allConnected(state game.State, cells []game.Cell) [4][]bool {
 	return connected
 }
 
+func allConnectedInto(state game.State, cells []game.Cell, workspace *evalWorkspace) [4][]bool {
+	for opponent := game.Player(1); opponent <= 4; opponent++ {
+		if state.Active(opponent) {
+			connectedCellsInto(state, cells, opponent, workspace.queue, workspace.connected[opponent-1])
+		} else {
+			clear(workspace.connected[opponent-1])
+		}
+	}
+	return workspace.connected
+}
+
 func newAnalysisScratch(size int) analysisScratch {
 	return analysisScratch{
 		targets: make([]bool, size), discovery: make([]uint16, size),
@@ -161,15 +222,17 @@ func (scratch *analysisScratch) reset() {
 	}
 }
 
-func analyzeWithConnectivity(state game.State, player game.Player, cells []game.Cell, connected [4][]bool, scratch *analysisScratch) playerMetrics {
-	size := state.Rows() * state.Cols()
+func analyzeWithConnectivity(state game.State, player game.Player, cells []game.Cell, connected [4][]bool,
+	scratch *analysisScratch, articulation []bool, cutLoss []uint16) playerMetrics {
 	scratch.reset()
+	clear(articulation)
+	clear(cutLoss)
 	m := playerMetrics{
 		connectedCells: connected[player-1],
-		articulation:   make([]bool, size),
-		cutLoss:        make([]uint16, size),
+		articulation:   articulation,
+		cutLoss:        cutLoss,
 	}
-	m.articulation, m.cutLoss = articulationPoints(state, player, cells, m.connectedCells, scratch)
+	articulationPointsInto(state, player, cells, m.connectedCells, scratch, articulation, cutLoss)
 	targets := scratch.targets
 	base := basePos(state, player)
 	for row := 0; row < state.Rows(); row++ {
@@ -253,10 +316,16 @@ func threatTempo(state game.State, player game.Player) int {
 
 func connectedCells(state game.State, cells []game.Cell, player game.Player, queue []int) []bool {
 	seen := make([]bool, state.Rows()*state.Cols())
+	connectedCellsInto(state, cells, player, queue, seen)
+	return seen
+}
+
+func connectedCellsInto(state game.State, cells []game.Cell, player game.Player, queue []int, seen []bool) {
+	clear(seen)
 	base := basePos(state, player)
 	cell := cells[indexFor(state, base)]
 	if cell.Owner != player || cell.Kind != game.Base {
-		return seen
+		return
 	}
 	baseIndex := base.Row*state.Cols() + base.Col
 	seen[baseIndex] = true
@@ -279,16 +348,22 @@ func connectedCells(state game.State, cells []game.Cell, player game.Player, que
 			}
 		}
 	}
-	return seen
 }
 
 func articulationPoints(state game.State, player game.Player, cells []game.Cell, connected []bool, scratch *analysisScratch) ([]bool, []uint16) {
 	size := len(connected)
+	result := make([]bool, size)
+	cutLoss := make([]uint16, size)
+	articulationPointsInto(state, player, cells, connected, scratch, result, cutLoss)
+	return result, cutLoss
+}
+
+func articulationPointsInto(state game.State, player game.Player, cells []game.Cell, connected []bool,
+	scratch *analysisScratch, result []bool, cutLoss []uint16) {
+	size := len(connected)
 	discovery := scratch.discovery
 	low := scratch.low
 	parent := scratch.parent
-	result := make([]bool, size)
-	cutLoss := make([]uint16, size)
 	subtree := scratch.subtree
 	time := uint16(0)
 	var visit func(int)
@@ -346,7 +421,6 @@ func articulationPoints(state game.State, player game.Player, cells []game.Cell,
 			}
 		}
 	}
-	return result, cutLoss
 }
 
 func threatenedByConnected(state game.State, index int, player game.Player, connected [4][]bool) bool {

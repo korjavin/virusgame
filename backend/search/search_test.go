@@ -394,6 +394,46 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 	}
 }
 
+func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
+	two := play(t, mustState(t, 5, 5, 2),
+		move(1, 1), move(2, 2), move(3, 3),
+		move(3, 4), move(2, 3), move(1, 2),
+	)
+	three := play(t, mustState(t, 5, 5, 3),
+		move(1, 1), move(2, 2), move(3, 3),
+		move(3, 3), move(2, 3), move(1, 2),
+		move(1, 3), move(2, 2), move(3, 1),
+	)
+	for _, fixture := range []struct {
+		name      string
+		state     game.State
+		wantDepth Result
+		wantNodes Result
+	}{
+		{
+			name: "minimax", state: two,
+			wantDepth: Result{Action: move(2, 3), Score: 6164, Depth: 2, Nodes: 216, Evaluations: 199},
+			wantNodes: Result{Action: move(2, 3), Score: 6164, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
+		},
+		{
+			name: "maxn", state: three,
+			wantDepth: Result{Action: move(1, 2), Score: 1762, Depth: 2, Nodes: 46, Evaluations: 40},
+			wantNodes: Result{Action: move(1, 2), Score: 3946, Depth: 3, Nodes: 1000, Evaluations: 814, BudgetExhausted: true},
+		},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			depth, ok := ChooseDepth(context.Background(), fixture.state, 2)
+			if !ok || depth != fixture.wantDepth {
+				t.Fatalf("fixed-depth result = %+v ok=%v, want origin/main %+v", depth, ok, fixture.wantDepth)
+			}
+			nodes, ok := ChooseNodeBudget(fixture.state, 1000)
+			if !ok || nodes != fixture.wantNodes {
+				t.Fatalf("fixed-node result = %+v ok=%v, want origin/main %+v", nodes, ok, fixture.wantNodes)
+			}
+		})
+	}
+}
+
 func BenchmarkDepthThree(b *testing.B) {
 	state, _ := game.New(10, 10, 2)
 	for i := 0; i < b.N; i++ {
