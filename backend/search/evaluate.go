@@ -4,22 +4,12 @@ import "virusgame/game"
 
 const mateScore = 1_000_000_000
 
-const (
-	// Frozen from matched corridor and forced-defense regressions. A larger
-	// quiet-structure penalty displaced an immediate rectangular cut defense.
-	latentCutPenaltyCap = 600
-	baseOpeningUtility  = 80
-	baseAnchorUtility   = 420
-)
-
 type playerMetrics struct {
 	connected, disconnected    int
 	normal, fortified          int
 	mobility, captures         int
 	baseExits, baseOpenings    int
-	baseNormalExits            int
 	baseAnchors, baseThreat    int
-	latentCutLoss              int
 	threatened, threatenedLoss int
 	threatTempo                int
 	articulation               []bool
@@ -115,8 +105,7 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			normalized(m.normal, area, 30) + normalized(m.fortified, area, 6) +
 			normalized(m.mobility, area, 1) + normalized(m.captures, area, 1) -
 			normalized(m.disconnected, owned, 1) +
-			baseExitUtility(m.baseNormalExits) + baseOpeningUtility*m.baseOpenings + baseAnchorUtility*m.baseAnchors -
-			min(latentCutPenaltyCap, ratio(m.latentCutLoss, max(1, m.connected))) -
+			180*m.baseExits + 80*m.baseOpenings + 240*m.baseAnchors -
 			650*m.baseThreat*m.threatTempo -
 			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
 			m.threatTempo*ratio(m.threatened, max(1, m.connected))
@@ -260,9 +249,6 @@ func analyzeWithConnectivity(state game.State, player game.Player, cells []game.
 				}
 				if m.connectedCells[index] {
 					m.connected++
-					if cell.Kind == game.Normal && m.articulation[index] {
-						m.latentCutLoss += int(m.cutLoss[index])
-					}
 				} else {
 					m.disconnected++
 				}
@@ -303,8 +289,6 @@ func analyzeWithConnectivity(state game.State, player game.Player, cells []game.
 			m.baseExits++
 			if cell.Kind == game.Fortified {
 				m.baseAnchors++
-			} else if cell.Kind == game.Normal {
-				m.baseNormalExits++
 			}
 		case cell.Kind == game.Empty:
 			m.baseOpenings++
@@ -319,21 +303,6 @@ func analyzeWithConnectivity(state game.State, player game.Player, cells []game.
 	}
 	m.threatTempo = threatTempo(state, player)
 	return m
-}
-
-func baseExitUtility(normalExits int) int {
-	switch normalExits {
-	case 0:
-		return 0
-	case 1:
-		return 180
-	case 2:
-		return 270
-	default:
-		// A completed three-cell capturable ring is actively harmful: it
-		// consumes the last empty escape and offers the opponent a foothold.
-		return 225
-	}
 }
 
 // threatTempo makes an unresolved attack more urgent as the defender spends
