@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -88,7 +89,12 @@ func (h *Hub) run() {
 }
 
 func (h *Hub) handleIllegalMove(game *Game, player int, reason string) {
+	h.handleIllegalAction(game, player, &Message{Type: "move", GameID: game.ID}, reason)
+}
+
+func (h *Hub) handleIllegalAction(game *Game, player int, msg *Message, reason string) {
 	log.Printf("Player %d made illegal move in game %s: %s", player, game.ID, reason)
+	h.captureRejectedAttempt(game, player, msg, reason)
 
 	// Send error to the specific player if possible
 	var user *User
@@ -105,7 +111,10 @@ func (h *Hub) handleIllegalMove(game *Game, player int, reason string) {
 	}
 
 	if user != nil {
-		h.sendError(user, "Defeated by illegal move: "+reason)
+		errorMsg := Message{Type: "error", GameID: game.ID, Username: "Defeated by illegal move: " + reason, RequestID: msg.RequestID}
+		snapshot := gameSnapshot(game)
+		errorMsg.Snapshot = &snapshot
+		h.sendToUser(user, &errorMsg)
 	}
 
 	// Eliminate player
@@ -155,6 +164,130 @@ func (h *Hub) handleIllegalMove(game *Game, player int, reason string) {
 	if !game.GameOver && game.CurrentPlayer == player {
 		h.endTurn(game)
 	}
+}
+
+func (h *Hub) captureRejectedAttempt(game *Game, player int, msg *Message, reason string) {
+	snapshot := gameSnapshot(game)
+	encoded, _ := json.Marshal(snapshot)
+	digest := sha256.Sum256(encoded)
+	game.RejectedAttempt = &RejectedAttempt{
+		Player: player, Action: msg.Type, Row: msg.Row, Col: msg.Col,
+		Cells: append([]CellPos(nil), msg.Cells...), Reason: reason,
+		Turn: game.TurnCount, MovesLeft: game.MovesLeft, RequestID: msg.RequestID,
+		StateHash: fmt.Sprintf("sha256:%x", digest), Snapshot: &snapshot,
+	}
+}
+
+func (game *Game) requestHistory(player int) *actionRequestHistory {
+	index := player - 1
+	if index < 0 || index >= len(game.actionRequests) {
+		return nil
+	}
+	if game.actionRequests[index] == nil {
+		game.actionRequests[index] = &actionRequestHistory{byID: make(map[string]actionRequestRecord)}
+	}
+	return game.actionRequests[index]
+}
+
+func (game *Game) hasActionRequest(player int, requestID string) bool {
+	if requestID == "" {
+		return false
+	}
+	history := game.requestHistory(player)
+	_, exists := history.byID[requestID]
+	return exists
+}
+
+func actionRequestRecordFor(message *Message) actionRequestRecord {
+	// Include both action variants and pointer presence. This makes a request ID
+	// identify one exact semantic payload, including fields invalid for its type.
+	payload := struct {
+		Type  string    `json:"type"`
+		Row   *int      `json:"row"`
+		Col   *int      `json:"col"`
+		Cells []CellPos `json:"cells"`
+	}{message.Type, message.Row, message.Col, message.Cells}
+	encoded, _ := json.Marshal(payload)
+	return actionRequestRecord{Fingerprint: sha256.Sum256(encoded)}
+}
+
+func (game *Game) actionRequestReplay(player int, message *Message) (exists, matches bool) {
+	if message.RequestID == "" {
+		return false, false
+	}
+	record, exists := game.requestHistory(player).byID[message.RequestID]
+	return exists, exists && record == actionRequestRecordFor(message)
+}
+
+func (game *Game) rememberActionRequest(player int, message *Message) {
+	requestID := message.RequestID
+	if requestID == "" {
+		return
+	}
+	history := game.requestHistory(player)
+	if _, exists := history.byID[requestID]; exists {
+		return
+	}
+	history.byID[requestID] = actionRequestRecordFor(message)
+	history.order = append(history.order, requestID)
+	if len(history.order) > actionRequestHistoryLimit {
+		oldest := history.order[0]
+		history.order = history.order[1:]
+		delete(history.byID, oldest)
+	}
+}
+
+func (h *Hub) acknowledgeAction(user *User, game *Game, requestID string) {
+	ack := Message{Type: "action_ack", GameID: game.ID, RequestID: requestID, MovesLeft: game.MovesLeft, Player: game.CurrentPlayer}
+	snapshot := gameSnapshot(game)
+	ack.Snapshot = &snapshot
+	h.sendToUser(user, &ack)
+}
+
+func (h *Hub) rejectAction(user *User, game *Game, requestID, reason string) {
+	message := Message{Type: "error", GameID: game.ID, Username: reason, RequestID: requestID}
+	snapshot := gameSnapshot(game)
+	message.Snapshot = &snapshot
+	h.sendToUser(user, &message)
+}
+
+func validActionRequestID(requestID string) bool {
+	if requestID == "" { // Legacy clients did not send action IDs.
+		return true
+	}
+	if len(requestID) > 128 {
+		return false
+	}
+	for _, character := range requestID {
+		if character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' || character == '-' || character == '_' ||
+			character == '.' || character == ':' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func playerNumberForUser(game *Game, user *User) int {
+	if game == nil || user == nil {
+		return 0
+	}
+	if game.IsMultiplayer {
+		for index, player := range game.Players {
+			if player != nil && player.User != nil && player.User.ID == user.ID {
+				return index + 1
+			}
+		}
+		return 0
+	}
+	if game.Player1 != nil && game.Player1.ID == user.ID {
+		return 1
+	}
+	if game.Player2 != nil && game.Player2.ID == user.ID {
+		return 2
+	}
+	return 0
 }
 
 func (h *Hub) handleConnect(client *Client) {
@@ -636,24 +769,24 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 	board[rows-1][cols-1] = NewCell(2, CellFlagBase)
 
 	game := &Game{
-		ID:            gameID,
-		Player1:       challenge.FromUser,
-		Player2:       challenge.ToUser,
-		Board:         board,
-		CurrentPlayer: 1,
-		MovesLeft:     3,
-		Player1Base:   CellPos{Row: 0, Col: 0},
-		Player2Base:   CellPos{Row: rows - 1, Col: cols - 1},
-		GameOver:      false,
-		Winner:        0,
+		ID:                  gameID,
+		Player1:             challenge.FromUser,
+		Player2:             challenge.ToUser,
+		Board:               board,
+		CurrentPlayer:       1,
+		MovesLeft:           3,
+		Player1Base:         CellPos{Row: 0, Col: 0},
+		Player2Base:         CellPos{Row: rows - 1, Col: cols - 1},
+		GameOver:            false,
+		Winner:              0,
 		Player1NeutralsUsed: false,
 		Player2NeutralsUsed: false,
-		Rows:          rows,
-		Cols:          cols,
-		StartTime:     time.Now(),
-		LastActionTime: time.Now(),
-		TurnCount:     1,
-		MoveHistory:   []MoveAction{},
+		Rows:                rows,
+		Cols:                cols,
+		StartTime:           time.Now(),
+		LastActionTime:      time.Now(),
+		TurnCount:           1,
+		MoveHistory:         []MoveAction{},
 	}
 	h.games[gameID] = game
 
@@ -726,51 +859,47 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		return
 	}
 
-	// Check Row and Col are provided
+	// Prove membership before returning any game-specific response or snapshot.
+	playerNum := playerNumberForUser(game, user)
+	if playerNum == 0 {
+		return
+	}
+	if !validActionRequestID(msg.RequestID) {
+		h.rejectAction(user, game, msg.RequestID, "Invalid action request ID")
+		return
+	}
+	if exists, matches := game.actionRequestReplay(playerNum, msg); exists {
+		if matches {
+			h.acknowledgeAction(user, game, msg.RequestID)
+		} else {
+			h.rejectAction(user, game, msg.RequestID, "Action request ID was reused with different content")
+		}
+		return
+	}
 	if msg.Row == nil || msg.Col == nil {
 		log.Printf("Move message missing row or col")
+		h.rejectAction(user, game, msg.RequestID, "Move is missing row or column")
+		return
+	}
+	if len(msg.Cells) != 0 {
+		h.rejectAction(user, game, msg.RequestID, "Move must not contain neutral cells")
 		return
 	}
 
 	row := *msg.Row
 	col := *msg.Col
 
-	// Find player number for this user
-	var playerNum int
-	if game.IsMultiplayer {
-		// Find player in multiplayer game
-		for i := 0; i < 4; i++ {
-			if game.Players[i] != nil && game.Players[i].User != nil && game.Players[i].User.ID == user.ID {
-				playerNum = i + 1
-				break
-			}
-		}
-		if playerNum == 0 {
-			return // User not in this game
-		}
-	} else {
-		// Legacy 1v1 mode
-		if game.Player1.ID == user.ID {
-			playerNum = 1
-		} else if game.Player2.ID == user.ID {
-			playerNum = 2
-		} else {
-			return
-		}
-	}
-
 	if game.CurrentPlayer != playerNum || game.GameOver {
+		h.rejectAction(user, game, msg.RequestID, "It is not this player's turn")
 		return
 	}
 
-	// Validate and apply move
-	cellValue := game.Board[row][col]
-
-	// Strictly validate move (checks bounds, target validity, AND connectivity)
+	// isValidMove checks bounds before any board access.
 	if !h.isValidMove(game, row, col, playerNum) {
-		h.handleIllegalMove(game, playerNum, fmt.Sprintf("Invalid move to (%d, %d)", row, col))
+		h.handleIllegalAction(game, playerNum, msg, fmt.Sprintf("Invalid move to (%d, %d)", row, col))
 		return
 	}
+	cellValue := game.Board[row][col]
 
 	// Apply move
 	moveType := "place"
@@ -796,6 +925,7 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		TurnNumber: game.TurnCount,
 	}
 	game.MoveHistory = append(game.MoveHistory, moveAction)
+	game.rememberActionRequest(playerNum, msg)
 
 	game.MovesLeft--
 
@@ -816,6 +946,7 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		Col:       msg.Col,
 		Player:    playerNum,
 		MovesLeft: game.MovesLeft,
+		RequestID: msg.RequestID,
 	}
 	h.broadcastToGame(game, &moveMsg)
 
@@ -878,46 +1009,48 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		return
 	}
 
-	var playerNum int
-
-	// Determine player number based on game type
-	if game.IsMultiplayer {
-		// Multiplayer lobby game (3-4 players)
-		found := false
-		for i, player := range game.Players {
-			if player != nil && player.User != nil && player.User.ID == user.ID {
-				playerNum = i + 1
-				found = true
-				break
-			}
-		}
-		if !found {
-			return
-		}
-	} else {
-		// 1v1 game
-		if game.Player1 != nil && game.Player1.ID == user.ID {
-			playerNum = 1
-		} else if game.Player2 != nil && game.Player2.ID == user.ID {
-			playerNum = 2
-		} else {
-			return
-		}
+	// Prove membership before returning any game-specific response or snapshot.
+	playerNum := playerNumberForUser(game, user)
+	if playerNum == 0 {
+		return
+	}
+	if !validActionRequestID(msg.RequestID) {
+		h.rejectAction(user, game, msg.RequestID, "Invalid action request ID")
+		return
 	}
 
-	if game.CurrentPlayer != playerNum || game.GameOver {
+	if exists, matches := game.actionRequestReplay(playerNum, msg); exists {
+		if matches {
+			h.acknowledgeAction(user, game, msg.RequestID)
+		} else {
+			h.rejectAction(user, game, msg.RequestID, "Action request ID was reused with different content")
+		}
+		return
+	}
+	if msg.Row != nil || msg.Col != nil {
+		h.rejectAction(user, game, msg.RequestID, "Neutrals must not contain a move target")
 		return
 	}
 
 	// Validate exactly 2 cells
 	if len(msg.Cells) != 2 {
 		log.Printf("Neutrals invalid: must supply exactly 2 cells (got %d)", len(msg.Cells))
+		h.rejectAction(user, game, msg.RequestID, "Neutrals must contain exactly two cells")
+		return
+	}
+	if game.CurrentPlayer != playerNum || game.GameOver {
+		h.rejectAction(user, game, msg.RequestID, "It is not this player's turn")
+		return
+	}
+	if msg.Cells[0] == msg.Cells[1] {
+		h.rejectAction(user, game, msg.RequestID, "Neutral cells must be distinct")
 		return
 	}
 
 	// Validate cells belong to player and are NOT bases
 	for _, cell := range msg.Cells {
 		if cell.Row < 0 || cell.Row >= game.Rows || cell.Col < 0 || cell.Col >= game.Cols {
+			h.rejectAction(user, game, msg.RequestID, "Neutral cell is outside the board")
 			return
 		}
 
@@ -925,12 +1058,14 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 
 		if cellValue.Player() != playerNum {
 			log.Printf("Neutrals invalid: cell (%d,%d) does not belong to player %d", cell.Row, cell.Col, playerNum)
+			h.rejectAction(user, game, msg.RequestID, "Neutral cell does not belong to player")
 			return
 		}
 
 		// Check if cell is a base
 		if cellValue.IsBase() {
 			log.Printf("Neutrals invalid: cell (%d,%d) is a base", cell.Row, cell.Col)
+			h.rejectAction(user, game, msg.RequestID, "A base cannot become neutral")
 			return
 		}
 	}
@@ -938,10 +1073,10 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 	// Mark cells as killed
 	for _, cell := range msg.Cells {
 		if game.Board[cell.Row][cell.Col].Player() == playerNum {
-            // Note: Killed cell has no player (Player 0) but has FlagKilled (0x30)
-            // But wait, if it's killed, it should probably belong to no one.
-            // "0x30 = neutral/killed (0x30 flag + 0x00 no player)"
-            // So we use NewCell(0, CellFlagKilled)
+			// Note: Killed cell has no player (Player 0) but has FlagKilled (0x30)
+			// But wait, if it's killed, it should probably belong to no one.
+			// "0x30 = neutral/killed (0x30 flag + 0x00 no player)"
+			// So we use NewCell(0, CellFlagKilled)
 			game.Board[cell.Row][cell.Col] = NewCell(0, CellFlagKilled)
 		}
 	}
@@ -974,36 +1109,20 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		TurnNumber: game.TurnCount,
 	}
 	game.MoveHistory = append(game.MoveHistory, moveAction)
+	game.rememberActionRequest(playerNum, msg)
 
 	// Broadcast to other players
 	neutralsMsg := Message{
-		Type:   "neutrals_placed",
-		GameID: msg.GameID,
-		Player: playerNum,
-		Cells:  msg.Cells,
+		Type:      "neutrals_placed",
+		GameID:    msg.GameID,
+		Player:    playerNum,
+		Cells:     msg.Cells,
+		RequestID: msg.RequestID,
 	}
 	neutralSnapshot := gameSnapshot(game)
 	neutralsMsg.Snapshot = &neutralSnapshot
 
-	if game.IsMultiplayer {
-		// Broadcast to all other players in the game
-		for i, player := range game.Players {
-			if player != nil && player.User != nil && (i+1) != playerNum {
-				h.sendToUser(player.User, &neutralsMsg)
-			}
-		}
-	} else {
-		// Send to opponent in 1v1
-		var opponentUser *User
-		if playerNum == 1 {
-			opponentUser = game.Player2
-		} else {
-			opponentUser = game.Player1
-		}
-		if opponentUser != nil {
-			h.sendToUser(opponentUser, &neutralsMsg)
-		}
-	}
+	h.broadcastToGame(game, &neutralsMsg)
 
 	// End turn
 	if game.IsMultiplayer {
@@ -1124,7 +1243,7 @@ func (h *Hub) handleResign(user *User, msg *Message) {
 				cell := game.Board[i][j]
 				if cell != 0 && cell.Player() == resignedPlayer {
 					// Mark as killed (neutral)
-                    game.Board[i][j] = NewCell(0, CellFlagKilled)
+					game.Board[i][j] = NewCell(0, CellFlagKilled)
 				}
 			}
 		}
@@ -1469,7 +1588,7 @@ func (h *Hub) checkWinCondition(game *Game) {
 			if cell == 0 {
 				continue
 			}
-            if cell.Player() == 1 {
+			if cell.Player() == 1 {
 				player1Count++
 			} else if cell.Player() == 2 {
 				player2Count++
@@ -1555,7 +1674,7 @@ func (h *Hub) isValidMove(game *Game, row, col, player int) bool {
 
 	// Must be empty or opponent cell (not own cell)
 	if cellValue != 0 {
-        // If cell belongs to this player, it's not a valid target
+		// If cell belongs to this player, it's not a valid target
 		if cellValue.Player() == player {
 			return false
 		}
@@ -1573,7 +1692,7 @@ func (h *Hub) isValidMove(game *Game, row, col, player int) bool {
 			if adjRow >= 0 && adjRow < game.Rows && adjCol >= 0 && adjCol < game.Cols {
 				adjCell := game.Board[adjRow][adjCol]
 				if adjCell != 0 {
-                    if adjCell.Player() == player {
+					if adjCell.Player() == player {
 						// Check if this cell is connected to base
 						if h.isConnectedToBase(game, adjRow, adjCol, player) {
 							return true
@@ -1630,7 +1749,7 @@ func (h *Hub) isConnectedToBase(game *Game, startRow, startCol, player int) bool
 					if !visited[key] {
 						cell := game.Board[newRow][newCol]
 						if cell != 0 {
-                            if cell.Player() == player {
+							if cell.Player() == player {
 								visited[key] = true
 								stack = append(stack, struct{ row, col int }{newRow, newCol})
 							}
@@ -2192,10 +2311,10 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 
 	// Determine base positions based on number of players
 	basePositions := [4]CellPos{
-		{Row: 0, Col: 0},                // Player 1: top-left
-		{Row: rows - 1, Col: cols - 1},  // Player 2: bottom-right
-		{Row: 0, Col: cols - 1},         // Player 3: top-right
-		{Row: rows - 1, Col: 0},         // Player 4: bottom-left
+		{Row: 0, Col: 0},               // Player 1: top-left
+		{Row: rows - 1, Col: cols - 1}, // Player 2: bottom-right
+		{Row: 0, Col: cols - 1},        // Player 3: top-right
+		{Row: rows - 1, Col: 0},        // Player 4: bottom-left
 	}
 
 	// Count active players and set bases
@@ -2204,30 +2323,30 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 	for i := 0; i < lobby.MaxPlayers; i++ {
 		if lobby.Players[i] != nil {
 			gamePlayers[i] = lobby.Players[i]
-            // Set base cell for player i+1
+			// Set base cell for player i+1
 			board[basePositions[i].Row][basePositions[i].Col] = NewCell(i+1, CellFlagBase)
 			activePlayers++
 		}
 	}
 
 	game := &Game{
-		ID:            gameID,
-		Board:         board,
-		CurrentPlayer: 1,
-		MovesLeft:     3,
-		GameOver:      false,
-		Winner:        0,
-		Rows:          rows,
-		Cols:          cols,
-		IsMultiplayer: true,
-		Players:       gamePlayers,
-		PlayerBases:   basePositions,
-		NeutralsUsed:  [4]bool{false, false, false, false},
-		ActivePlayers: activePlayers,
-		StartTime:     time.Now(),
+		ID:             gameID,
+		Board:          board,
+		CurrentPlayer:  1,
+		MovesLeft:      3,
+		GameOver:       false,
+		Winner:         0,
+		Rows:           rows,
+		Cols:           cols,
+		IsMultiplayer:  true,
+		Players:        gamePlayers,
+		PlayerBases:    basePositions,
+		NeutralsUsed:   [4]bool{false, false, false, false},
+		ActivePlayers:  activePlayers,
+		StartTime:      time.Now(),
 		LastActionTime: time.Now(),
-		TurnCount:     1,
-		MoveHistory:   []MoveAction{},
+		TurnCount:      1,
+		MoveHistory:    []MoveAction{},
 	}
 
 	h.games[gameID] = game
@@ -2416,7 +2535,7 @@ func (h *Hub) endTurn(game *Game) {
 							for j := 0; j < game.Cols; j++ {
 								cell := game.Board[i][j]
 								if cell != 0 {
-                                    if cell.Player() == nextPlayer {
+									if cell.Player() == nextPlayer {
 										game.Board[i][j] = 0
 									}
 								}
@@ -2610,7 +2729,7 @@ func (h *Hub) countPlayerPieces(game *Game, player int) int {
 		for j := 0; j < game.Cols; j++ {
 			cell := game.Board[i][j]
 			if cell != 0 {
-                if cell.Player() == player {
+				if cell.Player() == player {
 					count++
 				}
 			}
@@ -2643,7 +2762,7 @@ func (h *Hub) eliminateDisconnectedPlayers(game *Game) {
 							for col := 0; col < game.Cols; col++ {
 								cell := game.Board[row][col]
 								if cell != 0 {
-                                    if cell.Player() == i {
+									if cell.Player() == i {
 										game.Board[row][col] = 0
 									}
 								}
