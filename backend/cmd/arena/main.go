@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"time"
 
 	"virusgame/arena"
@@ -22,7 +23,7 @@ func main() {
 	corpusSplit := flag.String("corpus-split", "train", "frozen corpus split: train (default) or explicitly requested heldout")
 	corpusTrack := flag.String("corpus-track", "", "optional corpus track")
 	corpusBoard := flag.String("corpus-board", "", "optional exact board shard, e.g. 12x12")
-	parallel := flag.Int("parallel", 1, "maximum concurrent board shards")
+	parallel := flag.Int("parallel", defaultParallelism(runtime.GOMAXPROCS(0)), "maximum concurrent board shards")
 	jsonOutput := flag.Bool("json", false, "emit machine-readable corpus report")
 	enforceGate := flag.Bool("enforce-corpus-gate", true, "hard-fail incumbent train superiority thresholds")
 	flag.Parse()
@@ -203,6 +204,16 @@ func main() {
 	if !passed {
 		log.Fatalf("strength gate failed: complete=%v legacy=%v greedy=%v", complete, legacyPassed, greedyPassed)
 	}
+}
+
+func defaultParallelism(cpus int) int {
+	if cpus <= 1 {
+		return 1
+	}
+	if cpus > 4 {
+		return 3
+	}
+	return cpus - 1
 }
 
 func searchBudget(production bool) time.Duration {

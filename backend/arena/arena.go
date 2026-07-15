@@ -13,8 +13,10 @@ import (
 type Agent func(game.State) (game.Action, bool)
 
 // DecisionTelemetry is emitted by search-aware agents. CompletedTurnDepth is
-// the number of whole turns the agent reports as fully searched; zero means
-// that the agent does not expose turn-depth information.
+// the number of whole turns fully searched. SearchedRoot fields count the
+// authoritative root candidates covered by the last completed iteration; they
+// are zero when no iteration completed, even if an aborted iteration visited
+// some candidates. LegalRoot fields always describe the authoritative set.
 type DecisionTelemetry struct {
 	Nodes                                   uint64
 	Evaluations                             uint64

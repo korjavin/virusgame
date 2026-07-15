@@ -24,6 +24,7 @@ type Result struct {
 	Nodes           uint64
 	Evaluations     uint64
 	BudgetExhausted bool
+	SearchComplete  bool
 }
 
 type tableEntry struct {
@@ -68,6 +69,7 @@ func chooseNodeBudget(state game.State, limit uint64) (Result, bool) {
 	}
 	best.Nodes, best.Evaluations = nodes, evaluations
 	best.BudgetExhausted = nodes >= limit
+	best.SearchComplete = best.Depth == maxDepth
 	return best, true
 }
 

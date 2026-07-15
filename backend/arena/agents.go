@@ -20,25 +20,29 @@ func Instrument(agent Agent) TelemetryAgent {
 // frozen incumbent under the same deterministic node ceiling.
 func TelemetryNodeBudget(nodes uint64, frozen bool) TelemetryAgent {
 	return func(state game.State) (game.Action, DecisionTelemetry, bool) {
-		legal, neutrals := rootCounts(state)
 		if frozen {
 			result, ok := incumbent.ChooseNodeBudget(state, nodes)
-			return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: legal, LegalRootNeutrals: neutrals, SearchedRootNeutrals: neutrals, BudgetShortfall: !result.BudgetExhausted}, ok
+			legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
+			return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: searched, LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals, BudgetShortfall: !result.BudgetExhausted && !result.SearchComplete}, ok
 		}
 		result, ok := search.ChooseNodeBudget(state, nodes)
-		return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: legal, LegalRootNeutrals: neutrals, SearchedRootNeutrals: neutrals, BudgetShortfall: !result.BudgetExhausted}, ok
+		legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
+		return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: searched, LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals, BudgetShortfall: !result.BudgetExhausted && !result.SearchComplete}, ok
 	}
 }
 
-func rootCounts(state game.State) (int, int) {
+func rootCoverage(state game.State, completedDepth int) (legal, searched, neutrals, searchedNeutrals int) {
 	actions := state.LegalActions()
-	neutrals := 0
 	for _, action := range actions {
 		if action.Kind == game.PlaceNeutrals {
 			neutrals++
 		}
 	}
-	return len(actions), neutrals
+	legal = len(actions)
+	if completedDepth > 0 {
+		searched, searchedNeutrals = legal, neutrals
+	}
+	return
 }
 
 func Tournament(depth int) Agent {
@@ -54,13 +58,13 @@ func Tournament(depth int) Agent {
 func TelemetryTournament(depth int) TelemetryAgent {
 	return func(state game.State) (game.Action, DecisionTelemetry, bool) {
 		result, ok := search.ChooseDepth(context.Background(), state, depth)
-		legal, neutrals := rootCounts(state)
+		legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
 		return result.Action, DecisionTelemetry{
 			Nodes:              result.Nodes,
 			Evaluations:        result.Evaluations,
 			CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth),
-			LegalRootActions:   legal, SearchedRootActions: legal,
-			LegalRootNeutrals: neutrals, SearchedRootNeutrals: neutrals,
+			LegalRootActions:   legal, SearchedRootActions: searched,
+			LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals,
 		}, ok
 	}
 }
@@ -68,8 +72,8 @@ func TelemetryTournament(depth int) TelemetryAgent {
 func TelemetryFrozenTournament(depth int) TelemetryAgent {
 	return func(state game.State) (game.Action, DecisionTelemetry, bool) {
 		result, ok := incumbent.ChooseDepth(context.Background(), state, depth)
-		legal, neutrals := rootCounts(state)
-		return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: legal, LegalRootNeutrals: neutrals, SearchedRootNeutrals: neutrals}, ok
+		legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
+		return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: searched, LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals}, ok
 	}
 }
 
@@ -89,13 +93,13 @@ func TelemetryProduction() TelemetryAgent {
 		ctx, cancel := context.WithTimeout(context.Background(), search.ProductionBudget)
 		defer cancel()
 		result, ok := search.Choose(ctx, state)
-		legal, neutrals := rootCounts(state)
+		legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
 		return result.Action, DecisionTelemetry{
 			Nodes:              result.Nodes,
 			Evaluations:        result.Evaluations,
 			CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth),
-			LegalRootActions:   legal, SearchedRootActions: legal,
-			LegalRootNeutrals: neutrals, SearchedRootNeutrals: neutrals,
+			LegalRootActions:   legal, SearchedRootActions: searched,
+			LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals,
 		}, ok
 	}
 }
@@ -105,8 +109,8 @@ func TelemetryFrozenProduction() TelemetryAgent {
 		ctx, cancel := context.WithTimeout(context.Background(), search.ProductionBudget)
 		defer cancel()
 		result, ok := incumbent.Choose(ctx, state)
-		legal, neutrals := rootCounts(state)
-		return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: legal, LegalRootNeutrals: neutrals, SearchedRootNeutrals: neutrals}, ok
+		legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
+		return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: searched, LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals}, ok
 	}
 }
 
