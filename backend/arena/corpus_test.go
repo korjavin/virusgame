@@ -58,7 +58,7 @@ func TestFrozenCorpusCoverageAndChecksums(t *testing.T) {
 			t.Fatalf("split %s incomplete: competitive=%v multiplayer=%v stress=%v players=%v moves=%v phases=%v strata=%v trajectories=%d", split, competitive, multiplayer, stress, players, moves, phases, strata, len(trajectories))
 		}
 		for board := range wantCompetitive {
-			if len(competitivePlayers[board]) != 2 || len(competitiveMoves[board]) != 3 || len(competitiveTrajectories[board]) != 2 || !competitivePhases[board]["opening"] || !competitivePhases[board]["contact_consolidation"] || !competitivePhases[board]["tactical_base_threat"] || !competitiveStrata[board]["tactical"] || !competitiveStrata[board]["base_threat"] || !competitiveStrata[board]["consolidation_candidate"] {
+			if len(competitivePlayers[board]) != 2 || len(competitiveMoves[board]) != 3 || len(competitiveTrajectories[board]) != 2 || !competitivePhases[board]["opening"] || !competitivePhases[board]["contact_consolidation"] || !competitivePhases[board]["tactical_base_threat"] || !competitiveStrata[board]["neutral_available"] || !competitiveStrata[board]["tactical"] || !competitiveStrata[board]["base_threat"] || !competitiveStrata[board]["consolidation_candidate"] {
 				t.Fatalf("split %s board %s lacks coverage: players=%v moves=%v trajectories=%v phases=%v strata=%v", split, board, competitivePlayers[board], competitiveMoves[board], competitiveTrajectories[board], competitivePhases[board], competitiveStrata[board])
 			}
 		}
