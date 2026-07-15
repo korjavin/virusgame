@@ -1,9 +1,7 @@
 package game
 
-// Position is the allocation-conscious, 1v1 search-facing view of an
+// Position is the allocation-conscious search-facing view of an
 // authoritative State. State.Apply remains the sole rules implementation.
-// Search selection is intentionally limited to 1v1: multiplayer callers get
-// exact enumeration because opponent-specific tactical pruning is ambiguous.
 type Position struct {
 	state       State
 	moves       []Pos
@@ -16,9 +14,7 @@ func NewPosition(state State) Position {
 	p := Position{state: state, moves: state.moveTargets(state.current), analyzed: true}
 	if p.canPlaceNeutrals() {
 		p.owned = p.scanOwnedNormals()
-		if state.players == 2 {
-			p.searchPairs = p.strategicNeutralPairs(p.owned)
-		}
+		p.searchPairs = p.strategicNeutralPairs(p.owned)
 	}
 	return p
 }
@@ -60,11 +56,10 @@ func (p Position) ForEachLegalAction(yield func(Action) bool) {
 }
 
 // ForEachSearchAction enumerates moves without materializing the branch list.
-// In 1v1 it omits strategically interchangeable neutral pairs while retaining:
-// every pair containing a base-defense, threatened, or articulation cell; and
-// every adjacent width-two pair whose simultaneous removal disconnects owned
-// territory.
-// Multiplayer positions deliberately fall back to exact enumeration.
+// It omits strategically interchangeable neutral pairs while retaining stable
+// representatives for base defense, threatened cells, articulation cells,
+// robust fillers, and two-vertex separators. Threats are the union of all
+// active opponents in both two-player and multiplayer games.
 func (p Position) ForEachSearchAction(yield func(Action) bool) {
 	if p.state.over || !p.state.Active(p.state.current) {
 		return
@@ -78,7 +73,9 @@ func (p Position) ForEachSearchAction(yield func(Action) bool) {
 	if !p.canPlaceNeutrals() {
 		return
 	}
-	if p.state.players != 2 {
+	// Keep small positions exact. Besides avoiding needless analysis, this
+	// preserves authoritative action order for deterministic tie breaking.
+	if len(p.moveList())+len(owned)*(len(owned)-1)/2 <= 32 {
 		p.forEachNeutralPair(owned, yield)
 		return
 	}
@@ -147,8 +144,10 @@ func (p Position) scanOwnedNormals() []Pos {
 // strategicNeutralPairs returns a deliberately bounded defensive branch set.
 // Neutralizing one important cell with every possible filler is strategically
 // redundant and catastrophically expensive. We instead pair at most twelve
-// highest-priority defensive cells with two robust fillers, and retain general
-// (including non-adjacent) two-vertex separators involving those cells.
+// highest-priority defensive cells with robust fillers, and retain general
+// (including non-adjacent) two-vertex separators involving those cells. Pair
+// classes receive reserved representation before remaining capacity is filled,
+// so a large defensive class cannot starve fillers or separators.
 func (p Position) strategicNeutralPairs(owned []Pos) [][2]Pos {
 	s, player := p.state, p.state.current
 	if !p.canPlaceNeutrals() {
@@ -158,17 +157,35 @@ func (p Position) strategicNeutralPairs(owned []Pos) [][2]Pos {
 	scratch := newArticulationScratch(len(s.cells))
 	cuts := append([]bool(nil), articulationCells(s, connected, -1, scratch)...)
 	threatened := make([]bool, len(s.cells))
-	opponent := Player(3 - player) // Position's selective path is explicitly 1v1.
-	for _, target := range s.moveTargets(opponent) {
-		cell := s.cells[s.index(target)]
-		if cell.Owner == player && cell.Kind == Normal {
-			threatened[s.index(target)] = true
+	for opponent := Player(1); int(opponent) <= s.players; opponent++ {
+		if opponent == player || !s.Active(opponent) {
+			continue
+		}
+		for _, target := range s.moveTargets(opponent) {
+			cell := s.cells[s.index(target)]
+			if cell.Owner == player && cell.Kind == Normal {
+				threatened[s.index(target)] = true
+			}
 		}
 	}
 	base := s.bases[player-1]
 	defensive := make([]Pos, 0, 12)
-	// Priority order is base survival, immediate attack defense, then narrow
-	// connectivity. Stable board order breaks ties deterministically.
+	baseDefense := make([]Pos, 0, 8)
+	threatDefense := make([]Pos, 0)
+	cutDefense := make([]Pos, 0)
+	for _, pos := range owned {
+		if adjacent(pos, base) {
+			baseDefense = append(baseDefense, pos)
+		}
+		if threatened[s.index(pos)] {
+			threatDefense = append(threatDefense, pos)
+		}
+		if cuts[s.index(pos)] {
+			cutDefense = append(cutDefense, pos)
+		}
+	}
+	// Seed every available defensive class, then fill in survival priority.
+	// Stable board order breaks ties deterministically.
 	addDefensive := func(pos Pos) {
 		for _, existing := range defensive {
 			if existing == pos {
@@ -179,52 +196,46 @@ func (p Position) strategicNeutralPairs(owned []Pos) [][2]Pos {
 			defensive = append(defensive, pos)
 		}
 	}
-	for _, pos := range owned {
-		if adjacent(pos, base) {
-			addDefensive(pos)
+	for _, class := range [][]Pos{baseDefense, threatDefense, cutDefense} {
+		if len(class) > 0 {
+			addDefensive(class[0])
 		}
 	}
-	for _, pos := range owned {
-		if threatened[s.index(pos)] {
-			addDefensive(pos)
-		}
-	}
-	for _, pos := range owned {
-		index := s.index(pos)
-		if cuts[index] {
+	for _, class := range [][]Pos{baseDefense, threatDefense, cutDefense} {
+		for _, pos := range class {
 			addDefensive(pos)
 		}
 	}
 	fillers := robustFillers(s, owned, cuts, threatened, defensive, 2)
-	pairs := make([][2]Pos, 0, 48)
-	addPair := func(a, b Pos) {
+	normalize := func(a, b Pos) ([2]Pos, bool) {
 		if a == b {
-			return
+			return [2]Pos{}, false
 		}
 		if s.index(a) > s.index(b) {
 			a, b = b, a
 		}
-		pair := [2]Pos{a, b}
-		for _, existing := range pairs {
-			if existing == pair {
-				return
-			}
-		}
-		if len(pairs) < 48 {
-			pairs = append(pairs, pair)
-		}
+		return [2]Pos{a, b}, true
 	}
+	defensiveFiller := make([][2]Pos, 0, len(defensive)*len(fillers))
 	for _, cell := range defensive {
 		for _, filler := range fillers {
-			addPair(cell, filler)
+			if pair, ok := normalize(cell, filler); ok {
+				defensiveFiller = appendUniquePairLimited(defensiveFiller, pair, 48)
+			}
 		}
 	}
+	defensivePairs := make([][2]Pos, 0, len(defensive)*len(defensive)/2)
+	for i := range defensive {
+		for j := i + 1; j < len(defensive); j++ {
+			if pair, ok := normalize(defensive[i], defensive[j]); ok {
+				defensivePairs = appendUniquePairLimited(defensivePairs, pair, 48)
+			}
+		}
+	}
+	separators := make([][2]Pos, 0)
 	// Tarjan in G-u finds all partners v of a general two-vertex separator.
 	// Scratch is reused and defensive is capped, bounding time and allocation.
 	for _, u := range defensive {
-		if len(pairs) >= 48 {
-			break
-		}
 		uIndex := s.index(u)
 		if cuts[uIndex] {
 			continue
@@ -232,9 +243,55 @@ func (p Position) strategicNeutralPairs(owned []Pos) [][2]Pos {
 		partners := articulationCells(s, connected, uIndex, scratch)
 		for _, v := range owned {
 			if partners[s.index(v)] {
-				addPair(u, v)
+				if pair, ok := normalize(u, v); ok {
+					separators = appendUniquePairLimited(separators, pair, 48)
+				}
 			}
 		}
+	}
+
+	pairs := make([][2]Pos, 0, 48)
+	add := func(pair [2]Pos) { pairs = appendUniquePairLimited(pairs, pair, 48) }
+	// Reserve one true separator and one pair for each defensive cell before
+	// distributing remaining slots. Fillers are only safe partners for a
+	// tactical cell; a standalone filler pair would be destructive cleanup.
+	if len(separators) > 0 {
+		add(separators[0])
+	}
+	for i := range defensive {
+		if len(fillers) > 0 {
+			pair, _ := normalize(defensive[i], fillers[i%len(fillers)])
+			add(pair)
+		} else if len(defensive) > 1 {
+			pair, _ := normalize(defensive[i], defensive[(i+1)%len(defensive)])
+			add(pair)
+		}
+	}
+	classes := [][][2]Pos{separators, defensiveFiller, defensivePairs}
+	maximum := 0
+	for _, class := range classes {
+		if len(class) > maximum {
+			maximum = len(class)
+		}
+	}
+	for index := 0; index < maximum && len(pairs) < 48; index++ {
+		for _, class := range classes {
+			if index < len(class) {
+				add(class[index])
+			}
+		}
+	}
+	return pairs
+}
+
+func appendUniquePairLimited(pairs [][2]Pos, pair [2]Pos, limit int) [][2]Pos {
+	for _, existing := range pairs {
+		if existing == pair {
+			return pairs
+		}
+	}
+	if len(pairs) < limit {
+		return append(pairs, pair)
 	}
 	return pairs
 }
