@@ -317,6 +317,32 @@ func BenchmarkMature50x50Successors(b *testing.B) {
 	}
 }
 
+func BenchmarkMature30x30SearchActions(b *testing.B) {
+	position := NewPosition(maturePosition(30, 30))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		position.ForEachSearchAction(func(Action) bool { return true })
+	}
+}
+
+func BenchmarkMature30x30Successors(b *testing.B) {
+	position := NewPosition(maturePosition(30, 30))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		expanded := 0
+		for expanded < 128 {
+			position.ForEachSearchAction(func(action Action) bool {
+				_ = position.ApplySearch(action)
+				expanded++
+				return expanded < 128
+			})
+		}
+		b.ReportMetric(float64(expanded), "successors/op")
+	}
+}
+
 func slowLegalActions(s State) []Action {
 	if s.over || !s.Active(s.current) {
 		return nil
@@ -356,9 +382,13 @@ func slowMoveTargets(s State, player Player) []Pos {
 }
 
 func maturePosition50() State {
-	state, _ := New(50, 50, 2)
-	for row := 0; row < 35; row++ {
-		for col := 0; col < 50; col++ {
+	return maturePosition(50, 50)
+}
+
+func maturePosition(rows, cols int) State {
+	state, _ := New(rows, cols, 2)
+	for row := 0; row < rows*7/10; row++ {
+		for col := 0; col < cols; col++ {
 			pos := Pos{row, col}
 			if pos != state.bases[0] {
 				state.set(pos, Cell{Owner: 1, Kind: Normal})
