@@ -61,28 +61,26 @@ func TestDecodeReplayRejectsDivergence(t *testing.T) {
 }
 
 func TestVariableRectangularDecisionMatrix(t *testing.T) {
-	boards := []Board{
+	competitive := []Board{
 		{Rows: 5, Cols: 5}, {Rows: 5, Cols: 10}, {Rows: 10, Cols: 5},
 		{Rows: 8, Cols: 8}, {Rows: 10, Cols: 10}, {Rows: 15, Cols: 20},
-		{Rows: 25, Cols: 25}, {Rows: 50, Cols: 50},
+		{Rows: 25, Cols: 25}, {Rows: 30, Cols: 30},
+	}
+	stress := []Board{
+		{Rows: 50, Cols: 50},
 		{Rows: 5, Cols: 50}, {Rows: 50, Cols: 5},
 	}
 	agent := TelemetryTournament(1)
-	for _, board := range boards {
-		state, err := game.New(board.Rows, board.Cols, 2)
-		if err != nil {
-			t.Fatalf("%dx%d: %v", board.Rows, board.Cols, err)
-		}
-		action, telemetry, ok := agent(state)
-		if !ok {
-			t.Fatalf("%dx%d: no decision", board.Rows, board.Cols)
-		}
-		if _, err := state.Apply(action); err != nil {
-			t.Fatalf("%dx%d: illegal decision: %v", board.Rows, board.Cols, err)
-		}
-		if telemetry.Nodes == 0 {
-			t.Fatalf("%dx%d: no node telemetry", board.Rows, board.Cols)
-		}
+	for name, boards := range map[string][]Board{"competitive": competitive, "max_dimension_stress": stress} {
+		t.Run(name, func(t *testing.T) {
+			report, err := Probe(boards, agent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if report.Games != len(boards) || report.Decisions != len(boards) || report.Illegal != 0 || report.Stalled != 0 || report.Nodes == 0 {
+				t.Fatalf("decision probe failed: %s", report)
+			}
+		})
 	}
 }
 

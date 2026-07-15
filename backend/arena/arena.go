@@ -57,6 +57,37 @@ type Report struct {
 	Elapsed                    time.Duration
 }
 
+// Probe runs one instrumented decision per board. It is intended for maximum
+// dimension legality/deadline stress, not as a competitive strength claim.
+func Probe(boards []Board, agent TelemetryAgent) (Report, error) {
+	var report Report
+	for _, board := range boards {
+		state, err := game.New(board.Rows, board.Cols, 2)
+		if err != nil {
+			return report, err
+		}
+		started := time.Now()
+		action, telemetry, ok := agent(state)
+		latency := time.Since(started)
+		report.Games++
+		report.Decisions++
+		report.Elapsed += latency
+		report.Latencies = append(report.Latencies, latency)
+		report.Nodes += telemetry.Nodes
+		if telemetry.CompletedTurnDepth > report.CompletedTurnDepth {
+			report.CompletedTurnDepth = telemetry.CompletedTurnDepth
+		}
+		if !ok {
+			report.Stalled++
+			continue
+		}
+		if _, err := state.Apply(action); err != nil {
+			report.Illegal++
+		}
+	}
+	return report, nil
+}
+
 func Play(match Match) (GameResult, error) {
 	agentCount := len(match.Agents)
 	if len(match.TelemetryAgents) > 0 {

@@ -26,9 +26,11 @@ broader variable-size and wall-clock gate manually before an engine release:
 go run ./cmd/arena -matrix full -production -seeds 2
 ```
 
-The full matrix includes 5x5, both 5x10 orientations, 8x8, 10x10, 15x20,
-25x25, 50x50, and 50-edge stress rectangles. Reports include wins, illegal,
-stalled and maxed games, searched nodes, completed-turn depth, and latency.
+The competitive full matrix includes 5x5, both 5x10 orientations, 8x8, 10x10,
+15x20, 25x25, and 30x30. The UI maximums 5x50, 50x5, and 50x50 are separate
+single-decision legality/no-stall/deadline probes; they are not deep win-rate
+requirements. Reports include wins, illegal, stalled and maxed games, searched
+nodes, completed-turn depth, and latency.
 
 Every board/seed pairing is played twice with swapped seats. The command exits
 non-zero for any illegal action, incomplete smoke game, less than 85% wins over

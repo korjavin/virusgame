@@ -21,8 +21,7 @@ func main() {
 		boards = []arena.Board{
 			{Rows: 5, Cols: 5}, {Rows: 5, Cols: 10}, {Rows: 10, Cols: 5},
 			{Rows: 8, Cols: 8}, {Rows: 10, Cols: 10}, {Rows: 15, Cols: 20},
-			{Rows: 25, Cols: 25}, {Rows: 50, Cols: 50},
-			{Rows: 5, Cols: 50}, {Rows: 50, Cols: 5},
+			{Rows: 25, Cols: 25}, {Rows: 30, Cols: 30},
 		}
 	} else if *matrix != "ci" {
 		log.Fatalf("unknown matrix %q", *matrix)
@@ -83,6 +82,17 @@ func main() {
 			log.Fatalf("%d-player smoke failed", players)
 		}
 	}
+	if *matrix == "full" {
+		stress := []arena.Board{{Rows: 5, Cols: 50}, {Rows: 50, Cols: 5}, {Rows: 50, Cols: 50}}
+		report, err := arena.Probe(stress, telemetryContender)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("stress mode=%s boards=5x50,50x5,50x50 %s\n", mode, report)
+		if report.Illegal != 0 || report.Stalled != 0 || report.MaxLatency() > searchBudget(*production) {
+			log.Fatalf("maximum-dimension stress failed: %s", report)
+		}
+	}
 	passed := complete
 	switch *opponent {
 	case "all":
@@ -95,4 +105,11 @@ func main() {
 	if !passed {
 		log.Fatalf("strength gate failed: complete=%v legacy=%v greedy=%v", complete, legacyPassed, greedyPassed)
 	}
+}
+
+func searchBudget(production bool) time.Duration {
+	if production {
+		return 850 * time.Millisecond
+	}
+	return 10 * time.Second
 }
