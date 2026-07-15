@@ -85,6 +85,13 @@ func (s State) MovesLeft() int        { return s.movesLeft }
 func (s State) GameOver() bool        { return s.over }
 func (s State) Winner() Player        { return s.winner }
 
+func (s State) Base(player Player) (Pos, bool) {
+	if !s.validPlayer(player) {
+		return Pos{}, false
+	}
+	return s.bases[player-1], true
+}
+
 func (s State) Active(player Player) bool {
 	return s.validPlayer(player) && s.active[player-1]
 }

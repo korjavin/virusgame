@@ -14,9 +14,10 @@ type Agent func(game.State) (game.Action, bool)
 
 // DecisionTelemetry is emitted by search-aware agents. CompletedTurnDepth is
 // the number of whole turns fully searched. SearchedRoot fields count the
-// authoritative root candidates covered by the last completed iteration; they
+// generated search-root candidates covered by the last completed iteration; they
 // are zero when no iteration completed, even if an aborted iteration visited
-// some candidates. LegalRoot fields always describe the authoritative set.
+// some candidates. LegalRoot fields describe Position.ForEachSearchAction
+// before the searcher's optional quiet-action cap.
 type DecisionTelemetry struct {
 	Nodes                                   uint64
 	Evaluations                             uint64
@@ -24,6 +25,9 @@ type DecisionTelemetry struct {
 	LegalRootActions, SearchedRootActions   int
 	LegalRootNeutrals, SearchedRootNeutrals int
 	BudgetShortfall                         bool
+	Workers, RootCompleted                  int
+	IterationsStarted, IterationsCompleted  int
+	SearchElapsed                           time.Duration
 }
 
 type TelemetryAgent func(game.State) (game.Action, DecisionTelemetry, bool)
@@ -58,6 +62,9 @@ type GameResult struct {
 	LegalRootActions, SearchedRootActions   [4]int
 	LegalRootNeutrals, SearchedRootNeutrals [4]int
 	CompletedTurnDepth                      [4]int
+	MaxWorkers, RootCompleted               [4]int
+	IterationsStarted, IterationsCompleted  [4]int
+	SearchElapsed                           [4]time.Duration
 	Elapsed                                 time.Duration
 }
 
@@ -73,6 +80,9 @@ type Report struct {
 	LegalRootActions, SearchedRootActions   int
 	LegalRootNeutrals, SearchedRootNeutrals int
 	CompletedTurnDepth                      int
+	MaxWorkers, RootCompleted               int
+	IterationsStarted, IterationsCompleted  int
+	SearchElapsed                           time.Duration
 	Elapsed                                 time.Duration
 }
 
@@ -98,6 +108,13 @@ func Probe(boards []Board, agent TelemetryAgent) (Report, error) {
 		report.SearchedRootActions += telemetry.SearchedRootActions
 		report.LegalRootNeutrals += telemetry.LegalRootNeutrals
 		report.SearchedRootNeutrals += telemetry.SearchedRootNeutrals
+		report.RootCompleted += telemetry.RootCompleted
+		report.IterationsStarted += telemetry.IterationsStarted
+		report.IterationsCompleted += telemetry.IterationsCompleted
+		report.SearchElapsed += telemetry.SearchElapsed
+		if telemetry.Workers > report.MaxWorkers {
+			report.MaxWorkers = telemetry.Workers
+		}
 		if telemetry.BudgetShortfall {
 			report.BudgetShortfalls++
 		}
@@ -164,6 +181,13 @@ func Play(match Match) (GameResult, error) {
 		result.SearchedRootActions[player-1] += telemetry.SearchedRootActions
 		result.LegalRootNeutrals[player-1] += telemetry.LegalRootNeutrals
 		result.SearchedRootNeutrals[player-1] += telemetry.SearchedRootNeutrals
+		result.RootCompleted[player-1] += telemetry.RootCompleted
+		result.IterationsStarted[player-1] += telemetry.IterationsStarted
+		result.IterationsCompleted[player-1] += telemetry.IterationsCompleted
+		result.SearchElapsed[player-1] += telemetry.SearchElapsed
+		if telemetry.Workers > result.MaxWorkers[player-1] {
+			result.MaxWorkers[player-1] = telemetry.Workers
+		}
 		if telemetry.BudgetShortfall {
 			result.BudgetShortfalls[player-1]++
 		}
@@ -273,6 +297,13 @@ func (r *Report) Add(result GameResult, focus game.Player) {
 	r.SearchedRootActions += result.SearchedRootActions[focus-1]
 	r.LegalRootNeutrals += result.LegalRootNeutrals[focus-1]
 	r.SearchedRootNeutrals += result.SearchedRootNeutrals[focus-1]
+	r.RootCompleted += result.RootCompleted[focus-1]
+	r.IterationsStarted += result.IterationsStarted[focus-1]
+	r.IterationsCompleted += result.IterationsCompleted[focus-1]
+	r.SearchElapsed += result.SearchElapsed[focus-1]
+	if result.MaxWorkers[focus-1] > r.MaxWorkers {
+		r.MaxWorkers = result.MaxWorkers[focus-1]
+	}
 	r.BudgetShortfalls += result.BudgetShortfalls[focus-1]
 	if result.CompletedTurnDepth[focus-1] > r.CompletedTurnDepth {
 		r.CompletedTurnDepth = result.CompletedTurnDepth[focus-1]
@@ -325,9 +356,11 @@ func (r Report) Throughput() float64 {
 }
 
 func (r Report) String() string {
-	return fmt.Sprintf("games=%d wins=%d losses=%d draws=%d win_rate=%.1f%% eliminations=%d illegal=%d maxed=%d stalled=%d decisions=%d nodes=%d completed_turn_depth=%d p50=%s p95=%s max=%s decisions/s=%.1f",
+	return fmt.Sprintf("games=%d wins=%d losses=%d draws=%d win_rate=%.1f%% eliminations=%d illegal=%d maxed=%d stalled=%d decisions=%d nodes=%d evals=%d workers=%d root_completed=%d iterations=%d/%d search_elapsed=%s completed_turn_depth=%d root_actions=%d/%d root_neutrals=%d/%d p50=%s p95=%s max=%s decisions/s=%.1f",
 		r.Games, r.Wins, r.Losses, r.Draws, r.WinRate(), r.Eliminations, r.Illegal, r.Maxed, r.Stalled,
-		r.Decisions, r.Nodes, r.CompletedTurnDepth, r.Percentile(50), r.Percentile(95), r.MaxLatency(), r.Throughput())
+		r.Decisions, r.Nodes, r.Evaluations, r.MaxWorkers, r.RootCompleted, r.IterationsCompleted, r.IterationsStarted, r.SearchElapsed,
+		r.CompletedTurnDepth, r.SearchedRootActions, r.LegalRootActions, r.SearchedRootNeutrals, r.LegalRootNeutrals,
+		r.Percentile(50), r.Percentile(95), r.MaxLatency(), r.Throughput())
 }
 
 func activeCount(state game.State) int {
