@@ -1,0 +1,371 @@
+{
+  "source_id": "58b2b9ab-30b4-45e8-bb32-4600300cac55",
+  "players": [
+    "CalmShark76",
+    "Bot 7403"
+  ],
+  "rows": 20,
+  "cols": 20,
+  "winner": 1,
+  "termination": "no_moves",
+  "observed_turns": 17,
+  "turns": [
+    {
+      "turn": 1,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 3
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 18
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "row": 15,
+          "col": 15
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 7
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 14,
+          "col": 14
+        },
+        {
+          "kind": "move",
+          "row": 13,
+          "col": 13
+        },
+        {
+          "kind": "move",
+          "row": 12,
+          "col": 12
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 9
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 12
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 5
+        }
+      ]
+    },
+    {
+      "turn": 10,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 13
+        }
+      ]
+    },
+    {
+      "turn": 11,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 11
+        }
+      ]
+    },
+    {
+      "turn": 12,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 12,
+          "col": 14
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 15
+        },
+        {
+          "kind": "move",
+          "row": 13,
+          "col": 15
+        }
+      ]
+    },
+    {
+      "turn": 13,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 12,
+          "col": 12
+        },
+        {
+          "kind": "move",
+          "row": 13,
+          "col": 13
+        },
+        {
+          "kind": "move",
+          "row": 14,
+          "col": 14
+        }
+      ]
+    },
+    {
+      "turn": 14,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 15,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 14,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 18
+        }
+      ]
+    },
+    {
+      "turn": 15,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 15,
+          "col": 15
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 17
+        }
+      ]
+    },
+    {
+      "turn": 16,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 16
+        }
+      ]
+    },
+    {
+      "turn": 17,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 19
+        }
+      ]
+    }
+  ]
+}

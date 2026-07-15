@@ -1,0 +1,4045 @@
+{
+  "version": "virusgame-strength-corpus-v1",
+  "generator": "corpusgen-v1: xorshift64, prefer-empty, 18 actions",
+  "generated_utc": "2026-07-15T16:00:00Z",
+  "trajectories": [
+    {
+      "id": "generated-v1-5x5-p2-competitive_1v1-train-9e3779b97f4a7c15",
+      "split": "train",
+      "track": "competitive_1v1",
+      "seed": 11400714819323198485,
+      "rows": 5,
+      "cols": 5,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "c330ce40d73d02992b4006fe24083d1fa771b07dd95bd934900c4cb8720e9971"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "ced409db33824b34289960a1ce2729f0e80e6008fdde52f6f08ca22b46c07b19"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "188f392f1e4faf535a53f1544c9424a96b27a0189f60faeb9b968e87dec1c00d"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available",
+            "tactical"
+          ],
+          "hash": "6530c85ec1f6efcefd02366a697f56c62b1b909c52de6a0432353c229566a6bd"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical"
+          ],
+          "hash": "47f7777188fff0d5dc1f58f3a28c0873b21b4241f49150f3df4289e805b0487a"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "b2ba26a41f126f98a3a9efbc9e5dec19ee588ed5c2d90c39ea1e8936263f947c"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-5x5-p2-competitive_1v1-heldout-9e3779b97f4a9b04",
+      "split": "heldout",
+      "track": "competitive_1v1",
+      "seed": 11400714819323206404,
+      "rows": 5,
+      "cols": 5,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 4
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "4e20fc24b382ff43b26839d7dac5075260f6307f47069864358f662f4709c50d"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "12cf392af537557adebb49895b7eddd64b722bb2749d8d956f54c9fe40013561"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "1530b8d226aa37dc4733c8371440a4c51ff98a5d3370018b2d3682bd21bb23f7"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "3d6552eed03e73d0a9f8ac2bfa807c2198d93e6fc53faf4fb50616f140922ddd"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "cad180c1224e279afcd19fbae71d094827fde2610cc9627243705280d7287c01"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical",
+            "base_threat"
+          ],
+          "hash": "631bca23e47ec31800011668d4b075731716ceb4b0bcc32ab780ed89d3deefa9"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-8x8-p2-competitive_1v1-train-9e3779b97f4a8006",
+      "split": "train",
+      "track": "competitive_1v1",
+      "seed": 11400714819323199494,
+      "rows": 8,
+      "cols": 8,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 4
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 5
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 4
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "5795049fd4c69f77d31881b3e3254108663ddfc8f6016d6818dd8cb87372f682"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "79d5dcbd49ec55e4abe09b4d90dd38acdeebc40a600d316caeff54eee57dba6f"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "cfd5d5158fbd2d1afa763998c317f93f025eccb73ce7c2de82fdc638c0633b33"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "35e513ab44db0a653b7c6f975746ba69b0a6b37c7e4a992900bb7638dce043fe"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "0bc90149c8aab4f6acb1ca42828d303130bde799500c2401a011586f116e228b"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "3aa755021aa3ba292d01a7a00aba6a7f987a56cc64d13c34f9a2ebaad62eaa77"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-8x8-p2-competitive_1v1-heldout-9e3779b97f4a9ef5",
+      "split": "heldout",
+      "track": "competitive_1v1",
+      "seed": 11400714819323207413,
+      "rows": 8,
+      "cols": 8,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 2
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available",
+            "tactical"
+          ],
+          "hash": "0409572bf01c244b5cfcc12d08c049397f7d7453756a5e1e6be840e7fe7bcbb2"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical"
+          ],
+          "hash": "49d81c4759ad8433aad23ee38003c013cddb64350df65c600828169aa222a81a"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical"
+          ],
+          "hash": "139224d4808ebe64921abebee9ad7a38c9ff25b1a5833ce1e9a6ac5d7d660e7a"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available",
+            "tactical"
+          ],
+          "hash": "c45fa8618e8dcf6698593cbc08b48b6eea021ff9fb64033e748db0ff8b67a577"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical"
+          ],
+          "hash": "c57fbad37437dc48a810c62c15bbb90e6710f98e12d3e22bd6866294d89f7963"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "tactical"
+          ],
+          "hash": "becca2338705798f9580eeab58877f932c65530bd9e1ec30f0231eb7d2c7cd15"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-10x10-p2-competitive_1v1-train-9e3779b97f4a83f7",
+      "split": "train",
+      "track": "competitive_1v1",
+      "seed": 11400714819323200503,
+      "rows": 10,
+      "cols": 10,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 9
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "21f7dc0c6cd230479fa6057f1efd8c160e2b1622d5af711916631f74453d6d0f"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "7af28de2a8b78e9518b097672e2dbc158ac35d5dc9d0a91763cbb2428b89e7e5"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "111a9f15e168db733fc5d73b8743610afa439540bbfd188b35c3b5922fdc4d25"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "75135442f6671c14e456661b0db75f7ae242ad12f25db85e82576506c43dbf59"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "b389363c0d9730ce134e93bd3df5ae594b139f5c8b7668914cf8a71a7fa4f253"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "4d0e6a7ce63e1aabc1066fee4ac19597dd1e1e1147b4e6d0411e32f33b0a1835"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-10x10-p2-competitive_1v1-heldout-9e3779b97f4aa2e6",
+      "split": "heldout",
+      "track": "competitive_1v1",
+      "seed": 11400714819323208422,
+      "rows": 10,
+      "cols": 10,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 4
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 5
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 7
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "6886a30b14b134465d9f1e7ad9d64b8769cae90f7350a9d6a4df451e6f0e1f0e"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "99c70bad15de090eabd9020f7b9d6bcc7c01f50d46543a3296cdb030bb0d670f"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "f58827d12c09f0d4a7e35875b98ae959064591f4c1348b4c33642ca641f3a631"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "05c88a9557dd0ece45eccf00dd0898c5dca77023b4de4174d83ebf249ab092eb"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "bd44b9cfcdfcdcf92a51e6d87560fffa293fad1a76a1a38a82d441206961f9ff"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "2c71cd8eaf10cb4a6e41953ed7af5930b8921bd70198d9b51e69ebb3da625074"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-12x12-p2-competitive_1v1-train-9e3779b97f4a87e8",
+      "split": "train",
+      "track": "competitive_1v1",
+      "seed": 11400714819323201512,
+      "rows": 12,
+      "cols": 12,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 9
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "284a5dbd1a6a62cc4e20c7b4fcc8ecdab397e40c5f9fa286f658e4346e76e37b"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "34987415b28cbb471b34f7206b643cc10bd3e9dc3c39d34ea1f8d84d80b35a5e"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "48dee0635e9c26aaac3df6185db6ad4a4e4c3015f0d1f2f405ef1a12274a745d"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "1190352594b7d0bf202a821d0f9082c9fe749e46264e3121f7d42a14b68c729a"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "000058c6902580e5534b238acd5434a697d7a3220967c38c24c604d18a01002a"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "445e828486b8dae2eb2ee1f1466f892b2cc62ce7ec2d2dc29a4645276ca74d29"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-12x12-p2-competitive_1v1-heldout-9e3779b97f4aa6d7",
+      "split": "heldout",
+      "track": "competitive_1v1",
+      "seed": 11400714819323209431,
+      "rows": 12,
+      "cols": 12,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 11
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "6e9ba890cd7686c2492c47d5f64b54638908504ff13718c684143d96444e775b"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "489df8c4276a5a0d79127ce9fb1f05cbdd37d33f119f325e06981c5b3912f877"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "577b40d3d3a118a0cf8e87960334ac0ebaf9b61cc6eab3f02a3114073fd0a227"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "8c59ae81a980e374d26cc9c92eedfec5eb611c0a62aa3e9096281de61bc41c47"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "e88a608063050abca5de112365c938ea3ccbf4e1462892c1571aa59068d85dee"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "9f8eb1ddae6864c7f9d7193ff499b55914dcd52ad711b67c629e718f2eb38f5b"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-15x20-p2-competitive_1v1-train-9e3779b97f4a8bd9",
+      "split": "train",
+      "track": "competitive_1v1",
+      "seed": 11400714819323202521,
+      "rows": 15,
+      "cols": 20,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 14,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 13,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 13,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 12,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 15
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "609ce882a23edb30ee338d4ea84709c3414dbffcff32e462ae13657125bc0c62"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "65b9551960ec9c62b523e4c3e2aa8ec2cf46adeb3d51a3a16ea8a239de9ca9d4"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "984c8c7a1ec3d251a88e641f2bd5e4973e69397492ba936ddf535e43180c64db"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "085ebeb17cd5b70af3870c889498b02e0fa61e83a7cee0d089614f937f4ed2a9"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "ea537a0fcc84fabc62e1931d678901029cc5254aa87fbf9ba91927a20b9e047a"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "84ae0b1569a6f1b4646a42f90c77c0228ccc63156003938a4f2fb41b86e3e01e"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-15x20-p2-competitive_1v1-heldout-9e3779b97f4aaac8",
+      "split": "heldout",
+      "track": "competitive_1v1",
+      "seed": 11400714819323210440,
+      "rows": 15,
+      "cols": 20,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 14,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 14,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 13,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 14,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "row": 13,
+          "col": 15
+        },
+        {
+          "kind": "move",
+          "row": 14,
+          "col": 15
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 12,
+          "col": 15
+        },
+        {
+          "kind": "move",
+          "row": 13,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 15
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "0dee5a6d8f1eafba89cd4cb13e1a59ae8a61df797787666889b48e3612b2b64a"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "f673f848dd7bcc9ef2476ae0636dfd5fa5929fbc47323d16c8bdcf7061bfc6d3"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "f448d352c07b29e641efaab5162f5e1becec93d4f3aead7a9ef512dd5bb6eb6a"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "8cd424d4034ae9ef9b5d6881ed9ccac24ee033a3d05a252e1a03ca2790d47bd4"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "841c2a0e75e2010c501a3d76ea4965cde990b1e395b87ec5efdfc0a97720a68a"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "e116c812a005b6aea1821c72fce5cd0781ed1a192ccfabd5e3772cd5429e7324"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-20x15-p2-competitive_1v1-train-9e3779b97f4a8fca",
+      "split": "train",
+      "track": "competitive_1v1",
+      "seed": 11400714819323203530,
+      "rows": 20,
+      "cols": 15,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 13
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 13
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 12
+        },
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 12
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 14
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 9
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "fc2a952385efdf06cf25cd0b4361b6048c0edc98ccd309384afb63ef573f076c"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "ad65f4f2bf4ccf7f255ffa4b4f55c3bfa7e30e5afa3f9220d217af2835b2cd3c"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "00a29dcd8ca8eff2b3799b955a199fa94c6668893153f03fd042459fe3deb20e"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "a01e4c684cf6dac8473b0147f3a5fd28153af724d04875209b3ccc5308f780e0"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "e507d5449952d8682b60b063632865375a7580fd6549beb9ef6074ee6bfff866"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "f7330419882a6358a69e7c68572bf552e336f99661b9f35605fdb600b62ea851"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-20x15-p2-competitive_1v1-heldout-9e3779b97f4aaeb9",
+      "split": "heldout",
+      "track": "competitive_1v1",
+      "seed": 11400714819323211449,
+      "rows": 20,
+      "cols": 15,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 14
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 13
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 14
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 14
+        },
+        {
+          "kind": "move",
+          "row": 15,
+          "col": 13
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 13
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 13
+        },
+        {
+          "kind": "move",
+          "row": 15,
+          "col": 12
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 12
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "feeaf7e0c0851930626a114eb049878f032cfe4f46c1508ea5267dd1f338cd97"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "9d874529fe49c08fc6adad5086f7e3b0ccd0585d79b8adb551bb8e01248625a8"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "7d4de68965b1ed7ba3acf1bcfb48b7c01bd8034dcf3c04dd3a93bbc8274f01ee"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "720262b04ea5ef53138f687084cafbc3ba912c2c2e98ca70b99f4c5a97bfd610"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "73733c8588164369d6cd4f30fd86cef5a6b8e7e93d143c469505bb4efe96e9dd"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "24e5f930cb9e52e9c572082bd7e01e2f6ff15e4d080a571191a30a11217d8152"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-20x20-p2-competitive_1v1-train-9e3779b97f4a93bb",
+      "split": "train",
+      "track": "competitive_1v1",
+      "seed": 11400714819323204539,
+      "rows": 20,
+      "cols": 20,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 15,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 14,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 16
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "cda6a83eca260875996c7ff25c52fdb65805b7c730200954333ff70f5b6ea16c"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "c2860f10f1e91082522ee79f02975817f1388a33a8034630a0c7171ef8c7a313"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "56c36672a0b356eb1feb4cab2b1b5f37d759d769b561784f781a033eceeddd9f"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "f0e693a22d96736c5a856356507845a2e1d93dad33bf04e520cd95ce9ac0640a"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "41c99115418bf83112fedb4803c86c3ce916ffeed60c023400056040680afce0"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "4f4910a1738437bde7c73d518159fe1db3a1f87e5150899c21fd7d40fdd94f98"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-20x20-p2-competitive_1v1-heldout-9e3779b97f4ab2aa",
+      "split": "heldout",
+      "track": "competitive_1v1",
+      "seed": 11400714819323212458,
+      "rows": 20,
+      "cols": 20,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 4
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 15
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 16
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "69b11f6f1e02f33d306d944354283f87a4c16c39fdea7a843194a5000349a48a"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "37f8fb5d925ec204327a8bf8833831472043c0dd50bc80ca787320a005a4b90a"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "bd8227c34aa107b34ecc97c24a540ec8cba7de25eb064557bc78aef8084373af"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "c26570f42a8a6bdf79d1112e7941c37bca8db9369dea88d62911ddeb60f08ece"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "c56a07da484ab22dde1e041c80f01ab02639b1eedf0a195914be29a8ac037abb"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "8ffe7f585b2580082db9a4d4f36996ba0eb945a4f199f75ad96d3b49ad2233d4"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-12x12-p3-multiplayer-train-9e3779b97f4a97ac",
+      "split": "train",
+      "track": "multiplayer",
+      "seed": 11400714819323205548,
+      "rows": 12,
+      "cols": 12,
+      "players": 3,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 9
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 10,
+          "phase": "opening",
+          "strata": [
+            "opening"
+          ],
+          "hash": "41da841223855c7fd9355de208f57762a9ef66f66d460ce230d35a1767012658"
+        },
+        {
+          "after_actions": 11,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "b8c8d8a999e60f41aa613fbff41877ab238d15fdd0ccf5986a287c7edad1f531"
+        },
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "0bc216babd5f1440d60863b8245e79c37cac236209fab9f96d5331295b2b1dd2"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "aedc3152257335a80f7c97624c085b2c8d6439a5bef8bfc5996f7d56ebd4f4ec"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "521da71135e70e6ad98f08670943460a4e7170ee7a19e88e87250a462b14194f"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "a6ce345d6158317de031484e185b534fa4ad33808f9b53f6f51827addadc0bce"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "a9e1fa252b0103a145199fdb2ea3367cc72c9d863a5a80e5242e262aac0e57c9"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "0a867e562fa7b29f67edc0bb14e2cf493a057b0acfb30e5b688bd52c45c9bf65"
+        },
+        {
+          "after_actions": 18,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "2f8248daf4d2a9072f260b0610a1b1597b566f56a66914e568c56e4c911fa27f"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-12x12-p3-multiplayer-heldout-9e3779b97f4ab69b",
+      "split": "heldout",
+      "track": "multiplayer",
+      "seed": 11400714819323213467,
+      "rows": 12,
+      "cols": 12,
+      "players": 3,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "col": 9
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 10,
+          "phase": "opening",
+          "strata": [
+            "opening"
+          ],
+          "hash": "1ad7b543138124f7dced617e1352182fec0771a0dd1fc275b83521d38a8e4aa3"
+        },
+        {
+          "after_actions": 11,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "7fa4ad52da9df37642b8d44c6f311d41921bee246f1ed094e027544db68dfbb9"
+        },
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "5d25fe0e250386b70b206d28c3d78566c916fbc7a97a6dab7b18bb34c40cf442"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "73809de3b5ee60d8ba70e959810dad288a78d04a42a3daa1fae49bc216b383ba"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "a5a7e9dc021300c1ae02f1786f18fc539051963b914b522ec4753881872376d1"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "9a73db311b714ba91c39f9894a5176758a0d7f9166d526cf63c0d0c611e23030"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "012a09356ecceba613c14f6b2f39d7d345d50ed5a94ff79bbd0d74946bc1797f"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "feeeef9cd6ea733d11206a8e1d8f4ba19b6161d6ba053a929e9af66e4aaa2880"
+        },
+        {
+          "after_actions": 18,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "a56ffbb7d332392334ca6dfb9daacc993e0f6c989f56aefd00b3bc3e07b3bc4a"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-20x20-p4-multiplayer-train-9e3779b97f4a9b9d",
+      "split": "train",
+      "track": "multiplayer",
+      "seed": 11400714819323206557,
+      "rows": 20,
+      "cols": 20,
+      "players": 4,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 18
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 15,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "row": 17
+        },
+        {
+          "kind": "move",
+          "row": 16,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 15,
+          "col": 2
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 13,
+          "phase": "opening",
+          "strata": [
+            "opening"
+          ],
+          "hash": "7a958a851c55c0789e2a237373511319102d6fb3d2e0023822c869280b4a712c"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "f1932390f8cb2c9d4211437a70f66c80ae26ca8b38567a26afc9fbd5f3884548"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "c589177c11058441a41ce89a123479c07f0f8608ba5ae946977ef2ffa1f8258e"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "c5a892a29dca88fe884e161076f019f39b8e3628ad58c8b48f691d3e0f422981"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "ef39026f764f795c498c329ca7b77ddb4eaaaf78a92a177eb7cf81304b24a141"
+        },
+        {
+          "after_actions": 18,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "7e1f286e84642d9c58ef1b304d8799745fdcf2c549ed57998d0a0013a2772550"
+        },
+        {
+          "after_actions": 19,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "de371370dc6704d3d3ad474d6ef5b526b2698e83d218258725e79301a6abe82f"
+        },
+        {
+          "after_actions": 20,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "65d8f4ec7e2f34d210fc3b3284d98f60f58f2e0ce3e214ef1d68a8137e14a5fb"
+        },
+        {
+          "after_actions": 21,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "5bc1144dca35d610b9a9fc38cff066a1b111ffacad3c4daae187bcae9f349b07"
+        },
+        {
+          "after_actions": 22,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "d3354b3fa8b26959c32b0dffba0880d960ad68c449f4e049298d947d2f4db9fb"
+        },
+        {
+          "after_actions": 23,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "5d965e485c1abbbec0eee54a030eb4e1e256b026ae49ab644cf8a43b3054ace6"
+        },
+        {
+          "after_actions": 24,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "45a90c74143b094def68cb8793c451f81c958064a2458baf9f2f70321caa3a6a"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-20x20-p4-multiplayer-heldout-9e3779b97f4aba8c",
+      "split": "heldout",
+      "track": "multiplayer",
+      "seed": 11400714819323214476,
+      "rows": 20,
+      "cols": 20,
+      "players": 4,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 19
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 19,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 17
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 16
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "col": 18
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 18,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 17,
+          "col": 4
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 13,
+          "phase": "opening",
+          "strata": [
+            "opening"
+          ],
+          "hash": "e73cd4fba15735281452dd8208ae1071dba78fd705dce1ba931f131c41eccefd"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "f883fc8d95ae391ad423770c3434b892a39925f2a46fae23b52c007e3679e4b4"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "8d156eaaa0e0ec9f7138767a7886fc0091bca1b823cb8ed2395b1b8b28568400"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "81fb4a1b3ac45a2d0d526beeb9ab91c28da90a2a0948274118292957e66561ea"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "6a52343a4d309db8a3c362c0dd8c1b08ec1e82b161463566d3f0490138e4d2d7"
+        },
+        {
+          "after_actions": 18,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "7262ac935569824d1eb2a9a208d437253727099fef353ecc982f30e2bd4c0304"
+        },
+        {
+          "after_actions": 19,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "914f4fb58223e2a57727dfab1549bac8ef6483c002d4e745945a061aa11c27f8"
+        },
+        {
+          "after_actions": 20,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "e5d0ccb104eaca98e15d81f76527f2a3686ce396c001a49b8e0aff7e7fd82630"
+        },
+        {
+          "after_actions": 21,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "ade3ef88a1c0cbb50d5063b555f7f75d2a4e6beb23bf70eab728c4598b67fa9e"
+        },
+        {
+          "after_actions": 22,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "992c525ac29e047f192e4d4d8ba34f293694339833fc9ae9561eb0c704d0b11d"
+        },
+        {
+          "after_actions": 23,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "2cc095c795c6220db22812a7b2ac3ae8d4a195c585b5a4f418f69fa4f9b520b7"
+        },
+        {
+          "after_actions": 24,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "7fc4aab76b72623b35b10b6ef4b3f30b9cf1d916b9f1b36512d755a265944177"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-28x28-p3-multiplayer-train-9e3779b97f4a9f8e",
+      "split": "train",
+      "track": "multiplayer",
+      "seed": 11400714819323207566,
+      "rows": 28,
+      "cols": 28,
+      "players": 3,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 25,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 24,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "row": 25,
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 25
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 10,
+          "phase": "opening",
+          "strata": [
+            "opening"
+          ],
+          "hash": "dfbbb876bc3f19436b3830450095b6f71a038658257400ccbb67e88485cdda17"
+        },
+        {
+          "after_actions": 11,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "ffc5a0548e56f972f59cae72c02e8b7f8817e92b3745cf16d09954112618b83d"
+        },
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "a1d40ba859eea1fb61c2489c6844dcdf3c510b9de36893dfb6a3caf0ac5c557f"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "090176c136f31e9e2a6add6073e004b7e8f17f17773802c7012b9b617f690232"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "489e9cf2163165280f0e137d9e2398d0a57b9c42c782102d31e7e9131f65da98"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "316f32fc97a965e215d5e7356e9818e9581dd704de8474669ec2a26b6d85ad2a"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "d44055c24a3b2aff029e6361f3f699501d206bd6aa95e1b82c9b703f5f81730d"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "03f44c8c52e8892e1d2606e6bf8dfbc2526acc245372709386daf81874f28f98"
+        },
+        {
+          "after_actions": 18,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "97b5c22b3cf6e8d8e369555dfdc2500d0eff6f895424f87168f22ecb859804e6"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-28x28-p3-multiplayer-heldout-9e3779b97f4abe7d",
+      "split": "heldout",
+      "track": "multiplayer",
+      "seed": 11400714819323215485,
+      "rows": 28,
+      "cols": 28,
+      "players": 3,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 23
+        },
+        {
+          "kind": "move",
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 26
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 10,
+          "phase": "opening",
+          "strata": [
+            "opening"
+          ],
+          "hash": "2cfd6ec93419fd2cb827fb755a708d76fcf644eaf3cf419b09c1c413e7d0bc1a"
+        },
+        {
+          "after_actions": 11,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "eed17c007a5d80a2b498c6658b18867bdf17d9c6e3e87dcfb8df1bd780f1063a"
+        },
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "b9c7a69e063e884a02d49f06ef207040c9abbbdf50e45302e2ee822fe38af7ba"
+        },
+        {
+          "after_actions": 13,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "b26acd65a40416a910a6caf3335d7b4a3872797ee2de717445578fbcbb8191eb"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "24097e856ead387d17f96a46ad172276b5534ae4540263367e245ff11268540a"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "ea7b1646424cb128b8a407d76226f869a52a14cffc04220cc0d2e5be449dc246"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "1f501f8f15c6bbf2089499b7ec9b08e401d39150fec499467444961d9b51f454"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "bcecdd410274746b55611ec53011f921edcda38da1e60c546e8e5472b2f2efaa"
+        },
+        {
+          "after_actions": 18,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "6649d410827cd28a7e86a16296a15dcab90c4c5b02f454497a37d0c178eab351"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-28x28-p4-multiplayer-train-9e3779b97f4aa37f",
+      "split": "train",
+      "track": "multiplayer",
+      "seed": 11400714819323208575,
+      "rows": 28,
+      "cols": 28,
+      "players": 4,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "row": 25,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 26
+        },
+        {
+          "kind": "move",
+          "row": 25
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 24,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 24,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "col": 23
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 23
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 25,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 25,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 24,
+          "col": 1
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 13,
+          "phase": "opening",
+          "strata": [
+            "opening"
+          ],
+          "hash": "c32196bd9183ad9f0f8183108e1a0a8d8bfc73f85df9e8af11fb18eeb03ada84"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "b9679e66738e5f514505df9cd87b2edf16ab5327ab9de46134407040bc7b7178"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "0aed6918b4cce84c214c433d62cd22f826ab8739105f13295f50f5a551fd9e36"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "1f08b11eb572733bdfbbce62810bccb9e7fa308ae1ed21f32a2b4a795bc0d109"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "46d0fcf9d22d0a501f1317a63d180a35b99f47b692ff3d39a6d57c878013a3be"
+        },
+        {
+          "after_actions": 18,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "b765cabf44042831082f09451030d38b66fc6690ff14940ca1c62204271c4c44"
+        },
+        {
+          "after_actions": 19,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "c41cfefc19e50637b9ef47faa3f8798f6f4fe8a04ca2a62f72c37b7d058f320e"
+        },
+        {
+          "after_actions": 20,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "d1ed3156e44e970e804a3ec94ec3a3877402bedc80a6d3cd42fbebefd74d07af"
+        },
+        {
+          "after_actions": 21,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "16cda16f7be8e6c6046d50ce4e77198c9a3080866d9f5baf54131d10349d9d67"
+        },
+        {
+          "after_actions": 22,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "4c08d7b35ade26016d0cca7867c0f5dc994233ccce190bc56488f55bf3d7da1b"
+        },
+        {
+          "after_actions": 23,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "d8bc68fe7aac807ba0ee58cc99f8ac3745c61bcd7e8d5dc86e8db2c85a15de63"
+        },
+        {
+          "after_actions": 24,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "6f0837d8fe6f0aa1ce16fa06cf017566a53088ee7ac1e2309d664e19c7de500d"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-28x28-p4-multiplayer-heldout-9e3779b97f4ac26e",
+      "split": "heldout",
+      "track": "multiplayer",
+      "seed": 11400714819323216494,
+      "rows": 28,
+      "cols": 28,
+      "players": 4,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 25
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "row": 25,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "col": 25
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 26,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 25,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 24,
+          "col": 1
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 13,
+          "phase": "opening",
+          "strata": [
+            "opening"
+          ],
+          "hash": "0c98c56b626ed62dae3c371007eb9f3a246a738ecdc843e3cedf3327251c6f5c"
+        },
+        {
+          "after_actions": 14,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "f754e9a8918dcee9f8a293c824b9649489d19bdcf6fbfdfc2dfd1c96412ce15c"
+        },
+        {
+          "after_actions": 15,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "9e50c6b312bb9b346f940a27c0603d7c946f4b9fcbfb5740fab5188bf0b109c7"
+        },
+        {
+          "after_actions": 16,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "5e8f5bd817664182046e56d813ce6172eb64ad8f27af422699aa5f0e8837ba9d"
+        },
+        {
+          "after_actions": 17,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "3c79833c53d320340cec9db783abfaa37f652ffac63ea36923015f3f87814db2"
+        },
+        {
+          "after_actions": 18,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "8ecdf5efd6bf30d82f1e17092f76f46580f0c982e9cbd857efca3af6bffc7d3a"
+        },
+        {
+          "after_actions": 19,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "afd3bfb9d060c72ec558d1d3d3d501bd8694e07363025041b6e1d9a1d74905df"
+        },
+        {
+          "after_actions": 20,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "46413d69c1da3427c059bfa5066e50f7dbdd94d3457e17dfdddc6743b5334fdc"
+        },
+        {
+          "after_actions": 21,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "dfc2bbbf10f7ec8130c3e030a4b68873728b3bb30aba30b8ef49bac9a74a57db"
+        },
+        {
+          "after_actions": 22,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "d3673902db5549159e5a3ca1539e2e9f449c6e38c1e32b3b4751fedfb4b4b0e6"
+        },
+        {
+          "after_actions": 23,
+          "phase": "midgame",
+          "strata": [
+            "midgame"
+          ],
+          "hash": "919c87aa60f69204d290319c63a45b62e2933ba55a8cfb47211617021b24d347"
+        },
+        {
+          "after_actions": 24,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "3d7843b3567368f781e89c15d3b17ad9329f48611415b372c3d69b4a34661392"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-25x25-p2-stress-train-9e3779b97f4aa770",
+      "split": "train",
+      "track": "stress",
+      "seed": 11400714819323209584,
+      "rows": 25,
+      "cols": 25,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2
+        },
+        {
+          "kind": "move",
+          "row": 23,
+          "col": 23
+        },
+        {
+          "kind": "move",
+          "row": 22,
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 22,
+          "col": 22
+        },
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 3
+        },
+        {
+          "kind": "move",
+          "row": 22,
+          "col": 21
+        },
+        {
+          "kind": "move",
+          "row": 21,
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 21,
+          "col": 22
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "07fd5a9166d736eb06a2f4d6e239a1c7c300ca74003a4d702e22e59cdf18478f"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-25x25-p2-stress-heldout-9e3779b97f4ac65f",
+      "split": "heldout",
+      "track": "stress",
+      "seed": 11400714819323217503,
+      "rows": 25,
+      "cols": 25,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 23,
+          "col": 23
+        },
+        {
+          "kind": "move",
+          "row": 24,
+          "col": 23
+        },
+        {
+          "kind": "move",
+          "row": 22,
+          "col": 22
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 23,
+          "col": 24
+        },
+        {
+          "kind": "move",
+          "row": 21,
+          "col": 23
+        },
+        {
+          "kind": "move",
+          "row": 23,
+          "col": 22
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "755b32c384e5cf6d7a4fc8c844692d44e94d1bbfee51d691e995aaa3b765e894"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-30x30-p2-stress-train-9e3779b97f4aab61",
+      "split": "train",
+      "track": "stress",
+      "seed": 11400714819323210593,
+      "rows": 30,
+      "cols": 30,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 28,
+          "col": 29
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 29
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 28
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 28,
+          "col": 28
+        },
+        {
+          "kind": "move",
+          "row": 29,
+          "col": 28
+        },
+        {
+          "kind": "move",
+          "row": 28,
+          "col": 27
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "6b26dbf503504121af2fabbbcdba4b592530069b05ed9c1afcb8cc282b21d0a1"
+        }
+      ]
+    },
+    {
+      "id": "generated-v1-30x30-p2-stress-heldout-9e3779b97f4aca50",
+      "split": "heldout",
+      "track": "stress",
+      "seed": 11400714819323218512,
+      "rows": 30,
+      "cols": 30,
+      "players": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 29,
+          "col": 28
+        },
+        {
+          "kind": "move",
+          "row": 28,
+          "col": 28
+        },
+        {
+          "kind": "move",
+          "row": 29,
+          "col": 27
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 28,
+          "col": 29
+        },
+        {
+          "kind": "move",
+          "row": 29,
+          "col": 26
+        },
+        {
+          "kind": "move",
+          "row": 27,
+          "col": 29
+        }
+      ],
+      "checkpoints": [
+        {
+          "after_actions": 12,
+          "phase": "midgame",
+          "strata": [
+            "midgame",
+            "neutral_available"
+          ],
+          "hash": "20a1667c0b92e285a35dac9838a8fc7e767f31938f83771620145aedf74db48a"
+        }
+      ]
+    }
+  ],
+  "group_hashes": {
+    "heldout": "f6ff85240fb4fb3d8b6c6382bfcc13798f4817b3deae0405e4180facdcdef06a",
+    "train": "bc7de8478a7ad5392307d01e5a4dfbe4e2143573dd89a694b9776023721c614c"
+  }
+}

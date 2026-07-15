@@ -1,0 +1,18 @@
+{
+  "version": "production-motifs-v1",
+  "moments": [
+    {"id":"neutral-self-elimination-10","source_id":"4d85f7c0-d314-4dce-b3f0-bb7b169c30ef","turn":8,"after_actions":0,"hash":"06fdd264ea79e519","polarity":"negative","tags":["self_eliminating_neutral","thin_tendril","base_rooted_cut","min_cut_le_3"]},
+    {"id":"happy-before-losing-neutral","source_id":"2cccdb97-8f6b-456d-bc76-a97933cc9cd6","turn":20,"after_actions":0,"hash":"90031018ed5590dd","polarity":"negative","tags":["thin_tendril","base_rooted_cut","attack_chain_counter_capture","neutral_available"]},
+    {"id":"within-turn-before","source_id":"ea94a51b-63e9-4c0a-8c36-154a4722eb01","turn":12,"after_actions":1,"hash":"2adccc15adae7f82","polarity":"negative","pair":"within-turn-consistency","tags":["within_turn","attack_chain_counter_capture"]},
+    {"id":"within-turn-after","source_id":"ea94a51b-63e9-4c0a-8c36-154a4722eb01","turn":12,"after_actions":2,"hash":"f4af122f354dc46f","polarity":"positive","pair":"within-turn-consistency","tags":["within_turn","consolidation","backup_route"]},
+    {"id":"base-cut-15","source_id":"02cfddec-8a18-4522-b99c-092ed8022393","turn":12,"after_actions":0,"hash":"63ed0e828a173d4b","polarity":"negative","tags":["three_cell_base_cut","base_rooted_vertex_disjoint_corridors","min_cut_le_3","thin_tendril"]},
+    {"id":"base-cut-20","source_id":"58b2b9ab-30b4-45e8-bb32-4600300cac55","turn":16,"after_actions":0,"hash":"14f83b201ab69719","polarity":"negative","tags":["three_cell_base_cut","base_rooted_vertex_disjoint_corridors","min_cut_le_3","translated_motif"]},
+    {"id":"proactive-before","source_id":"419c231b-7e0e-4df9-9bba-7871f758f019","turn":8,"after_actions":0,"hash":"32a8969aa7c42c19","polarity":"neutral","pair":"proactive-capture","tags":["proactive_capture","branching"]},
+    {"id":"proactive-after","source_id":"419c231b-7e0e-4df9-9bba-7871f758f019","turn":8,"after_actions":3,"hash":"86cc27256b734b67","polarity":"positive","pair":"proactive-capture","tags":["proactive_capture","consolidation","backup_route","useful_redundant_corridor","preserved_empty_escape"]},
+    {"id":"halo-before","source_id":"47e5ba48-cf37-43e2-b364-efd97ce5f233","turn":19,"after_actions":0,"hash":"653acbd1010464e4","polarity":"negative","pair":"harmful-base-halo","tags":["capturable_base_halo","thin_tendril","preserve_empty_escape"]},
+    {"id":"halo-after","source_id":"47e5ba48-cf37-43e2-b364-efd97ce5f233","turn":20,"after_actions":0,"hash":"19f814cb107fed64","polarity":"negative","pair":"harmful-base-halo","tags":["capturable_base_halo","hardened_enemy_foothold","self_eliminating_neutral"]},
+    {"id":"expansion-without-consolidation","source_id":"fb5b584f-790d-45ca-9351-a4925010b998","turn":14,"after_actions":0,"hash":"899f43934b3a72dd","polarity":"negative","tags":["expansion_without_consolidation","thin_tendril","attack_chain_counter_capture","reflected_motif"]},
+    {"id":"winning-cut-before","source_id":"0c6bf57b-a602-4e2c-87c5-a2fff5de1dff","turn":10,"after_actions":0,"hash":"d48a769b743fa9c1","polarity":"neutral","pair":"winning-proactive-cut","tags":["proactive_capture","base_rooted_cut","opponent_base_siege_decision","neutral_denial_candidate","avoid_capturable_normal_foothold"]},
+    {"id":"winning-cut-after","source_id":"0c6bf57b-a602-4e2c-87c5-a2fff5de1dff","turn":10,"after_actions":3,"hash":"07b16f956f11a54f","polarity":"positive","pair":"winning-proactive-cut","tags":["proactive_capture","attack_chain_survival","backup_route"]}
+  ]
+}

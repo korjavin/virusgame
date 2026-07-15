@@ -29,6 +29,17 @@ func TestProductionPathDeadlineAndLegality(t *testing.T) {
 	}
 }
 
+func TestPlayRejectsSnapshotAgentCountMismatch(t *testing.T) {
+	state, err := game.New(5, 5, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := state.Snapshot()
+	if _, err := Play(Match{Rows: 5, Cols: 5, Initial: &snapshot, Agents: []Agent{Greedy, Greedy}}); err == nil {
+		t.Fatal("accepted three-player snapshot with two agents")
+	}
+}
+
 func TestStrengthGate(t *testing.T) {
 	boards := []Board{{Rows: 5, Cols: 5}, {Rows: 6, Cols: 6}}
 	contender := Tournament(3)

@@ -3,6 +3,7 @@ package arena
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -26,7 +27,11 @@ type OpponentFactory func(seed uint64) Agent
 type TelemetryOpponentFactory func(seed uint64) TelemetryAgent
 
 type Match struct {
-	Rows, Cols      int
+	Rows, Cols int
+	// Initial, when present, is validated by game.FromSnapshot and replaces the
+	// empty board. It lets strength comparisons start from a frozen identical
+	// position instead of replaying the same deterministic opening as a "seed".
+	Initial         *game.Snapshot
 	Agents          []Agent
 	TelemetryAgents []TelemetryAgent
 	MaxActions      int
@@ -99,7 +104,18 @@ func Play(match Match) (GameResult, error) {
 	if match.MaxActions <= 0 {
 		match.MaxActions = match.Rows * match.Cols * 12
 	}
-	state, err := game.New(match.Rows, match.Cols, agentCount)
+	var state game.State
+	var err error
+	if match.Initial != nil {
+		state, err = game.FromSnapshot(*match.Initial)
+		if err == nil && len(match.Initial.Bases) != agentCount {
+			err = fmt.Errorf("initial snapshot has %d players, need %d agents", len(match.Initial.Bases), agentCount)
+		} else if err == nil && (state.Rows() != match.Rows || state.Cols() != match.Cols) {
+			err = fmt.Errorf("initial snapshot dimensions %dx%d do not match %dx%d", state.Rows(), state.Cols(), match.Rows, match.Cols)
+		}
+	} else {
+		state, err = game.New(match.Rows, match.Cols, agentCount)
+	}
 	if err != nil {
 		return GameResult{}, err
 	}
@@ -144,6 +160,25 @@ func Play(match Match) (GameResult, error) {
 	result.Winner = state.Winner()
 	result.Maxed = !state.GameOver() && result.Actions >= match.MaxActions
 	return result, nil
+}
+
+// Interval is a binomial confidence interval expressed as percentages.
+type Interval struct{ Low, High float64 }
+
+// Wilson95 returns the Wilson score interval for wins out of games. Draws are
+// deliberately not counted as half-wins: the superior-engine gate is about
+// demonstrated wins, and this conservative definition cannot hide draws.
+func Wilson95(wins, games int) Interval {
+	if games == 0 {
+		return Interval{}
+	}
+	const z = 1.959963984540054
+	n := float64(games)
+	p := float64(wins) / n
+	denominator := 1 + z*z/n
+	center := (p + z*z/(2*n)) / denominator
+	margin := z * math.Sqrt((p*(1-p)+z*z/(4*n))/n) / denominator
+	return Interval{Low: 100 * (center - margin), High: 100 * (center + margin)}
 }
 
 // Compare runs a balanced incumbent comparison and gives the relationship an
