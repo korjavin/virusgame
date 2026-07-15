@@ -44,6 +44,10 @@ type searcher struct {
 // ChooseNodeBudget performs deterministic iterative deepening without an
 // implicit wall-clock deadline.
 func ChooseNodeBudget(state game.State, limit uint64) (Result, bool) {
+	return chooseNodeBudget(state, limit)
+}
+
+func chooseNodeBudget(state game.State, limit uint64) (Result, bool) {
 	fallback, ok := preservingFallback(state)
 	if !ok || limit == 0 {
 		return Result{}, false

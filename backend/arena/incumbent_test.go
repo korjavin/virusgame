@@ -2,22 +2,49 @@ package arena
 
 import (
 	"context"
+	"os"
 	"reflect"
 	"testing"
 
 	"virusgame/game"
-	"virusgame/search"
 	"virusgame/search/incumbent"
 )
 
-func TestFrozenIncumbentMatchesCurrentSample(t *testing.T) {
-	states := sampledStates(t)
-	for index, state := range states {
-		got, ok := search.ChooseDepth(context.Background(), state, 2)
-		want, wantOK := incumbent.ChooseDepth(context.Background(), state, 2)
-		if !ok || !wantOK || got.Action != want.Action || got.Score != want.Score || got.Depth != want.Depth || got.Nodes != want.Nodes {
-			t.Fatalf("sample %d parity failed: current=%+v/%v frozen=%+v/%v", index, got, ok, want, wantOK)
+func TestFrozenIncumbentGoldenTacticalOutputs(t *testing.T) {
+	type golden struct {
+		action       game.Action
+		score, depth int
+		nodes        uint64
+	}
+	want := map[string]golden{
+		"6c4edd337904f0aa8d105fe0a545e551eb3b7e36d4d50f3a2bfc1642ce63d78b": {game.Action{Kind: game.Move, Target: game.Pos{Row: 1, Col: 1}}, 2096, 2, 23},
+		"33426981f95a9eafb27a3e104210dc5d87e95a3cad4d353fbd5b48bc5ac2824c": {game.Action{Kind: game.Move, Target: game.Pos{Row: 4, Col: 3}}, 6336, 2, 23},
+		"32af0aa62e2721a2ec3f63f99d91690e7c51a32d3d4a541a8e46e454803bab92": {game.Action{Kind: game.Move, Target: game.Pos{Row: 6, Col: 6}}, 3431, 2, 113},
+		"3c3d23f5229bf260f963ed4b41898b8c2074d8b0d468a5131e381a42d3dfa788": {game.Action{Kind: game.Move, Target: game.Pos{Row: 7, Col: 6}}, 6576, 2, 50},
+	}
+	fixture, err := os.Open("testdata/strength-corpus-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fixture.Close()
+	corpus, err := DecodeCorpus(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, testCase := range corpus.Cases {
+		expected, ok := want[testCase.Hash]
+		if !ok {
+			continue
 		}
+		result, complete := incumbent.ChooseDepth(context.Background(), testCase.State, 2)
+		if !complete || result.Action != expected.action || result.Score != expected.score || result.Depth != expected.depth || result.Nodes != expected.nodes {
+			t.Fatalf("hash=%s got=%+v/%v want=%+v", testCase.Hash, result, complete, expected)
+		}
+		found++
+	}
+	if found != len(want) {
+		t.Fatalf("found %d of %d golden states", found, len(want))
 	}
 }
 
@@ -46,10 +73,10 @@ func TestFrozenMultiplayerParityAfterEliminations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, ok := search.ChooseDepth(context.Background(), state, 2)
-	want, wantOK := incumbent.ChooseDepth(context.Background(), state, 2)
-	if !ok || !wantOK || got.Action != want.Action || got.Score != want.Score || got.Nodes != want.Nodes {
-		t.Fatalf("current=%+v frozen=%+v", got, want)
+	result, ok := incumbent.ChooseDepth(context.Background(), state, 2)
+	want := incumbent.Result{Action: game.Action{Kind: game.Move, Target: game.Pos{Row: 0, Col: 1}}, Score: 1508, Depth: 2, Nodes: 18, Evaluations: 15}
+	if !ok || result != want {
+		t.Fatalf("got=%+v/%v want=%+v", result, ok, want)
 	}
 }
 
@@ -86,6 +113,9 @@ func TestSerialAndThreeWayCorpusAggregationMatch(t *testing.T) {
 	if serial.Overall.Illegal != 0 || serial.Overall.Stalled != 0 || serial.Overall.Maxed != 0 {
 		t.Fatalf("invalid self comparison: %s", serial)
 	}
+	if serial.Overall.Wins != 3 || serial.Overall.Losses != 3 || serial.Overall.Draws != 0 || serial.Overall.WinRate() != 50 {
+		t.Fatalf("unbalanced deterministic self comparison: %s", serial)
+	}
 	repeat, err := CompareCorpusBoards(corpus, "train", "competitive_1v1", boards, 3, nil, factory, factory)
 	if err != nil {
 		t.Fatal(err)
@@ -119,36 +149,4 @@ func stripTiming(report *CorpusReport) {
 		value.Elapsed = 0
 		report.Buckets[key] = value
 	}
-}
-
-func sampledStates(t *testing.T) []game.State {
-	var states []game.State
-	for _, board := range []Board{{5, 5}, {8, 8}, {12, 12}} {
-		state, err := game.New(board.Rows, board.Cols, 2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		states = append(states, state)
-		for step := 0; step < 5; step++ {
-			actions := state.LegalActions()
-			var action game.Action
-			found := false
-			for _, candidate := range actions {
-				if candidate.Kind == game.Move {
-					action = candidate
-					found = true
-					break
-				}
-			}
-			if !found {
-				break
-			}
-			state, err = state.Apply(action)
-			if err != nil {
-				t.Fatal(err)
-			}
-			states = append(states, state)
-		}
-	}
-	return states
 }

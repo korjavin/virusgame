@@ -54,9 +54,13 @@ func Tournament(depth int) Agent {
 func TelemetryTournament(depth int) TelemetryAgent {
 	return func(state game.State) (game.Action, DecisionTelemetry, bool) {
 		result, ok := search.ChooseDepth(context.Background(), state, depth)
+		legal, neutrals := rootCounts(state)
 		return result.Action, DecisionTelemetry{
 			Nodes:              result.Nodes,
+			Evaluations:        result.Evaluations,
 			CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth),
+			LegalRootActions:   legal, SearchedRootActions: legal,
+			LegalRootNeutrals: neutrals, SearchedRootNeutrals: neutrals,
 		}, ok
 	}
 }
@@ -85,9 +89,13 @@ func TelemetryProduction() TelemetryAgent {
 		ctx, cancel := context.WithTimeout(context.Background(), search.ProductionBudget)
 		defer cancel()
 		result, ok := search.Choose(ctx, state)
+		legal, neutrals := rootCounts(state)
 		return result.Action, DecisionTelemetry{
 			Nodes:              result.Nodes,
+			Evaluations:        result.Evaluations,
 			CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth),
+			LegalRootActions:   legal, SearchedRootActions: legal,
+			LegalRootNeutrals: neutrals, SearchedRootNeutrals: neutrals,
 		}, ok
 	}
 }
