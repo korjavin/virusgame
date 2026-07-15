@@ -5,22 +5,39 @@ package game
 // Search selection is intentionally limited to 1v1: multiplayer callers get
 // exact enumeration because opponent-specific tactical pruning is ambiguous.
 type Position struct {
-	state State
-	moves []Pos
+	state       State
+	moves       []Pos
+	owned       []Pos
+	searchPairs [][2]Pos
+	analyzed    bool
 }
 
 func NewPosition(state State) Position {
-	return Position{state: state, moves: state.moveTargets(state.current)}
+	p := Position{state: state, moves: state.moveTargets(state.current), analyzed: true}
+	if p.canPlaceNeutrals() {
+		p.owned = p.scanOwnedNormals()
+		if state.players == 2 {
+			p.searchPairs = p.strategicNeutralPairs(p.owned)
+		}
+	}
+	return p
 }
 
 func (p Position) State() State { return p.state }
+
+func (p Position) moveList() []Pos {
+	if p.moves != nil {
+		return p.moves
+	}
+	return p.state.moveTargets(p.state.current)
+}
 
 // LegalActions is exactly State.LegalActions, with cached frontier generation.
 func (p Position) LegalActions() []Action {
 	if p.state.over || !p.state.Active(p.state.current) {
 		return nil
 	}
-	actions := make([]Action, 0, len(p.moves))
+	actions := make([]Action, 0, len(p.moveList()))
 	p.ForEachLegalAction(func(action Action) bool {
 		actions = append(actions, action)
 		return true
@@ -34,7 +51,7 @@ func (p Position) ForEachLegalAction(yield func(Action) bool) {
 	if p.state.over || !p.state.Active(p.state.current) {
 		return
 	}
-	for _, target := range p.moves {
+	for _, target := range p.moveList() {
 		if !yield(Action{Kind: Move, Target: target}) {
 			return
 		}
@@ -52,7 +69,7 @@ func (p Position) ForEachSearchAction(yield func(Action) bool) {
 	if p.state.over || !p.state.Active(p.state.current) {
 		return
 	}
-	for _, target := range p.moves {
+	for _, target := range p.moveList() {
 		if !yield(Action{Kind: Move, Target: target}) {
 			return
 		}
@@ -65,40 +82,11 @@ func (p Position) ForEachSearchAction(yield func(Action) bool) {
 		p.forEachNeutralPair(owned, yield)
 		return
 	}
-	singles, pairs := p.tacticalNeutrals(owned)
-	index := make([]int, len(p.state.cells))
-	for i := range index {
-		index[i] = -1
-	}
-	for i, cell := range owned {
-		index[p.state.index(cell)] = i
-	}
-	relevant := make([]bool, len(owned))
-	for _, cell := range singles {
-		relevant[index[p.state.index(cell)]] = true
-	}
-	for i, isRelevant := range relevant {
-		if !isRelevant {
-			continue
-		}
-		for j := i + 1; j < len(owned); j++ {
-			if !yield(Action{Kind: PlaceNeutrals, Neutrals: [2]Pos{owned[i], owned[j]}}) {
-				return
-			}
-		}
-		for j := 0; j < i; j++ {
-			if relevant[j] {
-				continue
-			} // emitted by the lower relevant endpoint.
-			if !yield(Action{Kind: PlaceNeutrals, Neutrals: [2]Pos{owned[j], owned[i]}}) {
-				return
-			}
-		}
+	pairs := p.searchPairs
+	if !p.analyzed {
+		pairs = p.strategicNeutralPairs(owned)
 	}
 	for _, pair := range pairs {
-		if relevant[index[p.state.index(pair[0])]] || relevant[index[p.state.index(pair[1])]] {
-			continue
-		}
 		if !yield(Action{Kind: PlaceNeutrals, Neutrals: pair}) {
 			return
 		}
@@ -111,6 +99,14 @@ func (p Position) Apply(action Action) (Position, error) {
 		return p, err
 	}
 	return NewPosition(next), nil
+}
+
+// ApplySearch applies an action produced by ForEachSearchAction without
+// repeating legality/connectivity work. Callers must not pass arbitrary input.
+// State.Apply remains the boundary oracle and is used by equivalence tests.
+func (p Position) ApplySearch(action Action) Position {
+	next := p.state.applyGenerated(action)
+	return Position{state: next}
 }
 
 func (p Position) canPlaceNeutrals() bool {
@@ -132,6 +128,13 @@ func (p Position) forEachNeutralPair(cells []Pos, yield func(Action) bool) {
 }
 
 func (p Position) ownedNormals() []Pos {
+	if p.analyzed {
+		return p.owned
+	}
+	return p.scanOwnedNormals()
+}
+
+func (p Position) scanOwnedNormals() []Pos {
 	cells := make([]Pos, 0)
 	for index, cell := range p.state.cells {
 		if cell.Owner == p.state.current && cell.Kind == Normal {
@@ -141,13 +144,15 @@ func (p Position) ownedNormals() []Pos {
 	return cells
 }
 
-// tacticalNeutrals returns individually relevant cells and exact two-cell
-// vertex separators. The latter catches two-wide bridges where neither cell is
-// an articulation point by itself.
-func (p Position) tacticalNeutrals(owned []Pos) ([]Pos, [][2]Pos) {
+// strategicNeutralPairs returns a deliberately bounded defensive branch set.
+// Neutralizing one important cell with every possible filler is strategically
+// redundant and catastrophically expensive. We instead pair at most twelve
+// highest-priority defensive cells with two robust fillers, and retain general
+// (including non-adjacent) two-vertex separators involving those cells.
+func (p Position) strategicNeutralPairs(owned []Pos) [][2]Pos {
 	s, player := p.state, p.state.current
 	if !p.canPlaceNeutrals() {
-		return nil, nil
+		return nil
 	}
 	connected := s.connected(player)
 	scratch := newArticulationScratch(len(s.cells))
@@ -161,143 +166,118 @@ func (p Position) tacticalNeutrals(owned []Pos) ([]Pos, [][2]Pos) {
 		}
 	}
 	base := s.bases[player-1]
-	singles := make([]Pos, 0)
+	defensive := make([]Pos, 0, 12)
+	// Priority order is base survival, immediate attack defense, then narrow
+	// connectivity. Stable board order breaks ties deterministically.
+	addDefensive := func(pos Pos) {
+		for _, existing := range defensive {
+			if existing == pos {
+				return
+			}
+		}
+		if len(defensive) < 12 {
+			defensive = append(defensive, pos)
+		}
+	}
+	for _, pos := range owned {
+		if adjacent(pos, base) {
+			addDefensive(pos)
+		}
+	}
+	for _, pos := range owned {
+		if threatened[s.index(pos)] {
+			addDefensive(pos)
+		}
+	}
 	for _, pos := range owned {
 		index := s.index(pos)
-		if cuts[index] || threatened[index] || adjacent(pos, base) {
-			singles = append(singles, pos)
+		if cuts[index] {
+			addDefensive(pos)
 		}
 	}
-
-	// A minimal tactically relevant width-two separator has adjacent endpoints.
-	// A cheap local screen rejects pairs whose surrounding territory remains
-	// connected; the survivors are verified against the full base component.
-	// This preserves two-wide bridges without a quadratic collection of states.
-	pairs := make([][2]Pos, 0)
-	ordinal := make([]int, len(s.cells))
-	for index := range ordinal {
-		ordinal[index] = -1
+	fillers := robustFillers(s, owned, cuts, threatened, defensive, 2)
+	pairs := make([][2]Pos, 0, 48)
+	addPair := func(a, b Pos) {
+		if a == b {
+			return
+		}
+		if s.index(a) > s.index(b) {
+			a, b = b, a
+		}
+		pair := [2]Pos{a, b}
+		for _, existing := range pairs {
+			if existing == pair {
+				return
+			}
+		}
+		if len(pairs) < 48 {
+			pairs = append(pairs, pair)
+		}
 	}
-	for i, pos := range owned {
-		ordinal[s.index(pos)] = i
+	for _, cell := range defensive {
+		for _, filler := range fillers {
+			addPair(cell, filler)
+		}
 	}
-	for i, u := range owned {
+	// Tarjan in G-u finds all partners v of a general two-vertex separator.
+	// Scratch is reused and defensive is capped, bounding time and allocation.
+	for _, u := range defensive {
+		if len(pairs) >= 48 {
+			break
+		}
 		uIndex := s.index(u)
-		if cuts[uIndex] || !connected[uIndex] {
+		if cuts[uIndex] {
 			continue
 		}
-		for row := u.Row - 1; row <= u.Row+1; row++ {
-			for col := u.Col - 1; col <= u.Col+1; col++ {
-				pos := Pos{row, col}
-				if !s.inBounds(pos) {
-					continue
-				}
-				j := ordinal[s.index(pos)]
-				if j <= i {
-					continue
-				}
-				v := owned[j]
-				vIndex := s.index(v)
-				if cuts[vIndex] || !locallySeparatingPair(s, connected, uIndex, vIndex) {
-					continue
-				}
-				if pairDisconnects(s, connected, uIndex, vIndex) {
-					pairs = append(pairs, [2]Pos{u, v})
-				}
+		partners := articulationCells(s, connected, uIndex, scratch)
+		for _, v := range owned {
+			if partners[s.index(v)] {
+				addPair(u, v)
 			}
 		}
 	}
-	return singles, pairs
+	return pairs
 }
 
-func locallySeparatingPair(s State, connected []bool, first, second int) bool {
-	var neighbors [16]int
-	neighborCount := 0
-	for _, center := range [2]int{first, second} {
-		row, col := center/s.cols, center%s.cols
-		for r := row - 1; r <= row+1; r++ {
-			for c := col - 1; c <= col+1; c++ {
-				pos := Pos{r, c}
-				if !s.inBounds(pos) {
-					continue
-				}
-				index := s.index(pos)
-				if index != first && index != second && connected[index] {
-					duplicate := false
-					for i := 0; i < neighborCount; i++ {
-						if neighbors[i] == index {
-							duplicate = true
-							break
-						}
-					}
-					if !duplicate {
-						neighbors[neighborCount] = index
-						neighborCount++
-					}
-				}
+func robustFillers(s State, owned []Pos, cuts, threatened []bool, defensive []Pos, limit int) []Pos {
+	result := make([]Pos, 0, limit)
+	isDefensive := func(pos Pos) bool {
+		for _, d := range defensive {
+			if d == pos {
+				return true
 			}
 		}
-	}
-	if neighborCount < 2 {
 		return false
 	}
-	var seen [16]bool
-	var queue [16]int
-	seen[0], queue[0] = true, 0
-	head, tail, seenCount := 0, 1, 1
-	for head < tail {
-		current := neighbors[queue[head]]
-		head++
-		row, col := current/s.cols, current%s.cols
-		for nextIndex := 0; nextIndex < neighborCount; nextIndex++ {
-			if seen[nextIndex] {
+	for len(result) < limit {
+		best, bestScore, found := Pos{}, -1, false
+		for _, pos := range owned {
+			index := s.index(pos)
+			if cuts[index] || threatened[index] || isDefensive(pos) {
 				continue
 			}
-			next := neighbors[nextIndex]
-			nr, nc := next/s.cols, next%s.cols
-			if abs(row-nr) <= 1 && abs(col-nc) <= 1 {
-				seen[nextIndex] = true
-				seenCount++
-				queue[tail] = nextIndex
-				tail++
-			}
-		}
-	}
-	return seenCount != neighborCount
-}
-
-func pairDisconnects(s State, connected []bool, first, second int) bool {
-	base := s.index(s.bases[s.current-1])
-	if base == first || base == second {
-		return false
-	}
-	seen := make([]bool, len(s.cells))
-	seen[base] = true
-	queue := []int{base}
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-		row, col := current/s.cols, current%s.cols
-		for r := row - 1; r <= row+1; r++ {
-			for c := col - 1; c <= col+1; c++ {
-				pos := Pos{r, c}
-				if !s.inBounds(pos) {
-					continue
-				}
-				next := s.index(pos)
-				if next != first && next != second && connected[next] && !seen[next] {
-					seen[next] = true
-					queue = append(queue, next)
+			used := false
+			for _, chosen := range result {
+				if chosen == pos {
+					used = true
+					break
 				}
 			}
+			if used {
+				continue
+			}
+			base := s.bases[s.current-1]
+			score := abs(pos.Row-base.Row) + abs(pos.Col-base.Col)
+			if !found || score > bestScore {
+				best, bestScore, found = pos, score, true
+			}
 		}
-	}
-	for index, wasConnected := range connected {
-		if wasConnected && index != first && index != second && !seen[index] {
-			return true
+		if !found {
+			break
 		}
+		result = append(result, best)
 	}
-	return false
+	return result
 }
 
 func abs(value int) int {
