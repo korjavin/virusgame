@@ -18,7 +18,8 @@ import (
 // win-rate ranks eval quality faithfully: a better evaluator wins more from the
 // SAME nodes. It plays balanced-seat 12x12 games from N seeded openings,
 // candidate (live eval) vs the byte-frozen incumbent, and reports the candidate
-// win-rate with a Wilson 95% CI.
+// win-rate with a Wilson 95% CI. The run stops early (SPRT-style, threshold
+// 50%) once the CI clears 50%, else at the opening cap.
 //
 // Parity property: because both seats are played from every shared opening,
 // frozen-vs-frozen reads 50% — any deviation of the candidate from 50% is
@@ -50,10 +51,10 @@ func TestStrangulationEvalNodeBudget(t *testing.T) {
 	contender := TelemetryNodeBudget(nodes, false)
 	incumbent := TelemetryNodeBudget(nodes, true)
 
-	report := playBalancedOpenings(t, "candidate vs incumbent", openings, contender, incumbent)
-	interval := Wilson95(report.Wins, report.Games)
-	t.Logf("12x12 node-budget(%d) head-to-head candidate vs frozen incumbent: %s wilson95=[%.1f%%, %.1f%%]",
-		nodes, report, interval.Low, interval.High)
+	result := playSequentialOpenings(t, "candidate vs incumbent", openings, 50, sequentialMinGames, contender, incumbent)
+	interval := Wilson95(result.Wins, result.Games)
+	t.Logf("12x12 node-budget(%d) head-to-head candidate vs frozen incumbent: %s wilson95=[%.1f%%, %.1f%%] games-played=%d/%d",
+		nodes, result.Report, interval.Low, interval.High, result.Games, 2*openings)
 }
 
 // stranglerOpenings returns the shared opening count for the strangler gates,

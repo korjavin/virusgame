@@ -18,7 +18,9 @@ import (
 // The gate plays the candidate (live eval) and the byte-frozen incumbent from
 // the SAME seeded openings, balanced seats, each against MobilityAttacker and
 // BaseAttacker, under a deterministic 1000-node search budget (no wall clock),
-// and logs wins/games with Wilson 95% CIs per (engine, opponent) pair. It is a
+// and logs wins/games with Wilson 95% CIs per (engine, opponent) pair. Each
+// pair runs sequentially with SPRT-style early stopping (threshold 50%): the
+// pair ends as soon as its Wilson CI clears 50%, else at the opening cap. It is a
 // measurement, failing only on illegal/stalled/maxed games — plus one regression
 // floor: the candidate's MobilityAttacker win-rate must exceed the incumbent's
 // (measured vs-ai2.34: candidate ~62-70%, incumbent ~17-25%).
@@ -54,12 +56,12 @@ func TestVsStrangler(t *testing.T) {
 	rates := map[string]float64{}
 	for _, engine := range engines {
 		for _, opponent := range opponents {
-			report := playBalancedOpenings(t, engine.name+" vs "+opponent.name, openings, engine.agent, opponent.agent)
-			interval := Wilson95(report.Wins, report.Games)
-			rate := 100 * float64(report.Wins) / float64(report.Games)
+			result := playSequentialOpenings(t, engine.name+" vs "+opponent.name, openings, 50, sequentialMinGames, engine.agent, opponent.agent)
+			interval := Wilson95(result.Wins, result.Games)
+			rate := 100 * float64(result.Wins) / float64(result.Games)
 			rates[engine.name+"/"+opponent.name] = rate
-			t.Logf("%s vs %s (nodes=%d): %d/%d=%.1f%% wilson95=[%.1f%%, %.1f%%]",
-				engine.name, opponent.name, nodes, report.Wins, report.Games, rate, interval.Low, interval.High)
+			t.Logf("%s vs %s (nodes=%d): %d/%d=%.1f%% wilson95=[%.1f%%, %.1f%%] games-played=%d/%d",
+				engine.name, opponent.name, nodes, result.Wins, result.Games, rate, interval.Low, interval.High, result.Games, 2*openings)
 		}
 	}
 	if rates["candidate/MobilityAttacker"] <= rates["incumbent/MobilityAttacker"] {

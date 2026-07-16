@@ -12,6 +12,10 @@ import (
 // same stop point, same verdict.
 const sequentialOrderSeed = 20260716
 
+// sequentialMinGames is the shared minimum sample the gates require before
+// wilsonDecision may stop a matchup early.
+const sequentialMinGames = 8
+
 // wilsonDecision is the SPRT-style stop rule: stop once games >= minGames and
 // the Wilson 95% interval lies entirely on one side of thresholdPct. above
 // reports which side. minGames guards against a premature stop on the first

@@ -120,17 +120,17 @@ ALL in `backend/arena/**` (test/measurement code only — zero changes to
 - [x] run `go test ./arena/... -run Sparring` — must pass before next task.
 
 ### Task 3: Wire early stopping into the existing gates
-- [ ] Update `TestVsStrangler` (`strangler_gate_test.go`) to measure each
+- [x] Update `TestVsStrangler` (`strangler_gate_test.go`) to measure each
       (engine, opponent) pair with `playSequentialOpenings` (threshold 50%),
       log `wins/games win% wilson95 games-played/cap` per pair, and keep the
       regression floor `candidate/MobilityAttacker win% > incumbent/MobilityAttacker win%`.
       Keep env gating (`VS_STRANGLER`, `VS_STRANGLER_OPENINGS`).
-- [ ] Update `TestStrangulationEvalNodeBudget` (`strangulation_eval_test.go`) to
+- [x] Update `TestStrangulationEvalNodeBudget` (`strangulation_eval_test.go`) to
       use `playSequentialOpenings` (candidate vs frozen incumbent, threshold 50%)
       and log the CI + games-played/cap. Keep env gating + `VS_STRANGLER_NODES`.
-- [ ] Sanity-run both with a tiny opening count and the env flags set to confirm
+- [x] Sanity-run both with a tiny opening count and the env flags set to confirm
       wiring (`VS_STRANGLER=1 VS_STRANGLER_OPENINGS=4`, `VS_STRANGLER_DIFF=1 VS_STRANGLER_OPENINGS=4`).
-- [ ] run `go test ./arena/...` (default, gates skipped) — must pass before next task.
+- [x] run `go test ./arena/...` (default, gates skipped) — must pass before next task.
 
 ### Task 4: Hybrid qualification + ladder report
 - [ ] Add `backend/arena/ladder_test.go` `TestLadderReport` gated by env
