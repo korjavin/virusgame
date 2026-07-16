@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -63,6 +64,7 @@ func recentGamesHandler(database *sql.DB) http.Handler {
 
 		games, err := loadRecentGames(r.Context(), database, limit)
 		if err != nil {
+			log.Printf("Error loading recent games: %v", err)
 			writeJSONError(w, http.StatusInternalServerError, "unable to load games")
 			return
 		}
