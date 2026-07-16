@@ -133,22 +133,24 @@ ALL in `backend/arena/**` (test/measurement code only — zero changes to
 - [x] run `go test ./arena/...` (default, gates skipped) — must pass before next task.
 
 ### Task 4: Hybrid qualification + ladder report
-- [ ] Add `backend/arena/ladder_test.go` `TestLadderReport` gated by env
+- [x] Add `backend/arena/ladder_test.go` `TestLadderReport` gated by env
       `VS_LADDER=1` (skip otherwise). Node budget default 1000 (env
       `VS_LADDER_NODES`), openings cap default from `stranglerOpenings`-style env
       `VS_LADDER_OPENINGS`. Roster of opponents (all `TelemetryAgent`):
       Greedy, Legacy(seed), BaseAttacker, MobilityAttacker, MobilityBaseAttacker,
       CutSeeker, frozen-incumbent (`TelemetryNodeBudget(nodes, true)`).
-- [ ] For each opponent run `playSequentialOpenings` for the current eval
+- [x] For each opponent run `playSequentialOpenings` for the current eval
       (`TelemetryNodeBudget(nodes, false)`, threshold 50%). For the two hybrids
       ALSO run frozen incumbent vs the hybrid (qualification needs eval AND
       incumbent numbers). Compute qualifies = eval win% < 60 (i.e. hybrid beats
       the eval >40%).
-- [ ] Print ONE aligned table via `t.Log`: columns `opponent | wins/games |
+- [x] Print ONE aligned table via `t.Log`: columns `opponent | wins/games |
       win% | wilson95 [low,high] | games-played/cap | qualifies` (qualifies blank
       for fixed rungs, yes/no for hybrids). Assert no illegal/stalled/maxed games.
-- [ ] run `VS_LADDER=1 VS_LADDER_OPENINGS=4 go test ./arena/ -run TestLadderReport -v`
+- [x] run `VS_LADDER=1 VS_LADDER_OPENINGS=4 go test ./arena/ -run TestLadderReport -v`
       to confirm the table renders and early stopping shows games<cap somewhere.
+      (Table renders; at 4 openings the cap=8 equals minGames=8 so every rung
+      runs to cap — games<cap demonstration happens at the real count in Task 5.)
 
 ### Task 5: Verify acceptance criteria + document
 - [ ] `go build ./...`, `go vet ./...`, `go test ./...`, `go test -race ./arena/...`
