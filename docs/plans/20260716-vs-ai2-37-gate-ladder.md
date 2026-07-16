@@ -153,12 +153,15 @@ ALL in `backend/arena/**` (test/measurement code only — zero changes to
       runs to cap — games<cap demonstration happens at the real count in Task 5.)
 
 ### Task 5: Verify acceptance criteria + document
-- [ ] `go build ./...`, `go vet ./...`, `go test ./...`, `go test -race ./arena/...`
+- [x] `go build ./...`, `go vet ./...`, `go test ./...`, `go test -race ./arena/...`
       all green from `backend/`.
-- [ ] Run the ladder report once at a real opening count and capture the table
+- [x] Run the ladder report once at a real opening count and capture the table
       for the PR body; confirm at least one clear-cut opponent shows
       games-played < cap (early stopping saved games).
-- [ ] Update `backend/arena/README.md`: document the ladder report, early
+      (40 openings, PASS in 176.7s; table in `ladder-report-full.log`. Early
+      stopping saved games on 8 of 9 rungs, e.g. eval vs Greedy 12/80, eval vs
+      incumbent 8/80; only eval vs MobilityAttacker ran to 40/80.)
+- [x] Update `backend/arena/README.md`: document the ladder report, early
       stopping, the two hybrid opponents, and the new env vars
       (`VS_LADDER`, `VS_LADDER_NODES`, `VS_LADDER_OPENINGS`).
 

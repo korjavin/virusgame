@@ -82,6 +82,51 @@ VS_STRANGLER_DIFF=1 go test ./arena -run TestStrangulationEvalNodeBudget -v -tim
 `VS_STRANGLER_OPENINGS` (default 40) and `VS_STRANGLER_NODES` (default 1000,
 secondary gate only) override the sample size and node budget.
 
+Both gates measure each pairing with SPRT-style sequential early stopping
+(see below), so lopsided matchups finish well under the opening cap.
+
+## Sequential early stopping
+
+Gate and ladder pairings play balanced seeded-opening pairs in a fixed-seed
+permutation and, after each pair, update a running Wilson 95% interval. The
+run stops early once at least 8 games are played and the interval lies
+entirely above or below the 50% decision threshold; otherwise it runs to the
+full opening cap. Everything is deterministic — node-budget engines, fixed
+opening order and content — so the same code and seed reproduce the same game
+sequence, stop point, and verdict.
+
+## Hybrid sparring opponents
+
+Two cheap heuristic stranglers extend the fixed baseline roster:
+
+- `MobilityBaseAttacker` — MobilityAttacker's mobility differential plus a
+  base-pressure term and capture bonus.
+- `CutSeeker` — computes the nearest opponent's base-connected articulation
+  points (arena-side Tarjan pass) and prefers moves that capture or adjoin a
+  cut cell, falling back to mobility.
+
+A hybrid qualifies for a ladder slot only if it beats the current eval >40%
+(i.e. the eval's win rate against it is below 60%); the ladder report prints
+the qualification verdict per hybrid.
+
+## Ladder report
+
+The pre-merge strength report for eval/search PRs: the current production
+eval (deterministic node budget) vs the full ladder — Greedy, Legacy,
+BaseAttacker, MobilityAttacker, both hybrids (plus incumbent-vs-hybrid
+qualification rows), and the frozen incumbent — printed as one table with
+win rates, Wilson 95% intervals, and games-played/cap (showing where early
+stopping saved games). Paste the table into the PR body as the strength
+baseline.
+
+```sh
+cd backend
+VS_LADDER=1 go test ./arena -run TestLadderReport -v -timeout 240m
+```
+
+`VS_LADDER_NODES` (default 1000) and `VS_LADDER_OPENINGS` (default 40, cap =
+2x openings) override the node budget and sample size.
+
 ## Production regressions
 
 Immutable production fixtures were imported from `GET /last_games?limit=20`
