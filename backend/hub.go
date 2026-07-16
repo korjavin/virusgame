@@ -396,19 +396,25 @@ func (h *Hub) handleDisconnect(client *Client) {
 					h.sendToUser(opponent, &msg)
 				}
 
-				winner := 1
-				if game.Player1 != nil && game.Player1.ID == user.ID {
-					winner = 2
+				if !game.GameOver {
+					winner := 1
+					if game.Player1 != nil && game.Player1.ID == user.ID {
+						winner = 2
+					}
+					game.GameOver = true
+					game.Winner = winner
 				}
-				game.GameOver = true
-				game.Winner = winner
 				if game.Player1 != nil {
 					game.Player1.InGame = false
 				}
 				if game.Player2 != nil {
 					game.Player2.InGame = false
 				}
-				if !PersistGameOnce(game, "disconnect") {
+				termination := "disconnect"
+				if game.persistenceTermination != "" {
+					termination = game.persistenceTermination
+				}
+				if !PersistGameOnce(game, termination) {
 					log.Printf("Retaining game %s after disconnect because persistence failed", game.ID)
 					continue
 				}
@@ -1343,7 +1349,19 @@ func (h *Hub) handleLeaveGame(user *User, msg *Message) {
 }
 
 func (h *Hub) handleCleanupGame(msg *Message) {
-	if _, exists := h.games[msg.GameID]; exists {
+	if game, exists := h.games[msg.GameID]; exists {
+		termination := game.persistenceTermination
+		if termination == "" {
+			if game.GameOver {
+				termination = "normal"
+			} else {
+				termination = "abandoned"
+			}
+		}
+		if !PersistGameOnce(game, termination) {
+			log.Printf("Retaining ended game %s in memory because persistence failed during cleanup", game.ID)
+			return
+		}
 		delete(h.games, msg.GameID)
 		log.Printf("Cleaned up ended game: %s", msg.GameID)
 	}

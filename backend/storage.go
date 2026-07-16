@@ -29,6 +29,13 @@ func InitDB(dbPath string) {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 
+	if _, err = db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		log.Printf("Failed to set journal_mode=WAL: %v", err)
+	}
+	if _, err = db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
+		log.Printf("Failed to set busy_timeout: %v", err)
+	}
+
 	createTableSQL := `
 	CREATE TABLE IF NOT EXISTS games (
 		id TEXT PRIMARY KEY,
