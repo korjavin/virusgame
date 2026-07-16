@@ -48,22 +48,24 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 	// I will just redefine a helper here to be safe and avoid "redeclaration" errors if I export it later.
 
 	game := &Game{
-		ID: "test-illegal-move-1v1",
-		Player1: c1.user,
-		Player2: c2.user,
+		ID:            "test-illegal-move-1v1",
+		Player1:       c1.user,
+		Player2:       c2.user,
 		CurrentPlayer: 1,
-		MovesLeft: 1,
-		Rows: 5, Cols: 5,
+		MovesLeft:     1,
+		Rows:          5, Cols: 5,
 		Board: make(Board, 5),
 	}
 	for i := range game.Board {
 		game.Board[i] = make([]CellValue, 5)
 	}
-	h.games[game.ID] = game
-	c1.user.InGame = true
-	c1.user.GameID = game.ID
-	c2.user.InGame = true
-	c2.user.GameID = game.ID
+	runOnHub(h, func() {
+		h.games[game.ID] = game
+		c1.user.InGame = true
+		c1.user.GameID = game.ID
+		c2.user.InGame = true
+		c2.user.GameID = game.ID
+	})
 
 	// Call handleIllegalMove directly or trigger it
 	// Triggering via handleMove with invalid move covers path
@@ -79,7 +81,7 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 	// Let's verify handleIllegalMove specifically for Multiplayer elimination vs 1v1 game end
 
 	// 1v1 Case
-	h.handleIllegalMove(game, 1, "test reason")
+	runOnHub(h, func() { h.handleIllegalMove(game, 1, "test reason") })
 
 	// Should receive game_end
 	msg := waitForMessage(t, c2, "game_end")
@@ -99,13 +101,13 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 	// Manually setup multiplayer game
 	mpGameID := "mp-illegal-test"
 	mpGame := &Game{
-		ID: mpGameID,
+		ID:            mpGameID,
 		IsMultiplayer: true,
 		ActivePlayers: 3,
-		Rows: 5, Cols: 5,
+		Rows:          5, Cols: 5,
 		CurrentPlayer: 1,
-		MovesLeft: 3,
-		Board: make(Board, 5),
+		MovesLeft:     3,
+		Board:         make(Board, 5),
 	}
 	for i := range mpGame.Board {
 		mpGame.Board[i] = make([]CellValue, 5)
@@ -121,10 +123,12 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 	mpGame.Board[4][4] = NewCell(2, CellFlagBase)
 	mpGame.Board[0][4] = NewCell(3, CellFlagBase)
 
-	h.games[mpGameID] = mpGame
+	runOnHub(h, func() {
+		h.games[mpGameID] = mpGame
 
-	// Player 1 makes illegal move
-	h.handleIllegalMove(mpGame, 1, "bad move")
+		// Player 1 makes illegal move
+		h.handleIllegalMove(mpGame, 1, "bad move")
+	})
 
 	// Should receive player_eliminated
 	msg = waitForMessage(t, c2, "player_eliminated")
@@ -136,7 +140,9 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 	}
 
 	// Verify pieces removed
-	if mpGame.Board[0][0] != 0 {
+	var eliminatedPiece CellValue
+	runOnHub(h, func() { eliminatedPiece = mpGame.Board[0][0] })
+	if eliminatedPiece != 0 {
 		t.Error("Eliminated player pieces should be removed")
 	}
 }
@@ -152,20 +158,24 @@ func TestHub_Logic_DisconnectCleanup(t *testing.T) {
 	// Setup user in lobby
 	lobbyID := "test-lobby"
 	lobby := &Lobby{
-		ID: lobbyID,
+		ID:         lobbyID,
 		MaxPlayers: 4,
-		Host: c1.user,
+		Host:       c1.user,
 	}
 	lobby.Players[0] = &LobbyPlayer{User: c1.user, Index: 0}
-	h.lobbies[lobbyID] = lobby
-	c1.user.InLobby = true
-	c1.user.LobbyID = lobbyID
+	runOnHub(h, func() {
+		h.lobbies[lobbyID] = lobby
+		c1.user.InLobby = true
+		c1.user.LobbyID = lobbyID
 
-	// Disconnect
-	h.handleDisconnect(c1)
+		// Disconnect
+		h.handleDisconnect(c1)
+	})
 
 	// Lobby should be closed (host left)
-	if _, ok := h.lobbies[lobbyID]; ok {
+	var lobbyExists bool
+	runOnHub(h, func() { _, lobbyExists = h.lobbies[lobbyID] })
+	if lobbyExists {
 		t.Error("Lobby should be closed when host disconnects")
 	}
 }
@@ -174,9 +184,9 @@ func TestHub_Logic_WinCondition(t *testing.T) {
 	h := newHub()
 
 	game := &Game{
-		ID: "win-check",
+		ID:   "win-check",
 		Rows: 3, Cols: 3,
-		Board: make(Board, 3),
+		Board:   make(Board, 3),
 		Player1: &User{ID: "p1"},
 		Player2: &User{ID: "p2"},
 	}
@@ -202,10 +212,10 @@ func TestHub_Logic_EliminateDisconnected(t *testing.T) {
 
 	// Multiplayer Game
 	game := &Game{
-		ID: "elim-check",
+		ID:            "elim-check",
 		IsMultiplayer: true,
-		Rows: 5, Cols: 5,
-		Board: make(Board, 5),
+		Rows:          5, Cols: 5,
+		Board:         make(Board, 5),
 		ActivePlayers: 2,
 	}
 	for i := range game.Board {
@@ -227,8 +237,8 @@ func TestHub_Logic_EliminateDisconnected(t *testing.T) {
 	game.Players[1] = &LobbyPlayer{Index: 1}
 
 	// Setup PlayerBases
-	game.PlayerBases[0] = CellPos{0,0}
-	game.PlayerBases[1] = CellPos{4,4}
+	game.PlayerBases[0] = CellPos{0, 0}
+	game.PlayerBases[1] = CellPos{4, 4}
 
 	// P2 has pieces but (2,2) is disconnected from base.
 	// Can P2 make a move?

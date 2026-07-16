@@ -38,9 +38,18 @@ func waitForMessage(t *testing.T, c *Client, msgType string) *Message {
 // Helper to send message via handleMessage channel
 func sendMessage(h *Hub, c *Client, msg *Message) {
 	h.handleMessage <- &MessageWrapper{
-		client: c,
+		client:  c,
 		message: msg,
 	}
+}
+
+// runOnHub executes fixture setup and observations under the same ownership
+// discipline as production Hub mutations. The acknowledgement is also a
+// deterministic barrier for preceding events.
+func runOnHub(h *Hub, apply func()) {
+	done := make(chan struct{})
+	h.commands <- hubCommand{apply: apply, done: done}
+	<-done
 }
 
 func TestHubIntegration_Connect(t *testing.T) {
@@ -100,17 +109,19 @@ func TestHubIntegration_LobbyAndGame(t *testing.T) {
 	waitForMessage(t, c2, "challenge_received")
 
 	// Verify Challenge exists
-	if len(h.challenges) != 1 {
-		t.Errorf("Expected 1 challenge, got %d", len(h.challenges))
+	var challengeCount int
+	var challengeID string
+	runOnHub(h, func() {
+		challengeCount = len(h.challenges)
+		for id := range h.challenges {
+			challengeID = id
+		}
+	})
+	if challengeCount != 1 {
+		t.Errorf("Expected 1 challenge, got %d", challengeCount)
 	}
 
 	// Client 2 accepts
-	// Find challenge ID
-	var challengeID string
-	for id := range h.challenges {
-		challengeID = id
-	}
-
 	acceptMsg := &Message{
 		Type:        "accept_challenge",
 		ChallengeID: challengeID,
@@ -121,8 +132,10 @@ func TestHubIntegration_LobbyAndGame(t *testing.T) {
 	waitForMessage(t, c1, "game_start")
 	waitForMessage(t, c2, "game_start")
 
-	if len(h.games) != 1 {
-		t.Errorf("Expected 1 active game, got %d", len(h.games))
+	var gameCount int
+	runOnHub(h, func() { gameCount = len(h.games) })
+	if gameCount != 1 {
+		t.Errorf("Expected 1 active game, got %d", gameCount)
 	}
 }
 
@@ -149,29 +162,31 @@ func TestHubIntegration_Move(t *testing.T) {
 		board[i] = make([]CellValue, cols)
 	}
 	game := &Game{
-		ID: gameID,
-		Player1: u1,
-		Player2: u2,
-		Board: board,
-		Rows: rows,
-		Cols: cols,
+		ID:            gameID,
+		Player1:       u1,
+		Player2:       u2,
+		Board:         board,
+		Rows:          rows,
+		Cols:          cols,
 		CurrentPlayer: 1,
-		MovesLeft: 1,
-		Player1Base: CellPos{0,0},
-		Player2Base: CellPos{4,4},
+		MovesLeft:     1,
+		Player1Base:   CellPos{0, 0},
+		Player2Base:   CellPos{4, 4},
 		// Initialize history to avoid panic
-		MoveHistory: []MoveAction{},
+		MoveHistory:    []MoveAction{},
 		LastActionTime: time.Now(),
 	}
 	game.Board[0][0] = NewCell(1, CellFlagBase)
 	game.Board[0][1] = NewCell(1, CellFlagNormal)
 	game.Board[4][4] = NewCell(2, CellFlagBase)
 
-	h.games[gameID] = game
-	u1.InGame = true
-	u1.GameID = gameID
-	u2.InGame = true
-	u2.GameID = gameID
+	runOnHub(h, func() {
+		h.games[gameID] = game
+		u1.InGame = true
+		u1.GameID = gameID
+		u2.InGame = true
+		u2.GameID = gameID
+	})
 
 	// Player 1 makes a move at (1,1) (valid)
 	r, c := 1, 1
@@ -188,7 +203,12 @@ func TestHubIntegration_Move(t *testing.T) {
 	waitForMessage(t, c2, "move_made")
 
 	// Check if move was applied
-	if game.Board[1][1].Player() != 1 {
+	var movedPlayer, currentPlayer int
+	runOnHub(h, func() {
+		movedPlayer = game.Board[1][1].Player()
+		currentPlayer = game.CurrentPlayer
+	})
+	if movedPlayer != 1 {
 		t.Error("Board not updated after move")
 	}
 
@@ -196,7 +216,7 @@ func TestHubIntegration_Move(t *testing.T) {
 	waitForMessage(t, c1, "turn_change")
 	waitForMessage(t, c2, "turn_change")
 
-	if game.CurrentPlayer != 2 {
+	if currentPlayer != 2 {
 		t.Error("Turn should switch to Player 2")
 	}
 }
@@ -223,26 +243,28 @@ func TestHubIntegration_Neutrals(t *testing.T) {
 	}
 	gameID := "test-neutrals"
 	game := &Game{
-		ID: gameID,
-		Player1: u1,
-		Player2: u2,
-		Board: board,
-		Rows: rows,
-		Cols: cols,
-		CurrentPlayer: 1,
-		MovesLeft: 3,
-		Player1Base: CellPos{0,0},
-		Player2Base: CellPos{4,4},
-		MoveHistory: []MoveAction{},
+		ID:             gameID,
+		Player1:        u1,
+		Player2:        u2,
+		Board:          board,
+		Rows:           rows,
+		Cols:           cols,
+		CurrentPlayer:  1,
+		MovesLeft:      3,
+		Player1Base:    CellPos{0, 0},
+		Player2Base:    CellPos{4, 4},
+		MoveHistory:    []MoveAction{},
 		LastActionTime: time.Now(),
 	}
 	game.Board[0][0] = NewCell(1, CellFlagBase)
 	game.Board[0][1] = NewCell(1, CellFlagNormal)
 	game.Board[1][0] = NewCell(1, CellFlagNormal)
 
-	h.games[gameID] = game
-	u1.InGame = true
-	u1.GameID = gameID
+	runOnHub(h, func() {
+		h.games[gameID] = game
+		u1.InGame = true
+		u1.GameID = gameID
+	})
 
 	neutralsMsg := &Message{
 		Type:   "neutrals",
@@ -260,7 +282,9 @@ func TestHubIntegration_Neutrals(t *testing.T) {
 	// Should receive turn_change
 	waitForMessage(t, c1, "turn_change")
 
-	if !game.Board[0][1].IsKilled() {
+	var killed bool
+	runOnHub(h, func() { killed = game.Board[0][1].IsKilled() })
+	if !killed {
 		t.Error("Cell (0,1) should be killed")
 	}
 }
@@ -282,17 +306,19 @@ func TestHubIntegration_Resign(t *testing.T) {
 
 	gameID := "test-resign"
 	game := &Game{
-		ID: gameID,
-		Player1: u1,
-		Player2: u2,
+		ID:            gameID,
+		Player1:       u1,
+		Player2:       u2,
 		CurrentPlayer: 1,
-		MovesLeft: 3,
+		MovesLeft:     3,
 	}
-	h.games[gameID] = game
-	u1.InGame = true
-	u1.GameID = gameID
-	u2.InGame = true
-	u2.GameID = gameID
+	runOnHub(h, func() {
+		h.games[gameID] = game
+		u1.InGame = true
+		u1.GameID = gameID
+		u2.InGame = true
+		u2.GameID = gameID
+	})
 
 	resignMsg := &Message{
 		Type:   "resign",
@@ -302,11 +328,17 @@ func TestHubIntegration_Resign(t *testing.T) {
 
 	waitForMessage(t, c2, "game_end")
 
-	if !game.GameOver {
+	var gameOver bool
+	var winner int
+	runOnHub(h, func() {
+		gameOver = game.GameOver
+		winner = game.Winner
+	})
+	if !gameOver {
 		t.Error("Game should be over")
 	}
-	if game.Winner != 2 {
-		t.Errorf("Player 2 should win, got %d", game.Winner)
+	if winner != 2 {
+		t.Errorf("Player 2 should win, got %d", winner)
 	}
 }
 
@@ -335,7 +367,9 @@ func TestHubIntegration_MultiplayerLobby(t *testing.T) {
 
 	// Wait for lobby_created
 	msg := waitForMessage(t, clients[0], "lobby_created")
-	if msg == nil { return }
+	if msg == nil {
+		return
+	}
 	lobbyID := msg.LobbyID
 
 	// 2. Others join lobby

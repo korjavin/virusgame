@@ -9,44 +9,44 @@ import (
 )
 
 const (
-    CellFlagNormal    byte = 0x00
-    CellFlagBase      byte = 0x10
-    CellFlagFortified byte = 0x20
-    CellFlagKilled    byte = 0x30
+	CellFlagNormal    byte = 0x00
+	CellFlagBase      byte = 0x10
+	CellFlagFortified byte = 0x20
+	CellFlagKilled    byte = 0x30
 
-    FlagMask   byte = 0x30
-    PlayerMask byte = 0x0F
+	FlagMask   byte = 0x30
+	PlayerMask byte = 0x0F
 )
 
 type CellValue byte
 
 func NewCell(player int, flag byte) CellValue {
-    return CellValue(flag | byte(player))
+	return CellValue(flag | byte(player))
 }
 
 func (c CellValue) Player() int {
-    return int(byte(c) & PlayerMask)
+	return int(byte(c) & PlayerMask)
 }
 
 func (c CellValue) Flag() byte {
-    return byte(c) & FlagMask
+	return byte(c) & FlagMask
 }
 
 func (c CellValue) IsBase() bool {
-    return c.Flag() == CellFlagBase
+	return c.Flag() == CellFlagBase
 }
 
 func (c CellValue) IsFortified() bool {
-    return c.Flag() == CellFlagFortified
+	return c.Flag() == CellFlagFortified
 }
 
 func (c CellValue) IsKilled() bool {
-    return c.Flag() == CellFlagKilled
+	return c.Flag() == CellFlagKilled
 }
 
 func (c CellValue) CanBeAttacked() bool {
-    // Cannot attack base, fortified, or killed (neutral)
-    return c.Flag() == CellFlagNormal
+	// Cannot attack base, fortified, or killed (neutral)
+	return c.Flag() == CellFlagNormal
 }
 
 // Custom marshaling for CellValue to ensure it is treated as a number in JSON
@@ -57,42 +57,42 @@ func (c CellValue) CanBeAttacked() bool {
 
 // Message types sent between client and server
 type Message struct {
-	Type         string      `json:"type"`
-	UserID       string      `json:"userId,omitempty"`
-	Username     string      `json:"username,omitempty"`
-	TargetUserID string      `json:"targetUserId,omitempty"`
-	ChallengeID  string      `json:"challengeId,omitempty"`
-	GameID       string      `json:"gameId,omitempty"`
-	FromUserID   string      `json:"fromUserId,omitempty"`
-	FromUsername string      `json:"fromUsername,omitempty"`
-	OpponentID   string      `json:"opponentId,omitempty"`
-	OpponentUsername string  `json:"opponentUsername,omitempty"`
-	YourPlayer   int         `json:"yourPlayer,omitempty"`
-	Rows         int         `json:"rows,omitempty"`
-	Cols         int         `json:"cols,omitempty"`
-	Row          *int        `json:"row,omitempty"`
-	Col          *int        `json:"col,omitempty"`
-	Player       int         `json:"player,omitempty"`
-	Winner       int         `json:"winner,omitempty"`
-	MovesLeft    int         `json:"movesLeft,omitempty"`
-	Users        []UserInfo  `json:"users,omitempty"`
-	Cells        []CellPos   `json:"cells,omitempty"`
+	Type             string     `json:"type"`
+	UserID           string     `json:"userId,omitempty"`
+	Username         string     `json:"username,omitempty"`
+	TargetUserID     string     `json:"targetUserId,omitempty"`
+	ChallengeID      string     `json:"challengeId,omitempty"`
+	GameID           string     `json:"gameId,omitempty"`
+	FromUserID       string     `json:"fromUserId,omitempty"`
+	FromUsername     string     `json:"fromUsername,omitempty"`
+	OpponentID       string     `json:"opponentId,omitempty"`
+	OpponentUsername string     `json:"opponentUsername,omitempty"`
+	YourPlayer       int        `json:"yourPlayer,omitempty"`
+	Rows             int        `json:"rows,omitempty"`
+	Cols             int        `json:"cols,omitempty"`
+	Row              *int       `json:"row,omitempty"`
+	Col              *int       `json:"col,omitempty"`
+	Player           int        `json:"player,omitempty"`
+	Winner           int        `json:"winner,omitempty"`
+	MovesLeft        int        `json:"movesLeft,omitempty"`
+	Users            []UserInfo `json:"users,omitempty"`
+	Cells            []CellPos  `json:"cells,omitempty"`
 	// Lobby fields
-	LobbyID      string      `json:"lobbyId,omitempty"`
-	MaxPlayers   int         `json:"maxPlayers,omitempty"`
-	SlotIndex    int         `json:"slotIndex,omitempty"`
-	Lobby        *LobbyInfo  `json:"lobby,omitempty"`
-	Lobbies      []LobbyInfo `json:"lobbies,omitempty"`
+	LobbyID    string      `json:"lobbyId,omitempty"`
+	MaxPlayers int         `json:"maxPlayers,omitempty"`
+	SlotIndex  int         `json:"slotIndex,omitempty"`
+	Lobby      *LobbyInfo  `json:"lobby,omitempty"`
+	Lobbies    []LobbyInfo `json:"lobbies,omitempty"`
 	// RequestID for tracking requests (e.g., bot_wanted)
-	RequestID    string      `json:"requestId,omitempty"`
+	RequestID string `json:"requestId,omitempty"`
 	// Multiplayer game fields
-	IsMultiplayer bool             `json:"isMultiplayer,omitempty"`
-	PlayerSymbol  string           `json:"playerSymbol,omitempty"`
-	GamePlayers   []GamePlayerInfo `json:"gamePlayers,omitempty"`
-	EliminatedPlayer int           `json:"eliminatedPlayer,omitempty"`
+	IsMultiplayer    bool             `json:"isMultiplayer,omitempty"`
+	PlayerSymbol     string           `json:"playerSymbol,omitempty"`
+	GamePlayers      []GamePlayerInfo `json:"gamePlayers,omitempty"`
+	EliminatedPlayer int              `json:"eliminatedPlayer,omitempty"`
 	// Bot settings
-	BotSettings   *BotSettings     `json:"botSettings,omitempty"`
-	Snapshot      *game.Snapshot   `json:"snapshot,omitempty"`
+	BotSettings *BotSettings   `json:"botSettings,omitempty"`
+	Snapshot    *game.Snapshot `json:"snapshot,omitempty"`
 
 	// Chat fields
 	MessageID string `json:"messageId,omitempty"` // Translation key
@@ -112,11 +112,11 @@ type CellPos struct {
 }
 
 type LobbyInfo struct {
-	LobbyID    string             `json:"lobbyId"`
-	HostName   string             `json:"hostName"`
-	Players    []LobbyPlayerInfo  `json:"players"`
-	MaxPlayers int                `json:"maxPlayers"`
-	Status     string             `json:"status"`
+	LobbyID    string            `json:"lobbyId"`
+	HostName   string            `json:"hostName"`
+	Players    []LobbyPlayerInfo `json:"players"`
+	MaxPlayers int               `json:"maxPlayers"`
+	Status     string            `json:"status"`
 }
 
 type LobbyPlayerInfo struct {
@@ -158,27 +158,27 @@ type Challenge struct {
 
 // Game represents an active game session
 type Game struct {
-	ID            string
-	Player1       *User
-	Player2       *User
-	Board         Board
-	CurrentPlayer int
-	MovesLeft     int
-	Player1Base   CellPos
-	Player2Base   CellPos
-	GameOver      bool
-	Winner        int
+	ID                  string
+	Player1             *User
+	Player2             *User
+	Board               Board
+	CurrentPlayer       int
+	MovesLeft           int
+	Player1Base         CellPos
+	Player2Base         CellPos
+	GameOver            bool
+	Winner              int
 	Player1NeutralsUsed bool
 	Player2NeutralsUsed bool
-	Rows          int
-	Cols          int
+	Rows                int
+	Cols                int
 	// Multiplayer mode fields
 	IsMultiplayer bool
-	Players       [4]*LobbyPlayer  // For 3-4 player games
-	PlayerBases   [4]CellPos       // Bases for each player
-	NeutralsUsed  [4]bool          // Track neutrals usage
-	ActivePlayers int              // Number of active players
-	MoveTimer     *time.Timer      // Timer for auto-resign after 120 seconds
+	Players       [4]*LobbyPlayer // For 3-4 player games
+	PlayerBases   [4]CellPos      // Bases for each player
+	NeutralsUsed  [4]bool         // Track neutrals usage
+	ActivePlayers int             // Number of active players
+	MoveTimer     *time.Timer     // Timer for auto-resign after 120 seconds
 
 	// Game history and timing
 	MoveHistory    []MoveAction
@@ -187,11 +187,43 @@ type Game struct {
 	EndTime        time.Time
 	LastActionTime time.Time
 
+	// Request history makes websocket retries idempotent. It is only accessed
+	// by the hub goroutine and is deliberately bounded per player.
+	actionRequests  [4]*actionRequestHistory
+	RejectedAttempt *RejectedAttempt
+
 	// The first terminal path owns the immutable database snapshot; later
 	// terminal signals observe the same durable row.
 	persistenceMu          sync.Mutex
 	persisted              bool
 	persistenceTermination string
+}
+
+const actionRequestHistoryLimit = 64
+
+type actionRequestHistory struct {
+	byID  map[string]actionRequestRecord
+	order []string
+}
+
+type actionRequestRecord struct {
+	Fingerprint [32]byte
+}
+
+// RejectedAttempt is captured before an illegal action mutates the game. The
+// snapshot and its digest let operators reproduce the exact validation state.
+type RejectedAttempt struct {
+	Player    int            `json:"player"`
+	Action    string         `json:"action"`
+	Row       *int           `json:"row,omitempty"`
+	Col       *int           `json:"col,omitempty"`
+	Cells     []CellPos      `json:"cells,omitempty"`
+	Reason    string         `json:"reason"`
+	Turn      int            `json:"turn"`
+	MovesLeft int            `json:"moves_left"`
+	RequestID string         `json:"request_id,omitempty"`
+	StateHash string         `json:"state_hash"`
+	Snapshot  *game.Snapshot `json:"snapshot"`
 }
 
 type MoveAction struct {
@@ -208,17 +240,17 @@ type Board [][]CellValue
 
 // MarshalJSON for Board to ensure it serializes as [][]int (numbers) instead of base64
 func (b Board) MarshalJSON() ([]byte, error) {
-    // Convert to [][]int for serialization
-    // This is necessary because encoding/json marshals []byte as a base64 string
-    // but we want a JSON array of numbers for the frontend
-    temp := make([][]int, len(b))
-    for i, row := range b {
-        temp[i] = make([]int, len(row))
-        for j, val := range row {
-            temp[i][j] = int(val)
-        }
-    }
-    return json.Marshal(temp)
+	// Convert to [][]int for serialization
+	// This is necessary because encoding/json marshals []byte as a base64 string
+	// but we want a JSON array of numbers for the frontend
+	temp := make([][]int, len(b))
+	for i, row := range b {
+		temp[i] = make([]int, len(row))
+		for j, val := range row {
+			temp[i][j] = int(val)
+		}
+	}
+	return json.Marshal(temp)
 }
 
 // Lobby represents a multiplayer game lobby

@@ -19,18 +19,19 @@ type recentGamesResponse struct {
 }
 
 type recentGame struct {
-	ID          string          `json:"id"`
-	StartedAt   time.Time       `json:"started_at"`
-	EndedAt     time.Time       `json:"ended_at"`
-	Rows        int             `json:"rows"`
-	Cols        int             `json:"cols"`
-	Player1Name string          `json:"player1_name"`
-	Player2Name string          `json:"player2_name"`
-	Player3Name string          `json:"player3_name"`
-	Player4Name string          `json:"player4_name"`
-	Result      int             `json:"result"`
-	Termination string          `json:"termination"`
-	PGNContent  json.RawMessage `json:"pgn_content"`
+	ID              string           `json:"id"`
+	StartedAt       time.Time        `json:"started_at"`
+	EndedAt         time.Time        `json:"ended_at"`
+	Rows            int              `json:"rows"`
+	Cols            int              `json:"cols"`
+	Player1Name     string           `json:"player1_name"`
+	Player2Name     string           `json:"player2_name"`
+	Player3Name     string           `json:"player3_name"`
+	Player4Name     string           `json:"player4_name"`
+	Result          int              `json:"result"`
+	Termination     string           `json:"termination"`
+	PGNContent      json.RawMessage  `json:"pgn_content"`
+	RejectedAttempt *RejectedAttempt `json:"rejected_attempt,omitempty"`
 }
 
 func recentGamesHandler(database *sql.DB) http.Handler {
@@ -117,7 +118,7 @@ func loadRecentGames(ctx context.Context, database *sql.DB, limit int) ([]recent
 	rows, err := database.QueryContext(ctx, `
 		SELECT id, started_at, ended_at, rows, cols,
 		       player1_name, player2_name, player3_name, player4_name,
-		       result, termination, pgn_content
+		       result, termination, pgn_content, rejected_attempt
 		FROM games
 		ORDER BY ended_at DESC, id DESC
 		LIMIT ?`, limit)
@@ -130,11 +131,12 @@ func loadRecentGames(ctx context.Context, database *sql.DB, limit int) ([]recent
 	for rows.Next() {
 		var game recentGame
 		var history []byte
+		var rejected sql.NullString
 		var player1, player2, player3, player4 sql.NullString
 		if err := rows.Scan(
 			&game.ID, &game.StartedAt, &game.EndedAt, &game.Rows, &game.Cols,
 			&player1, &player2, &player3, &player4,
-			&game.Result, &game.Termination, &history,
+			&game.Result, &game.Termination, &history, &rejected,
 		); err != nil {
 			return nil, err
 		}
@@ -146,6 +148,13 @@ func loadRecentGames(ctx context.Context, database *sql.DB, limit int) ([]recent
 			return nil, &corruptGameHistoryError{}
 		}
 		game.PGNContent = append(json.RawMessage(nil), history...)
+		if rejected.Valid {
+			var attempt RejectedAttempt
+			if !json.Valid([]byte(rejected.String)) || json.Unmarshal([]byte(rejected.String), &attempt) != nil {
+				return nil, &corruptGameHistoryError{}
+			}
+			game.RejectedAttempt = &attempt
+		}
 		games = append(games, game)
 	}
 	if err := rows.Err(); err != nil {
