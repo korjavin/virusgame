@@ -394,6 +394,27 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 	}
 }
 
+func TestParallelRootMatchesSequentialAtFixedDepth(t *testing.T) {
+	state := play(t, mustState(t, 5, 5, 2),
+		move(1, 1), move(2, 2), move(3, 3),
+		move(3, 4), move(2, 3), move(1, 2),
+	)
+	want, ok := newSearcher(context.Background(), state).atDepth(state, 2)
+	if !ok {
+		t.Fatal("sequential search incomplete")
+	}
+	fallback, _ := preservingFallback(state)
+	for workers := 1; workers <= 4; workers++ {
+		for repeat := 0; repeat < 3; repeat++ {
+			s := newSearcher(context.Background(), state)
+			got, complete := s.atDepthParallel(state, 2, workers, fallback)
+			if !complete || got.Action != want.Action || got.Score != want.Score {
+				t.Fatalf("workers=%d repeat=%d got=%+v complete=%v want=%+v", workers, repeat, got, complete, want)
+			}
+		}
+	}
+}
+
 func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
