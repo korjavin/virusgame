@@ -144,7 +144,7 @@ new values, never weakened to ranges):
   minimax 26644 (depth+nodes), maxn 6242 (depth) / 9425 (nodes).
 
 ### Task 3: Promote the primary strangler gate into backend/arena
-- [ ] replace `backend/arena/zz_strangler_test.go` with
+- [x] replace `backend/arena/zz_strangler_test.go` with
       `backend/arena/strangler_gate_test.go`: `TestVsStrangler`, opt-in via
       `VS_STRANGLER=1`, default 40 openings (`VS_STRANGLER_OPENINGS`
       override), deterministic N=1000-node budget, balanced seats, SAME seeded
@@ -152,13 +152,16 @@ new values, never weakened to ranges):
       AND `BaseAttacker`, logging wins/games + Wilson 95% CI per (engine,
       opponent) pair; proper doc comment: what a strangler is, why win-rate vs
       a strangler (not vs the incumbent) is the objective, reproduce command
-- [ ] keep the measurement non-failing except on illegal/stalled decisions
+- [x] keep the measurement non-failing except on illegal/stalled decisions
       (same convention as `TestStrangulationEvalNodeBudget`), fail also if the
       candidate's Mobility win-rate is <= the incumbent's (regression floor)
-- [ ] run it once at 4 openings (`VS_STRANGLER=1 VS_STRANGLER_OPENINGS=4
+- [x] run it once at 4 openings (`VS_STRANGLER=1 VS_STRANGLER_OPENINGS=4
       go test ./arena -run TestVsStrangler -v`) to prove wiring; full n=40 run
       happens in Task 5
-- [ ] run `go test ./arena/...` (without env) — gate must skip cleanly
+- [x] run `go test ./arena/...` (without env) — gate must skip cleanly
+- ➕ wiring run (n=4 openings, 8 games/pair): candidate vs Mobility 6/8=75.0%,
+  vs Base 3/8=37.5%; incumbent vs Mobility 1/8=12.5%, vs Base 2/8=25.0% —
+  directionally consistent with the n=200 sweep; full-n numbers land in Task 5.
 
 ### Task 4: Promote the secondary incumbent-differential gate
 - [ ] clean `backend/arena/strangulation_eval_test.go`: DELETE
