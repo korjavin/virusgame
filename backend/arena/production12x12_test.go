@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -106,9 +107,9 @@ func botDecisionPoint(t *testing.T, sourceID string, turn int) game.State {
 // bot's turn-18 decision point (the base-spine cut it never sees coming) and
 // asserts two things the live engine already satisfies today: the reconstructed
 // position is hash-stable, and production Choose returns a legal action that
-// does not immediately hand the game to the human. It also carries, skipped
-// until vs-ai2.31 strengthens 12x12 search, the stronger assertion that the
-// engine avoids the recorded losing continuation.
+// does not immediately hand the game to the human. It also carries, kept
+// skipped per the vs-ai2.34 plan, the stronger assertion that the engine
+// avoids the recorded losing continuation.
 func TestProduction12x12BotDecisionPointRegression(t *testing.T) {
 	const (
 		sourceID = "4558d2fe-c22f-4940-8012-8f4f43fac728"
@@ -146,20 +147,21 @@ func TestProduction12x12BotDecisionPointRegression(t *testing.T) {
 		t.Fatalf("production action %+v self-eliminated the bot: winner=%d", result.Action, next.Winner())
 	}
 
-	// Stronger assertion, deferred to vs-ai2.31: the engine should not walk into
-	// the recorded losing continuation. The bot actually played this exact
-	// base-spine cut sequence and was strangled; today's shallow 12x12 search
-	// still starts down it (Choose returns {3,1} here), so this is skipped to
-	// keep CI green until the search is strong enough to flip it on.
+	// Stronger assertion, kept skipped per the vs-ai2.34 plan (HARD LANDMINE:
+	// beyond any static eval's horizon — leave it skipped, do not chase it):
+	// the engine should not walk into the recorded losing continuation the bot
+	// actually played before being strangled. The vs-ai2.34 space-race eval
+	// avoids the line on a fast machine, but the wall-clock production search
+	// makes that machine-dependent, so enabling it would be flaky.
 	t.Run("avoids_losing_continuation", func(t *testing.T) {
-		t.Skip("enable in vs-ai2.31 once 12x12 search is strong enough")
+		t.Skip("kept skipped per the vs-ai2.34 plan: wall-clock-dependent, do not chase")
 		losing := []game.Action{
 			{Kind: game.Move, Target: game.Pos{Row: 3, Col: 1}},
 			{Kind: game.Move, Target: game.Pos{Row: 2, Col: 0}},
 			{Kind: game.Move, Target: game.Pos{Row: 0, Col: 1}},
 		}
 		played := playOutTurn(t, state)
-		if actionsEqual(played, losing) {
+		if slices.Equal(played, losing) {
 			t.Fatalf("production reproduced the losing continuation %+v", played)
 		}
 	})
@@ -186,18 +188,6 @@ func playOutTurn(t *testing.T, state game.State) []game.Action {
 		state = next
 	}
 	return played
-}
-
-func actionsEqual(a, b []game.Action) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 // TestProduction12x12StrengthMeasurement is the deterministic, reproducible

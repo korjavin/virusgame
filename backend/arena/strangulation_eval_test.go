@@ -38,14 +38,7 @@ func TestStrangulationEvalNodeBudget(t *testing.T) {
 	if os.Getenv("VS_STRANGLER_DIFF") != "1" {
 		t.Skip("set VS_STRANGLER_DIFF=1 to run the node-budget incumbent-differential gate")
 	}
-	openings := 40
-	if v := os.Getenv("VS_STRANGLER_OPENINGS"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 1 {
-			t.Fatalf("VS_STRANGLER_OPENINGS=%q must be a positive integer", v)
-		}
-		openings = parsed
-	}
+	openings := stranglerOpenings(t)
 	nodes := uint64(1000)
 	if v := os.Getenv("VS_STRANGLER_NODES"); v != "" {
 		parsed, err := strconv.ParseUint(v, 10, 64)
@@ -57,27 +50,50 @@ func TestStrangulationEvalNodeBudget(t *testing.T) {
 	contender := TelemetryNodeBudget(nodes, false)
 	incumbent := TelemetryNodeBudget(nodes, true)
 
+	report := playBalancedOpenings(t, "candidate vs incumbent", openings, contender, incumbent)
+	interval := Wilson95(report.Wins, report.Games)
+	t.Logf("12x12 node-budget(%d) head-to-head candidate vs frozen incumbent: %s wilson95=[%.1f%%, %.1f%%]",
+		nodes, report, interval.Low, interval.High)
+}
+
+// stranglerOpenings returns the shared opening count for the strangler gates,
+// overridable via VS_STRANGLER_OPENINGS.
+func stranglerOpenings(t *testing.T) int {
+	t.Helper()
+	openings := 40
+	if v := os.Getenv("VS_STRANGLER_OPENINGS"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 1 {
+			t.Fatalf("VS_STRANGLER_OPENINGS=%q must be a positive integer", v)
+		}
+		openings = parsed
+	}
+	return openings
+}
+
+// playBalancedOpenings plays both seats of every seeded 12x12 opening between
+// a and b and returns a's report. It fails on any illegal or stalled decision.
+func playBalancedOpenings(t *testing.T, label string, openings int, a, b TelemetryAgent) Report {
+	t.Helper()
 	var report Report
 	for i := 0; i < openings; i++ {
 		snapshot := randomLegalOpening(t, uint64(i)+1)
 		for seat := 0; seat < 2; seat++ {
-			agents := []TelemetryAgent{contender, incumbent}
+			agents := []TelemetryAgent{a, b}
 			if seat == 1 {
 				agents[0], agents[1] = agents[1], agents[0]
 			}
 			result, err := Play(Match{Rows: 12, Cols: 12, Initial: &snapshot, TelemetryAgents: agents})
 			if err != nil {
-				t.Fatalf("opening %d seat %d: %v", i, seat, err)
+				t.Fatalf("%s opening %d seat %d: %v", label, i, seat, err)
 			}
-			if result.Illegal != 0 {
-				t.Fatalf("opening %d seat %d illegal: %+v", i, seat, result)
+			if result.Illegal != 0 || result.Stalled {
+				t.Fatalf("%s opening %d seat %d produced illegal/stalled decision: %+v", label, i, seat, result)
 			}
 			report.Add(result, game.Player(seat+1))
 		}
 	}
-	interval := Wilson95(report.Wins, report.Games)
-	t.Logf("12x12 node-budget(%d) head-to-head candidate vs frozen incumbent: %s wilson95=[%.1f%%, %.1f%%]",
-		nodes, report, interval.Low, interval.High)
+	return report
 }
 
 // randomLegalOpening plays ~8 pseudo-random legal plies from the empty 12x12

@@ -2,10 +2,7 @@ package arena
 
 import (
 	"os"
-	"strconv"
 	"testing"
-
-	"virusgame/game"
 )
 
 // TestVsStrangler is the vs-ai2.34 primary anti-strangulation gate.
@@ -37,14 +34,7 @@ func TestVsStrangler(t *testing.T) {
 	if os.Getenv("VS_STRANGLER") != "1" {
 		t.Skip("set VS_STRANGLER=1 to run the slow 12x12 strangler gate")
 	}
-	openings := 40
-	if v := os.Getenv("VS_STRANGLER_OPENINGS"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 1 {
-			t.Fatalf("VS_STRANGLER_OPENINGS=%q must be a positive integer", v)
-		}
-		openings = parsed
-	}
+	openings := stranglerOpenings(t)
 	const nodes = 1000
 	engines := []struct {
 		name  string
@@ -64,25 +54,7 @@ func TestVsStrangler(t *testing.T) {
 	rates := map[string]float64{}
 	for _, engine := range engines {
 		for _, opponent := range opponents {
-			var report Report
-			for i := 0; i < openings; i++ {
-				snapshot := randomLegalOpening(t, uint64(i)+1)
-				for seat := 0; seat < 2; seat++ {
-					agents := []TelemetryAgent{engine.agent, opponent.agent}
-					if seat == 1 {
-						agents[0], agents[1] = agents[1], agents[0]
-					}
-					result, err := Play(Match{Rows: 12, Cols: 12, Initial: &snapshot, TelemetryAgents: agents})
-					if err != nil {
-						t.Fatalf("%s vs %s opening %d seat %d: %v", engine.name, opponent.name, i, seat, err)
-					}
-					if result.Illegal != 0 || result.Stalled {
-						t.Fatalf("%s vs %s opening %d seat %d produced illegal/stalled decision: %+v",
-							engine.name, opponent.name, i, seat, result)
-					}
-					report.Add(result, game.Player(seat+1))
-				}
-			}
+			report := playBalancedOpenings(t, engine.name+" vs "+opponent.name, openings, engine.agent, opponent.agent)
 			interval := Wilson95(report.Wins, report.Games)
 			rate := 100 * float64(report.Wins) / float64(report.Games)
 			rates[engine.name+"/"+opponent.name] = rate

@@ -40,7 +40,6 @@ type evalWorkspace struct {
 	scratch      analysisScratch
 	spaceDist    []int16
 	spaceOwner   []int8
-	spaceQueue   []int
 }
 
 func (w *evalWorkspace) ensure(size int) {
@@ -58,7 +57,6 @@ func (w *evalWorkspace) ensure(size int) {
 	w.scratch.subtree = resize(w.scratch.subtree, size)
 	w.spaceDist = resize(w.spaceDist, size)
 	w.spaceOwner = resize(w.spaceOwner, size)
-	w.spaceQueue = resize(w.spaceQueue, size)
 }
 
 // spaceRace runs one shared multi-source BFS over empty cells seeded from every
@@ -80,7 +78,9 @@ func (w *evalWorkspace) ensure(size int) {
 // differ, so it captures the space-race signal at lower cost.
 func spaceRace(state game.State, cells []game.Cell, connected [4][]bool, w *evalWorkspace) [4]int {
 	size := len(cells)
-	dist, owner, queue := w.spaceDist[:size], w.spaceOwner[:size], w.spaceQueue[:size]
+	// w.queue is borrowed: the connectivity BFS (allConnectedInto) has already
+	// finished with it by the time spaceRace runs, and it retains nothing.
+	dist, owner, queue := w.spaceDist[:size], w.spaceOwner[:size], w.queue[:size]
 	for i := range dist {
 		dist[i] = -1
 		owner[i] = -1
