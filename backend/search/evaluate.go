@@ -57,6 +57,41 @@ func resize[S ~[]E, E any](buffer S, size int) S {
 	return buffer[:size]
 }
 
+// FeatureVector represents every current signed contribution after its existing exact rounding.
+type FeatureVector [17]int64
+
+// WeightVector represents the multiplier weights for the features.
+type WeightVector [17]int64
+
+// IncumbentWeights returns a copy of the frozen incumbent weights (scale=1000).
+func IncumbentWeights() WeightVector {
+	return WeightVector{
+		1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+		1000, 1000, 1000, 1000, 1000, 1000, 1000,
+	}
+}
+
+// scoreFeatures computes the dot product of the feature vector and weight vector, scaled by 1000.
+func scoreFeatures(f FeatureVector, w WeightVector) int64 {
+	var sum int64
+	for i := 0; i < 17; i++ {
+		sum += f[i] * w[i]
+	}
+	return sum / 1000
+}
+
+func safeInt(val int64) int {
+	const maxInt = int64(^uint(0) >> 1)
+	const minInt = -maxInt - 1
+	if val > maxInt {
+		return int(maxInt)
+	}
+	if val < minInt {
+		return int(minInt)
+	}
+	return int(val)
+}
+
 func evaluate(state game.State, player game.Player) int {
 	return evaluateAll(state)[player-1]
 }
@@ -67,6 +102,77 @@ func evaluateAll(state game.State) [4]int {
 
 func evaluateWithWorkspace(state game.State, player game.Player, workspace *evalWorkspace) int {
 	return evaluateAllWithWorkspace(state, workspace)[player-1]
+}
+
+// extractFeatures returns a FeatureVector for each seat.
+func extractFeatures(state game.State, workspace *evalWorkspace) [4]FeatureVector {
+	var features [4]FeatureVector
+	if state.GameOver() {
+		return features
+	}
+
+	var metrics [4]playerMetrics
+	size := state.Rows() * state.Cols()
+	workspace.ensure(size)
+	cells := snapshotCellsInto(state, workspace.cells)
+	connected := allConnectedInto(state, cells, workspace)
+
+	for player := game.Player(1); player <= 4; player++ {
+		if !state.Active(player) {
+			continue
+		}
+		index := player - 1
+		metrics[index] = analyzeWithConnectivity(state, player, cells, connected, &workspace.scratch,
+			workspace.articulation[index], workspace.cutLoss[index])
+		m := metrics[index]
+		area := state.Rows() * state.Cols()
+		owned := m.normal + m.fortified + 1 // include the base
+
+		features[index][0] = int64(normalized(m.connected, area, 10))
+		features[index][1] = int64(normalized(m.normal, area, 30))
+		features[index][2] = int64(normalized(m.fortified, area, 6))
+		features[index][3] = int64(normalized(m.mobility, area, 1))
+		features[index][4] = int64(normalized(m.captures, area, 1))
+		features[index][5] = int64(-normalized(m.disconnected, owned, 1))
+		features[index][6] = int64(180 * m.baseExits)
+		features[index][7] = int64(80 * m.baseOpenings)
+		features[index][8] = int64(240 * m.baseAnchors)
+		features[index][9] = int64(-650 * m.baseThreat * m.threatTempo)
+		features[index][10] = int64(-m.threatTempo * ratio(m.threatenedLoss, max(1, m.connected)))
+		features[index][11] = int64(-m.threatTempo * ratio(m.threatened, max(1, m.connected)))
+
+		if m.baseExits+m.baseOpenings == 0 {
+			features[index][12] = -5000
+		}
+		if !state.NeutralUsed(player) {
+			features[index][13] = 20
+		}
+		if state.CurrentPlayer() == player {
+			features[index][14] = int64(state.MovesLeft() * 12)
+		}
+	}
+
+	for player := game.Player(1); player <= 4; player++ {
+		if !state.Active(player) {
+			continue
+		}
+		own := &metrics[player-1]
+		featuresIndex := player - 1
+		for opponent := game.Player(1); opponent <= 4; opponent++ {
+			if opponent == player || !state.Active(opponent) {
+				continue
+			}
+			for index, cut := range metrics[opponent-1].articulation {
+				if cut && adjacentConnected(state, index, own.connectedCells) {
+					loss := int(metrics[opponent-1].cutLoss[index])
+					features[featuresIndex][15] += 150
+					features[featuresIndex][16] += int64(ratio(loss, max(1, metrics[opponent-1].connected)) / 2)
+				}
+			}
+		}
+	}
+
+	return features
 }
 
 func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int {
@@ -82,12 +188,8 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		return utility
 	}
 
-	var metrics [4]playerMetrics
-	size := state.Rows() * state.Cols()
-	workspace.ensure(size)
-	cells := snapshotCellsInto(state, workspace.cells)
-	connected := allConnectedInto(state, cells, workspace)
-	var raw [4]int
+	features := extractFeatures(state, workspace)
+	var raw [4]int64
 	active := 0
 	for player := game.Player(1); player <= 4; player++ {
 		if !state.Active(player) {
@@ -95,65 +197,27 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			continue
 		}
 		active++
-		index := player - 1
-		metrics[index] = analyzeWithConnectivity(state, player, cells, connected, &workspace.scratch,
-			workspace.articulation[index], workspace.cutLoss[index])
-		m := metrics[player-1]
-		area := state.Rows() * state.Cols()
-		owned := m.normal + m.fortified + 1 // include the base
-		raw[player-1] = normalized(m.connected, area, 10) +
-			normalized(m.normal, area, 30) + normalized(m.fortified, area, 6) +
-			normalized(m.mobility, area, 1) + normalized(m.captures, area, 1) -
-			normalized(m.disconnected, owned, 1) +
-			180*m.baseExits + 80*m.baseOpenings + 240*m.baseAnchors -
-			650*m.baseThreat*m.threatTempo -
-			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
-			m.threatTempo*ratio(m.threatened, max(1, m.connected))
-		if m.baseExits+m.baseOpenings == 0 {
-			raw[player-1] -= 5000
-		}
-		if !state.NeutralUsed(player) {
-			raw[player-1] += 20
-		}
-		if state.CurrentPlayer() == player {
-			raw[player-1] += state.MovesLeft() * 12
-		}
+		raw[player-1] = scoreFeatures(features[player-1], IncumbentWeights())
 	}
 
 	for player := game.Player(1); player <= 4; player++ {
 		if !state.Active(player) {
+			utility[player-1] = safeInt(raw[player-1])
 			continue
 		}
-		own := &metrics[player-1]
-		for opponent := game.Player(1); opponent <= 4; opponent++ {
-			if opponent == player || !state.Active(opponent) {
-				continue
-			}
-			for index, cut := range metrics[opponent-1].articulation {
-				if cut && adjacentConnected(state, index, own.connectedCells) {
-					loss := int(metrics[opponent-1].cutLoss[index])
-					raw[player-1] += 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
-				}
-			}
-		}
-	}
-
-	for player := game.Player(1); player <= 4; player++ {
-		if !state.Active(player) {
-			utility[player-1] = raw[player-1]
-			continue
-		}
-		opponents := 0
+		var opponents int64
 		for other := game.Player(1); other <= 4; other++ {
 			if other != player && state.Active(other) {
 				opponents += raw[other-1]
 			}
 		}
+		var score int64
 		if active > 1 {
-			utility[player-1] = raw[player-1] - opponents/(active-1)
+			score = raw[player-1] - opponents/int64(active-1)
 		} else {
-			utility[player-1] = raw[player-1]
+			score = raw[player-1]
 		}
+		utility[player-1] = safeInt(score)
 	}
 	return utility
 }

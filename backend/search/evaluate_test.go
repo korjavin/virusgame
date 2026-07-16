@@ -1,6 +1,7 @@
 package search
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
@@ -396,4 +397,343 @@ func absInt(value int) int {
 		return -value
 	}
 	return value
+}
+
+func TestEvaluatorEquivalence(t *testing.T) {
+	for _, fixture := range []struct {
+		rows, cols, players int
+		seed                int64
+	}{
+		{5, 5, 2, 42}, {6, 6, 2, 43}, {8, 8, 3, 44}, {10, 10, 4, 45},
+	} {
+		state := randomReachableState(t, fixture.rows, fixture.cols, fixture.players, fixture.seed)
+		workspace := evalWorkspace{}
+		got := evaluateAllWithWorkspace(state, &workspace)
+		want := oldEvaluateAllForTest(state)
+		if got != want {
+			t.Fatalf("Equivalence failed for %dx%d/%dp: got %v, want %v", fixture.rows, fixture.cols, fixture.players, got, want)
+		}
+	}
+}
+
+func TestEvaluatorCartesianEquivalence(t *testing.T) {
+	sizes := [][2]int{{5, 5}, {12, 20}, {20, 12}, {20, 20}}
+	playersOpts := []int{2, 3, 4}
+
+	for _, sz := range sizes {
+		for _, players := range playersOpts {
+			t.Run(fmt.Sprintf("%dx%d-%dp", sz[0], sz[1], players), func(t *testing.T) {
+				seed := int64(sz[0]*1000 + sz[1]*10 + players)
+				state := randomReachableState(t, sz[0], sz[1], players, seed)
+
+				workspace := evalWorkspace{}
+				got := evaluateAllWithWorkspace(state, &workspace)
+				want := oldEvaluateAllForTest(state)
+				if got != want {
+					t.Fatalf("Equivalence failed: got %v, want %v", got, want)
+				}
+			})
+		}
+	}
+}
+
+func TestEvaluatorTransformsSymmetry(t *testing.T) {
+	for _, fixture := range []struct {
+		rows, cols, players int
+		seed                int64
+	}{
+		{5, 5, 2, 99}, {5, 5, 4, 100},
+		{12, 12, 2, 101}, {12, 12, 4, 102},
+	} {
+		state := randomReachableState(t, fixture.rows, fixture.cols, fixture.players, fixture.seed)
+		workspace := evalWorkspace{}
+		baseScores := evaluateAllWithWorkspace(state, &workspace)
+
+		// 1. Transposition (Rows <-> Cols, P3 <-> P4)
+		tState := transposeState(state)
+		tScores := evaluateAllWithWorkspace(tState, &workspace)
+
+		expectedTScores := baseScores
+		if fixture.players >= 4 {
+			expectedTScores[2], expectedTScores[3] = baseScores[3], baseScores[2]
+		}
+		if tScores != expectedTScores {
+			t.Errorf("Transposed state evaluation mismatch for %dx%d-%dp: got %v, want %v",
+				fixture.rows, fixture.cols, fixture.players, tScores, expectedTScores)
+		}
+
+		// 2. 180-degree rotation (P1 <-> P2, P3 <-> P4)
+		rState := rotate180State(state)
+		rScores := evaluateAllWithWorkspace(rState, &workspace)
+
+		expectedRScores := baseScores
+		expectedRScores[0], expectedRScores[1] = baseScores[1], baseScores[0]
+		if fixture.players >= 4 {
+			expectedRScores[2], expectedRScores[3] = baseScores[3], baseScores[2]
+		}
+		if rScores != expectedRScores {
+			t.Errorf("180-degree rotated state evaluation mismatch for %dx%d-%dp: got %v, want %v",
+				fixture.rows, fixture.cols, fixture.players, rScores, expectedRScores)
+		}
+	}
+}
+
+func TestChooseDepthChooseNodeBudgetDigestEquality(t *testing.T) {
+	state := randomReachableState(t, 6, 6, 2, 777)
+
+	// ChooseDepth
+	r1, ok1 := ChooseDepth(context.Background(), state, 2)
+	if !ok1 {
+		t.Fatal("ChooseDepth failed")
+	}
+	r2, ok2 := ChooseDepth(context.Background(), state, 2)
+	if !ok2 || r1.Action != r2.Action || r1.Nodes != r2.Nodes || r1.Evaluations != r2.Evaluations {
+		t.Fatalf("ChooseDepth not deterministic: %+v vs %+v", r1, r2)
+	}
+
+	// ChooseNodeBudget
+	rb1, okb1 := ChooseNodeBudget(state, 500)
+	if !okb1 {
+		t.Fatal("ChooseNodeBudget failed")
+	}
+	rb2, okb2 := ChooseNodeBudget(state, 500)
+	if !okb2 || rb1.Action != rb2.Action || rb1.Nodes != rb2.Nodes || rb1.Evaluations != rb2.Evaluations {
+		t.Fatalf("ChooseNodeBudget not deterministic: %+v vs %+v", rb1, rb2)
+	}
+
+	h := sha256.New()
+	writeResult := func(r Result) {
+		_ = binary.Write(h, binary.LittleEndian, uint32(r.Action.Kind))
+		_ = binary.Write(h, binary.LittleEndian, int32(r.Action.Target.Row))
+		_ = binary.Write(h, binary.LittleEndian, int32(r.Action.Target.Col))
+		_ = binary.Write(h, binary.LittleEndian, uint64(r.Nodes))
+		_ = binary.Write(h, binary.LittleEndian, uint64(r.Evaluations))
+	}
+	writeResult(r1)
+	writeResult(rb1)
+	digest := fmt.Sprintf("%x", h.Sum(nil))
+
+	const expectedDigest = "487541197b96732ea20c575b884d4e888c97f70e36b45b63d8fc36223388867f"
+	if digest != expectedDigest {
+		t.Fatalf("ChooseDepth/ChooseNodeBudget digest = %s, want %s", digest, expectedDigest)
+	}
+}
+
+func transposeState(state game.State) game.State {
+	snap := state.Snapshot()
+	tSnap := game.Snapshot{
+		Rows:        snap.Cols,
+		Cols:        snap.Rows,
+		Bases:       make([]game.Pos, len(snap.Bases)),
+		Active:      make([]bool, len(snap.Active)),
+		NeutralUsed: make([]bool, len(snap.NeutralUsed)),
+		Current:     snap.Current,
+		MovesLeft:   snap.MovesLeft,
+		GameOver:    snap.GameOver,
+		Winner:      snap.Winner,
+		Board:       make([][]game.Cell, snap.Cols),
+	}
+	for col := 0; col < snap.Cols; col++ {
+		tSnap.Board[col] = make([]game.Cell, snap.Rows)
+		for row := 0; row < snap.Rows; row++ {
+			tSnap.Board[col][row] = snap.Board[row][col]
+		}
+	}
+	for i := range snap.Bases {
+		tSnap.Bases[i] = game.Pos{Row: snap.Bases[i].Col, Col: snap.Bases[i].Row}
+		tSnap.Active[i] = snap.Active[i]
+		tSnap.NeutralUsed[i] = snap.NeutralUsed[i]
+	}
+	// Swap Player 3 and Player 4 bases/metadata under transposition
+	if len(tSnap.Bases) >= 4 {
+		tSnap.Bases[2], tSnap.Bases[3] = tSnap.Bases[3], tSnap.Bases[2]
+		tSnap.Active[2], tSnap.Active[3] = tSnap.Active[3], tSnap.Active[2]
+		tSnap.NeutralUsed[2], tSnap.NeutralUsed[3] = tSnap.NeutralUsed[3], tSnap.NeutralUsed[2]
+		// Update board cell owners for Player 3 and 4
+		for r := 0; r < tSnap.Rows; r++ {
+			for c := 0; c < tSnap.Cols; c++ {
+				if tSnap.Board[r][c].Owner == 3 {
+					tSnap.Board[r][c].Owner = 4
+				} else if tSnap.Board[r][c].Owner == 4 {
+					tSnap.Board[r][c].Owner = 3
+				}
+			}
+		}
+		if tSnap.Current == 3 {
+			tSnap.Current = 4
+		} else if tSnap.Current == 4 {
+			tSnap.Current = 3
+		}
+		if tSnap.Winner == 3 {
+			tSnap.Winner = 4
+		} else if tSnap.Winner == 4 {
+			tSnap.Winner = 3
+		}
+	}
+	tState, err := game.FromSnapshot(tSnap)
+	if err != nil {
+		panic(err)
+	}
+	return tState
+}
+
+func rotate180State(state game.State) game.State {
+	snap := state.Snapshot()
+	rSnap := game.Snapshot{
+		Rows:        snap.Rows,
+		Cols:        snap.Cols,
+		Bases:       make([]game.Pos, len(snap.Bases)),
+		Active:      make([]bool, len(snap.Active)),
+		NeutralUsed: make([]bool, len(snap.NeutralUsed)),
+		Current:     snap.Current,
+		MovesLeft:   snap.MovesLeft,
+		GameOver:    snap.GameOver,
+		Winner:      snap.Winner,
+		Board:       make([][]game.Cell, snap.Rows),
+	}
+	for r := 0; r < snap.Rows; r++ {
+		rSnap.Board[r] = make([]game.Cell, snap.Cols)
+		for c := 0; c < snap.Cols; c++ {
+			rSnap.Board[r][c] = snap.Board[snap.Rows-1-r][snap.Cols-1-c]
+		}
+	}
+	for i := range snap.Bases {
+		rSnap.Bases[i] = game.Pos{Row: snap.Rows - 1 - snap.Bases[i].Row, Col: snap.Cols - 1 - snap.Bases[i].Col}
+		rSnap.Active[i] = snap.Active[i]
+		rSnap.NeutralUsed[i] = snap.NeutralUsed[i]
+	}
+	// Under 180-degree rotation, bases map:
+	// P1 (0,0) <-> P2 (rows-1, cols-1)
+	// P3 (0,cols-1) <-> P4 (rows-1, 0)
+	// So we swap P1 <-> P2, and if 4 players, P3 <-> P4.
+	swap := func(p1, p2 int) {
+		rSnap.Bases[p1], rSnap.Bases[p2] = rSnap.Bases[p2], rSnap.Bases[p1]
+		rSnap.Active[p1], rSnap.Active[p2] = rSnap.Active[p2], rSnap.Active[p1]
+		rSnap.NeutralUsed[p1], rSnap.NeutralUsed[p2] = rSnap.NeutralUsed[p2], rSnap.NeutralUsed[p1]
+	}
+	swap(0, 1)
+	if len(rSnap.Bases) >= 4 {
+		swap(2, 3)
+	}
+	// Map owners, current, winner
+	mapper := func(p game.Player) game.Player {
+		switch p {
+		case 1:
+			return 2
+		case 2:
+			return 1
+		case 3:
+			if len(rSnap.Bases) >= 4 {
+				return 4
+			}
+			return 3
+		case 4:
+			return 3
+		default:
+			return 0
+		}
+	}
+	for r := 0; r < rSnap.Rows; r++ {
+		for c := 0; c < rSnap.Cols; c++ {
+			rSnap.Board[r][c].Owner = mapper(rSnap.Board[r][c].Owner)
+		}
+	}
+	rSnap.Current = mapper(rSnap.Current)
+	rSnap.Winner = mapper(rSnap.Winner)
+
+	rState, err := game.FromSnapshot(rSnap)
+	if err != nil {
+		panic(err)
+	}
+	return rState
+}
+
+func oldEvaluateAllForTest(state game.State) [4]int {
+	var utility [4]int
+	if state.GameOver() {
+		for player := game.Player(1); player <= 4; player++ {
+			if state.Winner() == player {
+				utility[player-1] = mateScore
+			} else {
+				utility[player-1] = -mateScore
+			}
+		}
+		return utility
+	}
+
+	var metrics [4]playerMetrics
+	size := state.Rows() * state.Cols()
+	workspace := evalWorkspace{}
+	workspace.ensure(size)
+	cells := snapshotCellsInto(state, workspace.cells)
+	connected := allConnectedInto(state, cells, &workspace)
+	var raw [4]int
+	active := 0
+	for player := game.Player(1); player <= 4; player++ {
+		if !state.Active(player) {
+			raw[player-1] = -mateScore / 2
+			continue
+		}
+		active++
+		index := player - 1
+		metrics[index] = analyzeWithConnectivity(state, player, cells, connected, &workspace.scratch,
+			workspace.articulation[index], workspace.cutLoss[index])
+		m := metrics[player-1]
+		area := state.Rows() * state.Cols()
+		owned := m.normal + m.fortified + 1 // include the base
+		raw[player-1] = normalized(m.connected, area, 10) +
+			normalized(m.normal, area, 30) + normalized(m.fortified, area, 6) +
+			normalized(m.mobility, area, 1) + normalized(m.captures, area, 1) -
+			normalized(m.disconnected, owned, 1) +
+			180*m.baseExits + 80*m.baseOpenings + 240*m.baseAnchors -
+			650*m.baseThreat*m.threatTempo -
+			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
+			m.threatTempo*ratio(m.threatened, max(1, m.connected))
+		if m.baseExits+m.baseOpenings == 0 {
+			raw[player-1] -= 5000
+		}
+		if !state.NeutralUsed(player) {
+			raw[player-1] += 20
+		}
+		if state.CurrentPlayer() == player {
+			raw[player-1] += state.MovesLeft() * 12
+		}
+	}
+
+	for player := game.Player(1); player <= 4; player++ {
+		if !state.Active(player) {
+			continue
+		}
+		own := &metrics[player-1]
+		for opponent := game.Player(1); opponent <= 4; opponent++ {
+			if opponent == player || !state.Active(opponent) {
+				continue
+			}
+			for index, cut := range metrics[opponent-1].articulation {
+				if cut && adjacentConnected(state, index, own.connectedCells) {
+					loss := int(metrics[opponent-1].cutLoss[index])
+					raw[player-1] += 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
+				}
+			}
+		}
+	}
+
+	for player := game.Player(1); player <= 4; player++ {
+		if !state.Active(player) {
+			utility[player-1] = raw[player-1]
+			continue
+		}
+		opponents := 0
+		for other := game.Player(1); other <= 4; other++ {
+			if other != player && state.Active(other) {
+				opponents += raw[other-1]
+			}
+		}
+		if active > 1 {
+			utility[player-1] = raw[player-1] - opponents/(active-1)
+		} else {
+			utility[player-1] = raw[player-1]
+		}
+	}
+	return utility
 }
