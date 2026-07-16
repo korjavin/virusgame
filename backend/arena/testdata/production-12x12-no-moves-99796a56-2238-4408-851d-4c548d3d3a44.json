@@ -1,0 +1,869 @@
+{
+  "source_id": "99796a56-2238-4408-851d-4c548d3d3a44",
+  "players": [
+    "CunningBadger93",
+    "Bot 9022"
+  ],
+  "rows": 12,
+  "cols": 12,
+  "winner": 1,
+  "termination": "no_moves",
+  "observed_turns": 41,
+  "turns": [
+    {
+      "turn": 1,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 1,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 3
+        }
+      ]
+    },
+    {
+      "turn": 2,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 9
+        }
+      ]
+    },
+    {
+      "turn": 3,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "turn": 4,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "turn": 5,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 7
+        }
+      ]
+    },
+    {
+      "turn": 6,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 5
+        }
+      ]
+    },
+    {
+      "turn": 7,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 8
+        }
+      ]
+    },
+    {
+      "turn": 8,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 10
+        }
+      ]
+    },
+    {
+      "turn": 9,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 8
+        }
+      ]
+    },
+    {
+      "turn": 10,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 5
+        }
+      ]
+    },
+    {
+      "turn": 11,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 8
+        }
+      ]
+    },
+    {
+      "turn": 12,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 9
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 9
+        }
+      ]
+    },
+    {
+      "turn": 13,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 10
+        }
+      ]
+    },
+    {
+      "turn": 14,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 9
+        }
+      ]
+    },
+    {
+      "turn": 15,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 9
+        }
+      ]
+    },
+    {
+      "turn": 16,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 9
+        }
+      ]
+    },
+    {
+      "turn": 17,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 3
+        }
+      ]
+    },
+    {
+      "turn": 18,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 7
+        }
+      ]
+    },
+    {
+      "turn": 19,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 2
+        }
+      ]
+    },
+    {
+      "turn": 20,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "turn": 21,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 2
+        }
+      ]
+    },
+    {
+      "turn": 22,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 4
+        }
+      ]
+    },
+    {
+      "turn": 23,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 2
+        }
+      ]
+    },
+    {
+      "turn": 24,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 4
+        }
+      ]
+    },
+    {
+      "turn": 25,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 9
+        }
+      ]
+    },
+    {
+      "turn": 26,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 2
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 11,
+          "col": 3
+        }
+      ]
+    },
+    {
+      "turn": 27,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 1
+        }
+      ]
+    },
+    {
+      "turn": 28,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 10
+        },
+        {
+          "kind": "move",
+          "row": 9
+        },
+        {
+          "kind": "move",
+          "row": 8
+        }
+      ]
+    },
+    {
+      "turn": 29,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 8
+        },
+        {
+          "kind": "move",
+          "row": 9
+        }
+      ]
+    },
+    {
+      "turn": 30,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 11
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 4
+        }
+      ]
+    },
+    {
+      "turn": 31,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 3
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 1
+        }
+      ]
+    },
+    {
+      "turn": 32,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 1
+        }
+      ]
+    },
+    {
+      "turn": 33,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 1
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 2
+        }
+      ]
+    },
+    {
+      "turn": 34,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 7
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 5
+        }
+      ]
+    },
+    {
+      "turn": 35,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 5
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 7
+        }
+      ]
+    },
+    {
+      "turn": 36,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 10,
+          "col": 2
+        }
+      ]
+    },
+    {
+      "turn": 37,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 4
+        },
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 8
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 5
+        }
+      ]
+    },
+    {
+      "turn": 38,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 9,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 8,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 11
+        }
+      ]
+    },
+    {
+      "turn": 39,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 3,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 6
+        },
+        {
+          "kind": "move",
+          "row": 2,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "turn": 40,
+      "player": 2,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 4,
+          "col": 4
+        }
+      ]
+    },
+    {
+      "turn": 41,
+      "player": 1,
+      "actions": [
+        {
+          "kind": "move",
+          "row": 6,
+          "col": 11
+        },
+        {
+          "kind": "move",
+          "row": 5,
+          "col": 10
+        },
+        {
+          "kind": "move",
+          "row": 7,
+          "col": 11
+        }
+      ]
+    }
+  ]
+}

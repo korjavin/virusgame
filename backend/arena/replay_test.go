@@ -33,6 +33,15 @@ func TestAllCapturedProductionGamesReplayWithDistinctOutcomes(t *testing.T) {
 		"913c33f7-1f0c-41ce-9cee-65d3d9688073": "no_moves",
 		"550cfd27-6c5c-48a2-928c-c36354f9db87": "no_moves",
 		"836204cc-7c0d-4d9c-ace3-8aae41fd5e8c": "illegal_move",
+		// vs-ai2.30: real 12x12 no_moves bot losses imported as frozen replays.
+		"323e3f1f-d1a9-4534-973c-5df2fd4302b4": "no_moves",
+		"86ecfde5-f313-4bec-bd6e-9a2e79f46227": "no_moves",
+		"6ad8b536-4f29-4c41-9b7e-fa5eb350f545": "no_moves",
+		"c3f39595-38f2-46a0-891e-2ca7efce4655": "no_moves",
+		"b2ef469b-470c-41d5-ac6a-5e3e2ded7776": "no_moves",
+		"6eaa8f07-719a-4663-aa11-90f3a9465b3a": "no_moves",
+		"99796a56-2238-4408-851d-4c548d3d3a44": "no_moves",
+		"6c8513fe-3c07-4471-9ea6-cc3da798bcc9": "no_moves",
 	}
 	fixtures, err := filepath.Glob("testdata/*.json")
 	if err != nil {
