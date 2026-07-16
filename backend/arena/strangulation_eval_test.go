@@ -28,7 +28,7 @@ import (
 // deterministic.
 //
 // It is a measurement, not a hard strength gate: it only fails on an
-// illegal/stalled decision.
+// illegal/stalled decision or a maxed-out (non-terminating) game.
 //
 // Reproduce:
 //
@@ -72,7 +72,9 @@ func stranglerOpenings(t *testing.T) int {
 }
 
 // playBalancedOpenings plays both seats of every seeded 12x12 opening between
-// a and b and returns a's report. It fails on any illegal or stalled decision.
+// a and b and returns a's report. It fails on any illegal or stalled decision,
+// or on a game that hits the MaxActions cap without terminating — a maxed game
+// would otherwise count as a silent draw and deflate both win rates.
 func playBalancedOpenings(t *testing.T, label string, openings int, a, b TelemetryAgent) Report {
 	t.Helper()
 	var report Report
@@ -87,8 +89,8 @@ func playBalancedOpenings(t *testing.T, label string, openings int, a, b Telemet
 			if err != nil {
 				t.Fatalf("%s opening %d seat %d: %v", label, i, seat, err)
 			}
-			if result.Illegal != 0 || result.Stalled {
-				t.Fatalf("%s opening %d seat %d produced illegal/stalled decision: %+v", label, i, seat, result)
+			if result.Illegal != 0 || result.Stalled || result.Maxed {
+				t.Fatalf("%s opening %d seat %d produced illegal/stalled/maxed game: %+v", label, i, seat, result)
 			}
 			report.Add(result, game.Player(seat+1))
 		}

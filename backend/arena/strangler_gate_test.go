@@ -19,7 +19,7 @@ import (
 // the SAME seeded openings, balanced seats, each against MobilityAttacker and
 // BaseAttacker, under a deterministic 1000-node search budget (no wall clock),
 // and logs wins/games with Wilson 95% CIs per (engine, opponent) pair. It is a
-// measurement, failing only on illegal/stalled decisions — plus one regression
+// measurement, failing only on illegal/stalled/maxed games — plus one regression
 // floor: the candidate's MobilityAttacker win-rate must exceed the incumbent's
 // (measured vs-ai2.34: candidate ~62-70%, incumbent ~17-25%).
 //
