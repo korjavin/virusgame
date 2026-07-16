@@ -96,28 +96,28 @@ ALL in `backend/arena/**` (test/measurement code only — zero changes to
 - [x] run `go test ./arena/... -run Sequential` — must pass before next task.
 
 ### Task 2: Hybrid sparring opponents (mobility+base, cut-seeker)
-- [ ] Add `backend/arena/sparring.go` (package `arena`): `MobilityBaseAttacker(state) (game.Action, bool)`
+- [x] Add `backend/arena/sparring.go` (package `arena`): `MobilityBaseAttacker(state) (game.Action, bool)`
       — score = `immediateMobility(next, actor)` minus opponent-reply mobility
       (like MobilityAttacker) PLUS a base-pressure term `-k*opponentBaseDistance(state, actor, target)`
       and a capture bonus; deterministic board-order tie-break. Cheap, no search.
-- [ ] Add arena-side connectivity helper in `sparring.go`:
+- [x] Add arena-side connectivity helper in `sparring.go`:
       `opponentArticulations(state game.State, victim game.Player) map[game.Pos]bool`
       — BFS the victim's base-connected component over 8-neighbours, run a simple
       iterative/recursive Tarjan articulation-point pass over that component,
       return the cut cells. Keep it a plain cheap heuristic (recompute per call;
       `ponytail:` comment noting O(cells) recompute, memoise only if the ladder
       gets slow).
-- [ ] Add `CutSeeker(state) (game.Action, bool)`: pick the highest-priority
+- [x] Add `CutSeeker(state) (game.Action, bool)`: pick the highest-priority
       victim (nearest active opponent base), compute its articulation points,
       score moves that capture an articulation cell or land 8-adjacent to one
       highest; fall back to MobilityAttacker-style mobility when no cut is
       reachable; deterministic tie-break. Cheap heuristic only.
-- [ ] `TestSparringAgentsLegalAndDeterministic`: for several `randomLegalOpening`
+- [x] `TestSparringAgentsLegalAndDeterministic`: for several `randomLegalOpening`
       snapshots, assert `MobilityBaseAttacker` and `CutSeeker` return legal moves
       (`state.Apply` succeeds) and identical action on repeated calls; add one
       crafted position with a known articulation point and assert `CutSeeker`
       targets/adjoins it.
-- [ ] run `go test ./arena/... -run Sparring` — must pass before next task.
+- [x] run `go test ./arena/... -run Sparring` — must pass before next task.
 
 ### Task 3: Wire early stopping into the existing gates
 - [ ] Update `TestVsStrangler` (`strangler_gate_test.go`) to measure each
