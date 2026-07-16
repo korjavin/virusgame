@@ -57,11 +57,54 @@ func resize[S ~[]E, E any](buffer S, size int) S {
 	return buffer[:size]
 }
 
+// Feature dimensions constants for the evaluation vector.
+const (
+	// FeatureConnected is the normalized score for connected cells (default weight 10).
+	FeatureConnected = iota
+	// FeatureNormal is the normalized score for normal player cells (default weight 30).
+	FeatureNormal
+	// FeatureFortified is the normalized score for fortified player cells (default weight 6).
+	FeatureFortified
+	// FeatureMobility is the normalized score for player cell mobility/empty neighbors (default weight 1).
+	FeatureMobility
+	// FeatureCaptures is the normalized score for adjacent normal opponent cells (default weight 1).
+	FeatureCaptures
+	// FeatureDisconnected is the normalized penalty for disconnected cells (default weight -1).
+	FeatureDisconnected
+	// FeatureBaseExits is the score for exits around the player base (default weight 180).
+	FeatureBaseExits
+	// FeatureBaseOpenings is the score for base openings (default weight 80).
+	FeatureBaseOpenings
+	// FeatureBaseAnchors is the score for fortified cells next to the base (default weight 240).
+	FeatureBaseAnchors
+	// FeatureBaseThreat is the tempo-scaled base threat penalty (default weight -650).
+	FeatureBaseThreat
+	// FeatureThreatenedLoss is the tempo-scaled loss penalty of threatened cells.
+	FeatureThreatenedLoss
+	// FeatureThreatened is the tempo-scaled count penalty of threatened cells.
+	FeatureThreatened
+	// FeatureBlocked is the penalty if the base has zero exits/openings (default weight -5000).
+	FeatureBlocked
+	// FeatureNeutralTempo is the bonus if neutral has not been used (default weight 20).
+	FeatureNeutralTempo
+	// FeatureCurrentMoves is the moves-left bonus if the player is active (default weight 12).
+	FeatureCurrentMoves
+	// FeatureAdjacentCutBase is the bonus for adjacent cuts made by opponents (default weight 150).
+	FeatureAdjacentCutBase
+	// FeatureAdjacentCutLoss is the accumulated ratio cut loss for adjacent opponent cuts.
+	FeatureAdjacentCutLoss
+	// FeatureCount is the total number of features in the feature vector.
+	FeatureCount
+)
+
+// WeightScale is the denominator scale for dot product scores (1000).
+const WeightScale = 1000
+
 // FeatureVector represents every current signed contribution after its existing exact rounding.
-type FeatureVector [17]int64
+type FeatureVector [FeatureCount]int64
 
 // WeightVector represents the multiplier weights for the features.
-type WeightVector [17]int64
+type WeightVector [FeatureCount]int64
 
 // IncumbentWeights returns a copy of the frozen incumbent weights (scale=1000).
 func IncumbentWeights() WeightVector {
@@ -71,13 +114,17 @@ func IncumbentWeights() WeightVector {
 	}
 }
 
-// scoreFeatures computes the dot product of the feature vector and weight vector, scaled by 1000.
+// ScoreFeatures computes the dot product of the feature vector and weight vector, scaled by WeightScale.
+func ScoreFeatures(f FeatureVector, w WeightVector) int64 {
+	return scoreFeatures(f, w)
+}
+
 func scoreFeatures(f FeatureVector, w WeightVector) int64 {
 	var sum int64
-	for i := 0; i < 17; i++ {
+	for i := 0; i < FeatureCount; i++ {
 		sum += f[i] * w[i]
 	}
-	return sum / 1000
+	return sum / WeightScale
 }
 
 func safeInt(val int64) int {
@@ -90,6 +137,16 @@ func safeInt(val int64) int {
 		return int(minInt)
 	}
 	return int(val)
+}
+
+// FeatureExtractor contains reusable workspace memory to extract features without heap allocations.
+type FeatureExtractor struct {
+	workspace evalWorkspace
+}
+
+// Extract returns the feature vectors for all 4 seats in the given game state.
+func (fe *FeatureExtractor) Extract(state game.State) [4]FeatureVector {
+	return extractFeatures(state, &fe.workspace)
 }
 
 func evaluate(state game.State, player game.Player) int {
@@ -535,6 +592,9 @@ func adjacentConnected(state game.State, index int, connected []bool) bool {
 }
 
 func basePos(state game.State, player game.Player) game.Pos {
+	if pos, ok := state.Base(player); ok {
+		return pos
+	}
 	switch player {
 	case 1:
 		return game.Pos{Row: 0, Col: 0}

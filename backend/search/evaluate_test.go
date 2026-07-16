@@ -450,7 +450,7 @@ func TestEvaluatorTransformsSymmetry(t *testing.T) {
 		baseScores := evaluateAllWithWorkspace(state, &workspace)
 
 		// 1. Transposition (Rows <-> Cols, P3 <-> P4)
-		tState := transposeState(state)
+		tState := transposeStateWithPlayerSwaps(state)
 		tScores := evaluateAllWithWorkspace(tState, &workspace)
 
 		expectedTScores := baseScores
@@ -519,7 +519,7 @@ func TestChooseDepthChooseNodeBudgetDigestEquality(t *testing.T) {
 	}
 }
 
-func transposeState(state game.State) game.State {
+func transposeStateWithPlayerSwaps(state game.State) game.State {
 	snap := state.Snapshot()
 	tSnap := game.Snapshot{
 		Rows:        snap.Cols,
@@ -736,4 +736,182 @@ func oldEvaluateAllForTest(state game.State) [4]int {
 		}
 	}
 	return utility
+}
+
+func TestFeatureExtractorExportedAPI(t *testing.T) {
+	sizes := [][2]int{{5, 5}, {6, 9}, {9, 6}, {12, 20}, {20, 12}, {20, 20}}
+	playersOpts := []int{2, 3, 4}
+
+	extractor := &FeatureExtractor{}
+
+	for _, sz := range sizes {
+		for _, players := range playersOpts {
+			seed := int64(sz[0]*1000 + sz[1]*10 + players)
+			state := randomReachableState(t, sz[0], sz[1], players, seed)
+
+			features := extractor.Extract(state)
+			workspace := evalWorkspace{}
+			internalFeatures := extractFeatures(state, &workspace)
+
+			if features != internalFeatures {
+				t.Fatalf("FeatureExtractor mismatch for %dx%d-%dp: got %v, want %v", sz[0], sz[1], players, features, internalFeatures)
+			}
+
+			for player := game.Player(1); player <= 4; player++ {
+				if !state.Active(player) {
+					continue
+				}
+				idx := player - 1
+				gotScore := ScoreFeatures(features[idx], IncumbentWeights())
+				wantScore := scoreFeatures(internalFeatures[idx], IncumbentWeights())
+				if gotScore != wantScore {
+					t.Fatalf("ScoreFeatures mismatch: got %d, want %d", gotScore, wantScore)
+				}
+			}
+		}
+	}
+
+	state := matureEvaluationState(t, 12, 12)
+	_ = extractor.Extract(state) // warmup
+
+	allocs := testing.AllocsPerRun(100, func() {
+		_ = extractor.Extract(state)
+	})
+	if allocs != 0 {
+		t.Fatalf("FeatureExtractor.Extract allocated %.0f times in steady state, want 0", allocs)
+	}
+}
+
+func TestEvaluatorCoordinateReflectionsAndTranspositions(t *testing.T) {
+	sizes := [][2]int{{5, 5}, {6, 9}}
+	playersOpts := []int{2, 3, 4}
+
+	for _, sz := range sizes {
+		for _, players := range playersOpts {
+			t.Run(fmt.Sprintf("%dx%d-%dp", sz[0], sz[1], players), func(t *testing.T) {
+				seed := int64(sz[0]*100 + sz[1]*10 + players + 123)
+				state := randomReachableState(t, sz[0], sz[1], players, seed)
+
+				workspace := evalWorkspace{}
+				baseScores := evaluateAllWithWorkspace(state, &workspace)
+
+				// Horizontal reflection
+				hState := reflectHorizontalState(state)
+				hScores := evaluateAllWithWorkspace(hState, &workspace)
+				if hScores != baseScores {
+					t.Errorf("Horizontal reflection score mismatch: got %v, want %v", hScores, baseScores)
+				}
+
+				// Vertical reflection
+				vState := reflectVerticalState(state)
+				vScores := evaluateAllWithWorkspace(vState, &workspace)
+				if vScores != baseScores {
+					t.Errorf("Vertical reflection score mismatch: got %v, want %v", vScores, baseScores)
+				}
+
+				// Transposition
+				tState := transposeState(state)
+				tScores := evaluateAllWithWorkspace(tState, &workspace)
+				if tScores != baseScores {
+					t.Errorf("Transpose score mismatch: got %v, want %v", tScores, baseScores)
+				}
+			})
+		}
+	}
+}
+
+func transposeState(state game.State) game.State {
+	snap := state.Snapshot()
+	tSnap := game.Snapshot{
+		Rows:        snap.Cols,
+		Cols:        snap.Rows,
+		Bases:       make([]game.Pos, len(snap.Bases)),
+		Active:      make([]bool, len(snap.Active)),
+		NeutralUsed: make([]bool, len(snap.NeutralUsed)),
+		Current:     snap.Current,
+		MovesLeft:   snap.MovesLeft,
+		GameOver:    snap.GameOver,
+		Winner:      snap.Winner,
+		Board:       make([][]game.Cell, snap.Cols),
+	}
+	for col := 0; col < snap.Cols; col++ {
+		tSnap.Board[col] = make([]game.Cell, snap.Rows)
+		for row := 0; row < snap.Rows; row++ {
+			tSnap.Board[col][row] = snap.Board[row][col]
+		}
+	}
+	for i := range snap.Bases {
+		tSnap.Bases[i] = game.Pos{Row: snap.Bases[i].Col, Col: snap.Bases[i].Row}
+		tSnap.Active[i] = snap.Active[i]
+		tSnap.NeutralUsed[i] = snap.NeutralUsed[i]
+	}
+	tState, err := game.FromSnapshot(tSnap)
+	if err != nil {
+		panic(err)
+	}
+	return tState
+}
+
+func reflectHorizontalState(state game.State) game.State {
+	snap := state.Snapshot()
+	rSnap := game.Snapshot{
+		Rows:        snap.Rows,
+		Cols:        snap.Cols,
+		Bases:       make([]game.Pos, len(snap.Bases)),
+		Active:      make([]bool, len(snap.Active)),
+		NeutralUsed: make([]bool, len(snap.NeutralUsed)),
+		Current:     snap.Current,
+		MovesLeft:   snap.MovesLeft,
+		GameOver:    snap.GameOver,
+		Winner:      snap.Winner,
+		Board:       make([][]game.Cell, snap.Rows),
+	}
+	for r := 0; r < snap.Rows; r++ {
+		rSnap.Board[r] = make([]game.Cell, snap.Cols)
+		for c := 0; c < snap.Cols; c++ {
+			rSnap.Board[r][c] = snap.Board[r][snap.Cols-1-c]
+		}
+	}
+	for i := range snap.Bases {
+		rSnap.Bases[i] = game.Pos{Row: snap.Bases[i].Row, Col: snap.Cols - 1 - snap.Bases[i].Col}
+		rSnap.Active[i] = snap.Active[i]
+		rSnap.NeutralUsed[i] = snap.NeutralUsed[i]
+	}
+	rState, err := game.FromSnapshot(rSnap)
+	if err != nil {
+		panic(err)
+	}
+	return rState
+}
+
+func reflectVerticalState(state game.State) game.State {
+	snap := state.Snapshot()
+	rSnap := game.Snapshot{
+		Rows:        snap.Rows,
+		Cols:        snap.Cols,
+		Bases:       make([]game.Pos, len(snap.Bases)),
+		Active:      make([]bool, len(snap.Active)),
+		NeutralUsed: make([]bool, len(snap.NeutralUsed)),
+		Current:     snap.Current,
+		MovesLeft:   snap.MovesLeft,
+		GameOver:    snap.GameOver,
+		Winner:      snap.Winner,
+		Board:       make([][]game.Cell, snap.Rows),
+	}
+	for r := 0; r < snap.Rows; r++ {
+		rSnap.Board[r] = make([]game.Cell, snap.Cols)
+		for c := 0; c < snap.Cols; c++ {
+			rSnap.Board[r][c] = snap.Board[snap.Rows-1-r][c]
+		}
+	}
+	for i := range snap.Bases {
+		rSnap.Bases[i] = game.Pos{Row: snap.Rows - 1 - snap.Bases[i].Row, Col: snap.Bases[i].Col}
+		rSnap.Active[i] = snap.Active[i]
+		rSnap.NeutralUsed[i] = snap.NeutralUsed[i]
+	}
+	rState, err := game.FromSnapshot(rSnap)
+	if err != nil {
+		panic(err)
+	}
+	return rState
 }
