@@ -97,6 +97,13 @@ type Message struct {
 	// Chat fields
 	MessageID string `json:"messageId,omitempty"` // Translation key
 	Content   string `json:"content,omitempty"`   // Fallback text or custom message
+
+	// Provenance (welcome message): lets the client detect when the WS socket and
+	// the /last_games endpoint were served by different backend instances/builds
+	// or read a different database volume (DBID minted inside the mounted DB).
+	BuildSHA   string `json:"buildSha,omitempty"`
+	InstanceID string `json:"instanceId,omitempty"`
+	DBID       string `json:"dbId,omitempty"`
 }
 
 type UserInfo struct {
@@ -195,8 +202,14 @@ type Game struct {
 	// The first terminal path owns the immutable database snapshot; later
 	// terminal signals observe the same durable row.
 	persistenceMu          sync.Mutex
-	persisted              bool
-	persistenceTermination string
+	persisted              bool   // committed to the games table
+	terminalLogged         bool   // event=terminal emitted exactly once
+	persistenceTermination string // first (authoritative) termination reason
+
+	// reserved is true while this game holds a durable outbox custody slot,
+	// reserved at admission (game creation) and released once its terminal
+	// record is durable. Only the hub goroutine touches it.
+	reserved bool
 }
 
 const actionRequestHistoryLimit = 64

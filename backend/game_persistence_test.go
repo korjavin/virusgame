@@ -150,6 +150,98 @@ func persistenceTestGame(id string, player1, player2 *User) *Game {
 	return game
 }
 
+// TestEliminateDisconnectedPlayersPersistsOnce covers the remaining distinct 1v1
+// terminal producer: a player with pieces but no legal move loses and the game is
+// committed exactly once as "no_moves".
+func TestEliminateDisconnectedPlayersPersistsOnce(t *testing.T) {
+	InitDB(filepath.Join(t.TempDir(), "elim.db"))
+	t.Cleanup(closePersistenceTestDB)
+
+	h := newHub()
+	player1 := persistenceTestUser("human", "Human")
+	player2 := persistenceTestUser("bot", "OnlineBot")
+	game := persistenceTestGame("elim-nomoves", player1, player2)
+	// Player 2 owns a stray piece with no base, so it can make no legal move.
+	game.Board[0][1] = NewCell(2, CellFlagNormal)
+	h.games[game.ID] = game
+
+	h.eliminateDisconnectedPlayers(game)
+
+	if !game.GameOver || game.Winner != 1 {
+		t.Fatalf("expected player 1 to win, gameOver=%t winner=%d", game.GameOver, game.Winner)
+	}
+	if !game.persisted {
+		t.Fatal("terminal producer did not persist game")
+	}
+	if !PersistGameOnce(game, "duplicate") {
+		t.Fatal("duplicate terminal signal did not observe durable row")
+	}
+	var count int
+	termination := ""
+	if err := db.QueryRow("SELECT COUNT(*), termination FROM games WHERE id = ?", game.ID).Scan(&count, &termination); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 || termination != "no_moves" {
+		t.Fatalf("unexpected row: count=%d termination=%q", count, termination)
+	}
+}
+
+// TestCleanupUserRequiresCustodyBeforeDelete proves cleanupUserFromPreviousGame
+// cannot drop a GameOver game from memory until its terminal record has durable
+// custody (games row or outbox).
+func TestCleanupUserRequiresCustodyBeforeDelete(t *testing.T) {
+	InitDB(filepath.Join(t.TempDir(), "custody.db"))
+	t.Cleanup(closePersistenceTestDB)
+	h := newHub()
+
+	user := persistenceTestUser("human", "Human")
+	board := make(Board, 2)
+	for i := range board {
+		board[i] = make([]CellValue, 2)
+	}
+	board[0][0] = NewCell(1, CellFlagBase)
+	game := &Game{
+		ID: "custody-game", Board: board, Rows: 2, Cols: 2,
+		IsMultiplayer: true, GameOver: true, Winner: 1,
+		persistenceTermination: "normal",
+		Players:                [4]*LobbyPlayer{{User: user, Index: 0}, {IsBot: true, Index: 1}, nil, nil},
+		MoveHistory:            []MoveAction{{Player: 1, Type: "place", Row: 0, Col: 1, TurnNumber: 1}},
+		StartTime:              time.Now().Add(-time.Minute),
+	}
+	h.games[game.ID] = game
+	user.InGame = true
+	user.GameID = game.ID
+
+	// Force both durable stores to fail: no DB, and a spool whose durable write
+	// errors. Restore via t.Cleanup so a failed assertion cannot leak global state
+	// (db/fs) into later tests.
+	good := db
+	t.Cleanup(func() { db = good })
+	rec := installRecordingFS(t)
+	rec.failAt = "rename"
+	db = nil
+
+	h.cleanupUserFromPreviousGame(user)
+	if _, exists := h.games[game.ID]; !exists {
+		t.Fatal("GameOver game dropped from memory without durable custody")
+	}
+
+	// Restore durability; the periodic cleanup now commits and releases it.
+	db = good
+	rec.failAt = ""
+	h.cleanupStaleGames()
+	if _, exists := h.games[game.ID]; exists {
+		t.Fatal("game not released after durable custody achieved")
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM games WHERE id = ?", game.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 durable row, got %d", count)
+	}
+}
+
 func TestPersistGameOnceFailureRetryAndConflict(t *testing.T) {
 	player1 := persistenceTestUser("human", "Human")
 	player2 := persistenceTestUser("bot", "OnlineBot")
@@ -381,22 +473,24 @@ func TestMultiplayerCleanupFailureRetry(t *testing.T) {
 	if game.persisted {
 		t.Fatal("expected game.persisted to be false since DB was nil")
 	}
-
-	// Simulate the 10-second cleanup message
-	h.handleCleanupGame(&Message{GameID: gameID})
-
-	// Since persistence failed, the game must NOT have been deleted from h.games!
-	if _, exists := h.games[gameID]; !exists {
-		t.Fatal("game was deleted from h.games even though persistence failed")
+	// The completed game must not be lost: custody is transferred to the durable
+	// outbox even though the games table write failed.
+	if spool.depth() != 1 {
+		t.Fatalf("terminal record not spooled during DB outage: depth=%d", spool.depth())
 	}
 
-	// Restore DB and retry
-	db = oldDB
+	// Cleanup runs while the DB is still down. Custody is already durable in the
+	// outbox, so the game may leave memory without being lost.
 	h.handleCleanupGame(&Message{GameID: gameID})
-
-	// Now it should be successfully persisted and deleted from h.games
 	if _, exists := h.games[gameID]; exists {
-		t.Fatal("game was not deleted from h.games after successful cleanup persistence retry")
+		t.Fatal("game retained in memory despite durable outbox custody")
+	}
+
+	// Restore DB and replay the outbox — the record commits exactly once.
+	db = oldDB
+	h.replayOutbox()
+	if spool.depth() != 0 {
+		t.Fatalf("outbox not drained after recovery: depth=%d", spool.depth())
 	}
 
 	var count int
@@ -485,7 +579,7 @@ func TestClientCannotForgeCleanupGame(t *testing.T) {
 	}
 }
 
-func TestActiveGameCleanedUpWithoutPersistence(t *testing.T) {
+func TestActiveOrphanGameFinalizedAsAbandoned(t *testing.T) {
 	InitDB(filepath.Join(t.TempDir(), "active-cleanup.db"))
 	t.Cleanup(closePersistenceTestDB)
 
@@ -502,18 +596,34 @@ func TestActiveGameCleanedUpWithoutPersistence(t *testing.T) {
 	// Run cleanup
 	h.cleanupStaleGames()
 
-	// The game should be deleted from h.games (as it's orphaned 1v1)
+	// The orphaned active game must NOT vanish silently: it is finalized as an
+	// explicit "abandoned" lifecycle record and then removed from memory.
 	if _, exists := h.games[game.ID]; exists {
-		t.Fatal("orphaned active game was not cleaned up from memory")
+		t.Fatal("finalized orphan game was not removed from memory after durable write")
 	}
 
-	// But it must NOT have been persisted to the database
-	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM games WHERE id = ?", game.ID).Scan(&count); err != nil {
+	var (
+		count       int
+		termination string
+		content     string
+	)
+	if err := db.QueryRow("SELECT COUNT(*), termination, pgn_content FROM games WHERE id = ?", game.ID).
+		Scan(&count, &termination, &content); err != nil {
 		t.Fatal(err)
 	}
-	if count != 0 {
-		t.Fatalf("active game was persisted to database during cleanup, count=%d", count)
+	if count != 1 {
+		t.Fatalf("orphan game was not persisted, count=%d", count)
+	}
+	if termination != "abandoned" {
+		t.Fatalf("orphan termination = %q, want abandoned", termination)
+	}
+	// Full move history is retained, not truncated.
+	var turns []PGNTurn
+	if err := json.Unmarshal([]byte(content), &turns); err != nil {
+		t.Fatalf("decode move history: %v", err)
+	}
+	if len(turns) != 1 || len(turns[0].Moves) != 2 {
+		t.Fatalf("abandoned game history not preserved: %#v", turns)
 	}
 }
 
