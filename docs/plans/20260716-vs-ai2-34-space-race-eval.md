@@ -123,20 +123,25 @@ new values, never weakened to ranges):
       base-safety terms it was written for.
 
 ### Task 2: Re-pin eval/search goldens to the new evaluator
-- [ ] re-pin `TestEvaluateWorkspaceGoldenStates` want-vectors in
+- [x] re-pin `TestEvaluateWorkspaceGoldenStates` want-vectors in
       `backend/search/evaluate_test.go` to the actual new outputs (terminal /
       eliminated mate-score sentinels must be unchanged — if they changed,
       something is wrong, stop and investigate)
-- [ ] re-pin the digest in `TestEvaluateWorkspaceMatchesOriginMainOracle`;
+- [x] re-pin the digest in `TestEvaluateWorkspaceMatchesOriginMainOracle`;
       update its comment to say it pins the vs-ai2.34 space-race evaluator
       (self-consistency oracle), no longer origin/main bf74a44
-- [ ] re-pin `TestSearchMatchesOriginMainAtFixedDepthAndNodes` expected
+- [x] re-pin `TestSearchMatchesOriginMainAtFixedDepthAndNodes` expected
       `Result` structs in `backend/search/search_test.go`; update comment
       likewise; verify re-pinned actions are still legal moves
-- [ ] run `go test ./search/... ./arena/... ./game/...`; for any OTHER
+- [x] run `go test ./search/... ./arena/... ./game/...`; for any OTHER
       failure: exact-value pin → re-pin; semantic assertion → investigate and
       fix properly, never weaken or skip
-- [ ] run `go test ./...` from backend — must be fully green
+- [x] run `go test ./...` from backend — must be fully green
+- ➕ only the `eliminated` golden vector changed (symmetric fixtures cancel the
+  space term across players): now `{-500000000, -768, 768, -500000000}`;
+  sentinels unchanged. New oracle digest `fbb86460…`. Search pins: same
+  actions as before (legality now asserted in-test via `state.Apply`), scores
+  minimax 26644 (depth+nodes), maxn 6242 (depth) / 9425 (nodes).
 
 ### Task 3: Promote the primary strangler gate into backend/arena
 - [ ] replace `backend/arena/zz_strangler_test.go` with
@@ -179,8 +184,25 @@ new values, never weakened to ranges):
       (expected ~80%); record the number
 - [ ] small boards, SEQUENTIALLY, nothing else running:
       `go run ./cmd/arena -production -opponent=greedy` (>=75% required) then
-      `go run ./cmd/arena -production -opponent=legacy` (>=85% required); both
-      must exit 0; record win rates
+      `go run ./cmd/arena -production -opponent=legacy` (>=85% required);
+      record win rates
+- [ ] ⚠️ small-board latency check — OWNER-AUTHORIZED FIX (supersedes earlier
+      guidance): the binary's gate requires p95 <= 600ms while
+      `search.ProductionBudget` is itself 600ms; the anytime search saturates
+      its budget BY DESIGN (p50 reads ~600.7ms), so the check fails on pure
+      stop-jitter (preview runs with the space term: greedy 60/60=100% p95
+      604.9ms, legacy 58/60=96.7% p95 601.4ms — exit 1 in both purely on
+      latency). The owner has authorized making this gate robust: in
+      `backend/cmd/arena/main.go` change the two hardcoded
+      `Percentile(95) <= 600*time.Millisecond` checks (legacy + greedy) to
+      `Percentile(95) <= search.ProductionBudget + 50*time.Millisecond`
+      (stop-jitter tolerance), with a short comment citing the vs-ai2.34 owner
+      authorization. Do NOT change `search.ProductionBudget` itself in this PR
+      (a real budget increase is vs-ai2.36 scope), and keep the existing
+      per-decision `searchBudget` (850ms) hard cap as-is. After the change
+      both small-board runs must exit 0 with win rates >=75% (greedy) /
+      >=85% (legacy) and illegal=0 stalled=0. Record exact win rates and
+      p50/p95 numbers honestly in this plan.
 - [ ] record every measured number with ➕ notes in this plan file
 
 ### Task 6: Documentation touch-up

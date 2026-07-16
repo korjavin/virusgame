@@ -394,6 +394,9 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 	}
 }
 
+// Pins exact search Results under the vs-ai2.34 space-race evaluator
+// (spaceRaceWeight = 32); no longer tracks origin/main, whose evaluator
+// lacked the space term. Scores changed with the re-pin; actions did not.
 func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
@@ -412,23 +415,29 @@ func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	}{
 		{
 			name: "minimax", state: two,
-			wantDepth: Result{Action: move(2, 3), Score: 6164, Depth: 2, Nodes: 216, Evaluations: 199},
-			wantNodes: Result{Action: move(2, 3), Score: 6164, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
+			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 216, Evaluations: 199},
+			wantNodes: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
 		},
 		{
 			name: "maxn", state: three,
-			wantDepth: Result{Action: move(1, 2), Score: 1762, Depth: 2, Nodes: 46, Evaluations: 40},
-			wantNodes: Result{Action: move(1, 2), Score: 3946, Depth: 3, Nodes: 1000, Evaluations: 814, BudgetExhausted: true},
+			wantDepth: Result{Action: move(1, 2), Score: 6242, Depth: 2, Nodes: 46, Evaluations: 40},
+			wantNodes: Result{Action: move(1, 2), Score: 9425, Depth: 3, Nodes: 1000, Evaluations: 814, BudgetExhausted: true},
 		},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
+			if _, err := fixture.state.Apply(fixture.wantDepth.Action); err != nil {
+				t.Fatalf("pinned depth action %+v is illegal: %v", fixture.wantDepth.Action, err)
+			}
+			if _, err := fixture.state.Apply(fixture.wantNodes.Action); err != nil {
+				t.Fatalf("pinned node action %+v is illegal: %v", fixture.wantNodes.Action, err)
+			}
 			depth, ok := ChooseDepth(context.Background(), fixture.state, 2)
 			if !ok || depth != fixture.wantDepth {
-				t.Fatalf("fixed-depth result = %+v ok=%v, want origin/main %+v", depth, ok, fixture.wantDepth)
+				t.Fatalf("fixed-depth result = %+v ok=%v, want vs-ai2.34 golden %+v", depth, ok, fixture.wantDepth)
 			}
 			nodes, ok := ChooseNodeBudget(fixture.state, 1000)
 			if !ok || nodes != fixture.wantNodes {
-				t.Fatalf("fixed-node result = %+v ok=%v, want origin/main %+v", nodes, ok, fixture.wantNodes)
+				t.Fatalf("fixed-node result = %+v ok=%v, want vs-ai2.34 golden %+v", nodes, ok, fixture.wantNodes)
 			}
 		})
 	}
