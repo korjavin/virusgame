@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,17 +24,16 @@ func InitDB(dbPath string) {
 		log.Fatalf("Failed to create database directory: %v", err)
 	}
 
+	escapedPath := url.PathEscape(filepath.ToSlash(dbPath))
+	escapedPath = strings.ReplaceAll(escapedPath, "%2F", "/")
+	escapedPath = strings.ReplaceAll(escapedPath, "%3A", ":")
+
+	dsn := "file:" + escapedPath + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
+
 	var err error
-	db, err = sql.Open("sqlite", dbPath)
+	db, err = sql.Open("sqlite", dsn)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
-	}
-
-	if _, err = db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		log.Printf("Failed to set journal_mode=WAL: %v", err)
-	}
-	if _, err = db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
-		log.Printf("Failed to set busy_timeout: %v", err)
 	}
 
 	// Validate returned journal mode

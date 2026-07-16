@@ -518,73 +518,84 @@ func TestActiveGameCleanedUpWithoutPersistence(t *testing.T) {
 }
 
 func TestSQLiteLockContention(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "contention.db")
+	dbPath := filepath.Join(t.TempDir(), "app_contention.db")
 
-	// Open connection A
-	dbA, err := sql.Open("sqlite", dbPath)
+	// 1. Initialize the global DB via the actual app InitDB function
+	InitDB(dbPath)
+	t.Cleanup(closePersistenceTestDB)
+
+	// 2. Open an external connection to the same database file to simulate another process/writer
+	extDB, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer dbA.Close()
+	defer extDB.Close()
 
-	// Initialize schema and set WAL on A
-	if _, err := dbA.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		t.Fatal(err)
-	}
-	_, err = dbA.Exec(`CREATE TABLE test_table (id TEXT PRIMARY KEY, val TEXT)`)
+	// 3. Acquire a write lock on the SQLite database using the external connection.
+	// We do this by starting a transaction and writing a row.
+	tx, err := extDB.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() { _ = tx.Rollback() }()
 
-	// Open connection B (simulating another client/connection pool)
-	dbB, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dbB.Close()
-
-	// Apply busy_timeout on B
-	if _, err := dbB.Exec("PRAGMA busy_timeout=2000;"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Connection A starts a transaction and locks the database
-	txA, err := dbA.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = txA.Rollback() }()
-
-	_, err = txA.Exec(`INSERT INTO test_table VALUES ('1', 'A')`)
+	// We insert a dummy row into games to hold the write lock
+	_, err = tx.Exec(`
+		INSERT INTO games (id, started_at, ended_at, rows, cols, player1_name, player2_name, result, termination, pgn_content)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"lock-holder-id", time.Now(), time.Now(), 10, 10, "P1", "P2", 1, "normal", "[]")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Now connection B attempts to write to the table.
-	// Since connection A has an active transaction holding the write lock,
-	// connection B should wait for A to finish.
-	// We will measure the duration and commit A after 100ms.
+	// 4. Force a reopen/replacement of the app connection to verify the DSN pragma configuration
+	// is properly applied on every connection creation.
+	if db != nil {
+		_ = db.Close()
+		db = nil
+	}
+	InitDB(dbPath) // Re-runs InitDB, opening a fresh connection pool
+
+	// 5. Try to write to the global DB (using PersistGameOnce).
+	// Because the external transaction is holding a write lock, the global DB connection
+	// must wait/block rather than failing with SQLITE_BUSY immediately.
+	player1 := persistenceTestUser("p1", "Human")
+	player2 := persistenceTestUser("p2", "OnlineBot")
+	game := persistenceTestGame("app-persist-game", player1, player2)
+	game.Winner = 1
+
 	start := time.Now()
 	errChan := make(chan error, 1)
 
+	// Release the external lock after 150ms
 	go func() {
-		time.Sleep(100 * time.Millisecond)
-		errChan <- txA.Commit()
+		time.Sleep(150 * time.Millisecond)
+		errChan <- tx.Commit()
 	}()
 
-	_, err = dbB.Exec(`INSERT INTO test_table VALUES ('2', 'B')`)
-	if err != nil {
-		t.Fatalf("Connection B failed to write even with busy_timeout: %v", err)
+	// Perform write via actual global DB created by InitDB
+	if !PersistGameOnce(game, "normal") {
+		t.Fatal("PersistGameOnce failed under lock contention")
 	}
 
 	duration := time.Since(start)
-	if duration < 100*time.Millisecond {
-		t.Fatalf("Connection B did not block and wait for Connection A, duration=%v", duration)
+	if duration < 150*time.Millisecond {
+		t.Fatalf("PersistGameOnce did not wait for the external lock to be released, duration=%v", duration)
 	}
 
-	// Check the commit error
+	// Verify the external commit was successful
 	if commitErr := <-errChan; commitErr != nil {
-		t.Fatalf("Commit A failed: %v", commitErr)
+		t.Fatalf("External commit failed: %v", commitErr)
+	}
+
+	// Verify the row written by PersistGameOnce exists
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM games WHERE id = ?", game.ID).Scan(&count)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("game was not successfully persisted, count=%d", count)
 	}
 }
 
