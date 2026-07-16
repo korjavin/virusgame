@@ -233,6 +233,14 @@ func extractFeatures(state game.State, workspace *evalWorkspace) [4]FeatureVecto
 }
 
 func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int {
+	return evaluateAllWithWeights(state, workspace, IncumbentWeights())
+}
+
+// evaluateAllWithWeights is the single scoring core. Production callers pass
+// IncumbentWeights so behavior is byte-identical to before this refactor (proven
+// by the unchanged decision digest); offline callers may inject alternate weights
+// to measure a weighted-search hypothesis without ever mutating the incumbent.
+func evaluateAllWithWeights(state game.State, workspace *evalWorkspace, weights WeightVector) [4]int {
 	var utility [4]int
 	if state.GameOver() {
 		for player := game.Player(1); player <= 4; player++ {
@@ -254,7 +262,7 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			continue
 		}
 		active++
-		raw[player-1] = scoreFeatures(features[player-1], IncumbentWeights())
+		raw[player-1] = scoreFeatures(features[player-1], weights)
 	}
 
 	for player := game.Player(1); player <= 4; player++ {

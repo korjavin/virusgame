@@ -2,6 +2,7 @@
 package arena
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
@@ -55,6 +56,7 @@ type GameResult struct {
 	Illegal                                 int
 	Maxed                                   bool
 	Stalled                                 bool
+	Aborted                                 bool // ctx cancelled: the match stopped immediately, mid-game
 	Latencies                               [4][]time.Duration
 	Nodes                                   [4]uint64
 	Evaluations                             [4]uint64
@@ -133,6 +135,18 @@ func Probe(boards []Board, agent TelemetryAgent) (Report, error) {
 }
 
 func Play(match Match) (GameResult, error) {
+	return PlayContext(context.Background(), match)
+}
+
+// PlayContext is Play with hard, immediate cancellation: before every decision it
+// checks ctx and, if cancelled, stops the match at once (result.Aborted) instead
+// of playing on to MaxActions. Cancellation therefore terminates within a single
+// ply, not a whole game. Play delegates here with a background context, so its
+// behavior is unchanged.
+func PlayContext(ctx context.Context, match Match) (GameResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	agentCount := len(match.Agents)
 	if len(match.TelemetryAgents) > 0 {
 		agentCount = len(match.TelemetryAgents)
@@ -161,6 +175,10 @@ func Play(match Match) (GameResult, error) {
 	result := GameResult{}
 	started := time.Now()
 	for !state.GameOver() && result.Actions < match.MaxActions {
+		if ctx.Err() != nil {
+			result.Aborted = true
+			break
+		}
 		player := state.CurrentPlayer()
 		legal := state.LegalActions()
 		before := activeCount(state)

@@ -63,6 +63,9 @@ type searcher struct {
 	nodeLimit          uint64
 	eval               evalWorkspace
 	pvs                bool
+	// weights defaults to IncumbentWeights so production search is unchanged;
+	// offline callers inject alternate weights for weighted-search measurement.
+	weights WeightVector
 }
 
 const (
@@ -239,7 +242,7 @@ func newSearcher(ctx context.Context, state game.State) *searcher {
 	}
 	return &searcher{
 		ctx: ctx, root: state.CurrentPlayer(), multi: active > 2,
-		table: make(map[uint64]tableEntry), pvs: true,
+		table: make(map[uint64]tableEntry), pvs: true, weights: IncumbentWeights(),
 	}
 }
 
@@ -254,26 +257,28 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 	best.RootLegalNeutrals = legalNeutrals
 	bestOrdinal := int(^uint(0) >> 1)
 	for _, child := range children {
-		var values [4]int
-		var complete bool
-		if s.multi {
-			values, complete = s.maxN(child.position, depth-1, 1)
-		} else {
-			values[0], complete = s.minimax(child.position, depth-1, -infScore, infScore, 1)
-		}
+		score, complete := s.scoreChild(child, depth)
 		if !complete {
 			return Result{}, false
 		}
 		best.RootCompleted++
-		score := values[0]
-		if s.multi {
-			score = values[s.root-1]
-		}
 		if score > best.Score || (score == best.Score && child.ordinal < bestOrdinal) {
 			best.Action, best.Score, bestOrdinal = child.action, score, child.ordinal
 		}
 	}
 	return best, true
+}
+
+// scoreChild is the single root-candidate scoring routine shared by the
+// production atDepth path and the offline RootScores ranking, so the two can
+// never disagree on a candidate's completed full-window score.
+func (s *searcher) scoreChild(c child, depth int) (int, bool) {
+	if s.multi {
+		values, complete := s.maxN(c.position, depth-1, 1)
+		return values[s.root-1], complete
+	}
+	score, complete := s.minimax(c.position, depth-1, -infScore, infScore, 1)
+	return score, complete
 }
 
 type rootOutcome struct {
@@ -400,7 +405,7 @@ func (s *searcher) minimax(position game.Position, depth, alpha, beta, ply int) 
 	}
 	if depth == 0 {
 		s.evaluations++
-		return evaluateWithWorkspace(state, s.root, &s.eval), true
+		return evaluateAllWithWeights(state, &s.eval, s.weights)[s.root-1], true
 	}
 	key := stateHash(state)
 	alphaOriginal, betaOriginal := alpha, beta
@@ -427,7 +432,7 @@ func (s *searcher) minimax(position game.Position, depth, alpha, beta, ply int) 
 	}
 	if len(children) == 0 {
 		s.evaluations++
-		return evaluateWithWorkspace(state, s.root, &s.eval), true
+		return evaluateAllWithWeights(state, &s.eval, s.weights)[s.root-1], true
 	}
 
 	maximizing := state.CurrentPlayer() == s.root
@@ -496,7 +501,7 @@ func (s *searcher) maxN(position game.Position, depth, ply int) ([4]int, bool) {
 	}
 	if depth == 0 {
 		s.evaluations++
-		return evaluateAllWithWorkspace(state, &s.eval), true
+		return evaluateAllWithWeights(state, &s.eval, s.weights), true
 	}
 	key := stateHash(state)
 	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
@@ -508,7 +513,7 @@ func (s *searcher) maxN(position game.Position, depth, ply int) ([4]int, bool) {
 	}
 	if len(children) == 0 {
 		s.evaluations++
-		return evaluateAllWithWorkspace(state, &s.eval), true
+		return evaluateAllWithWeights(state, &s.eval, s.weights), true
 	}
 
 	player := state.CurrentPlayer()
