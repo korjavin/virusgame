@@ -53,12 +53,12 @@ func TestTwelveNoMovesLossesAreFrozenTerminals(t *testing.T) {
 		}
 		replay, states, decodeErr := DecodeReplay(fixture)
 		fixture.Close()
+		if decodeErr != nil {
+			t.Fatalf("%s: decode: %v", path, decodeErr)
+		}
 		want, selected := remaining[replay.SourceID]
 		if !selected {
 			continue
-		}
-		if decodeErr != nil {
-			t.Fatalf("%s: decode: %v", path, decodeErr)
 		}
 		if replay.Rows != 12 || replay.Cols != 12 || replay.Termination != "no_moves" || replay.Winner != 1 {
 			t.Fatalf("%s: not a 12x12 no_moves loss won by seat 1: %+v", replay.SourceID, replay)

@@ -10,9 +10,12 @@ import (
 // TestLadderReport is THE pre-merge strength report for eval/search PRs: the
 // current production eval (deterministic node budget) vs the full opponent
 // ladder over seeded openings, each rung measured with SPRT-style early
-// stopping (threshold 50%). For the two hybrid sparring opponents the frozen
-// incumbent is measured too, and a hybrid qualifies for a ladder slot only if
-// it beats the current eval >40% (eval win% < 60).
+// stopping. Fixed rungs stop against 50%; the two hybrid qualification rungs
+// stop against the actual 60% decision boundary, so the verdict comes from
+// the sequential decision itself (CI clear of 60%) rather than a point
+// estimate biased by optional stopping. A hybrid qualifies for a ladder slot
+// only if it beats the current eval >40% (eval win% < 60); the frozen
+// incumbent is measured against each hybrid too.
 //
 // It is a measurement, failing only on illegal/stalled/maxed games (enforced
 // inside playSequentialOpenings).
@@ -56,13 +59,17 @@ func TestLadderReport(t *testing.T) {
 	fmt.Fprintf(&table, "%-35s | %10s | %6s | %-16s | %6s | %s\n",
 		"opponent", "wins/games", "win%", "wilson95", "played", "qualifies")
 	for _, rung := range rungs {
-		result := playSequentialOpenings(t, rung.name, openings, 50, sequentialMinGames, rung.engine, rung.opponent)
+		threshold := 50.0
+		if rung.hybrid {
+			threshold = 60 // stop against the qualification boundary the verdict is read at
+		}
+		result := playSequentialOpenings(t, rung.name, openings, threshold, sequentialMinGames, rung.engine, rung.opponent)
 		interval := Wilson95(result.Wins, result.Games)
 		rate := 100 * float64(result.Wins) / float64(result.Games)
 		qualifies := ""
 		if rung.hybrid {
 			qualifies = "no"
-			if rate < 60 {
+			if (result.Stopped && !result.Above) || (!result.Stopped && rate < 60) {
 				qualifies = "yes"
 			}
 		}

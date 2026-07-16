@@ -94,8 +94,8 @@ early-stopped point estimates.
 Gate and ladder pairings play balanced seeded-opening pairs in a fixed-seed
 permutation and, after each pair, update a running Wilson 95% interval. The
 run stops early once at least 8 games are played and the interval lies
-entirely above or below the 50% decision threshold; otherwise it runs to the
-full opening cap. Everything is deterministic — node-budget engines, fixed
+entirely above or below the decision threshold (50%, or 60% for the ladder's
+hybrid qualification rungs); otherwise it runs to the full opening cap. Everything is deterministic — node-budget engines, fixed
 opening order and content — so the same code and seed reproduce the same game
 sequence, stop point, and verdict.
 
@@ -115,8 +115,10 @@ Two cheap heuristic stranglers extend the fixed baseline roster:
   cut cell, falling back to mobility.
 
 A hybrid qualifies for a ladder slot only if it beats the current eval >40%
-(i.e. the eval's win rate against it is below 60%); the ladder report prints
-the qualification verdict per hybrid.
+(i.e. the eval's win rate against it is below 60%). Qualification rungs stop
+against the 60% boundary itself, and the verdict comes from that sequential
+decision (interval clear of 60%), falling back to the full-cap rate — so the
+stop rule tests the same boundary the verdict is read at.
 
 ## Ladder report
 
