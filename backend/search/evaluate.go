@@ -2,7 +2,10 @@ package search
 
 import "virusgame/game"
 
-const mateScore = 1_000_000_000
+const (
+	mateScore     = 1_000_000_000
+	fragilityCoef = 1
+)
 
 type playerMetrics struct {
 	connected, disconnected    int
@@ -109,6 +112,7 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			650*m.baseThreat*m.threatTempo -
 			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
 			m.threatTempo*ratio(m.threatened, max(1, m.connected))
+		raw[player-1] -= structuralFragilityPenalty(m)
 		if m.baseExits+m.baseOpenings == 0 {
 			raw[player-1] -= 5000
 		}
@@ -156,6 +160,16 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		}
 	}
 	return utility
+}
+
+func structuralFragilityPenalty(m playerMetrics) int {
+	maxCutLoss := 0
+	for index, cut := range m.articulation {
+		if cut {
+			maxCutLoss = max(maxCutLoss, int(m.cutLoss[index]))
+		}
+	}
+	return normalized(maxCutLoss, m.connected, fragilityCoef)
 }
 
 func analyze(state game.State, player game.Player) playerMetrics {
