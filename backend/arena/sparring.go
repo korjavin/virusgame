@@ -7,36 +7,9 @@ import "virusgame/game"
 // marching on the nearest opponent base, preferring captures. Cheap, no
 // search; ties resolve in stable board order.
 func MobilityBaseAttacker(state game.State) (game.Action, bool) {
-	actions := state.LegalActions()
-	if len(actions) == 0 {
-		return game.Action{}, false
-	}
-	actor := state.CurrentPlayer()
-	best, bestScore := actions[0], -1<<60
-	for _, action := range actions {
-		next, err := state.Apply(action)
-		if err != nil {
-			continue
-		}
-		score := immediateMobility(next, actor)
-		if next.CurrentPlayer() != actor {
-			score -= 50 * len(next.LegalActions())
-		}
-		if action.Kind == game.Move {
-			target, _ := state.At(action.Target)
-			if target.Kind == game.Normal && target.Owner != actor {
-				score += 10_000
-			}
-			score -= 25 * opponentBaseDistance(state, actor, action.Target)
-		}
-		if next.GameOver() && next.Winner() == actor {
-			score += 1_000_000
-		}
-		if score > bestScore {
-			best, bestScore = action, score
-		}
-	}
-	return best, true
+	return bestStrangle(state, func(actor game.Player, action game.Action) int {
+		return -25 * opponentBaseDistance(state, actor, action.Target)
+	})
 }
 
 // CutSeeker attacks the articulation points of the nearest opponent's
@@ -44,15 +17,30 @@ func MobilityBaseAttacker(state game.State) (game.Action, bool) {
 // scores highest, otherwise it falls back to MobilityAttacker-style
 // mobility scoring. Cheap heuristic only; ties resolve in board order.
 func CutSeeker(state game.State) (game.Action, bool) {
+	var cuts map[game.Pos]bool
+	if victim, ok := nearestVictim(state, state.CurrentPlayer()); ok {
+		cuts = opponentArticulations(state, victim)
+	}
+	return bestStrangle(state, func(_ game.Player, action game.Action) int {
+		switch {
+		case cuts[action.Target]:
+			return 100_000
+		case adjacentToCut(action.Target, cuts):
+			return 40_000
+		}
+		return 0
+	})
+}
+
+// bestStrangle is the MobilityAttacker-style argmax shared by the sparring
+// agents: starve the opponent's replies, prefer captures and wins, plus a
+// per-agent moveBonus for Move targets. Ties resolve in stable board order.
+func bestStrangle(state game.State, moveBonus func(actor game.Player, action game.Action) int) (game.Action, bool) {
 	actions := state.LegalActions()
 	if len(actions) == 0 {
 		return game.Action{}, false
 	}
 	actor := state.CurrentPlayer()
-	var cuts map[game.Pos]bool
-	if victim, ok := nearestVictim(state, actor); ok {
-		cuts = opponentArticulations(state, victim)
-	}
 	best, bestScore := actions[0], -1<<60
 	for _, action := range actions {
 		next, err := state.Apply(action)
@@ -68,11 +56,7 @@ func CutSeeker(state game.State) (game.Action, bool) {
 			if target.Kind == game.Normal && target.Owner != actor {
 				score += 10_000
 			}
-			if cuts[action.Target] {
-				score += 100_000
-			} else if adjacentToCut(action.Target, cuts) {
-				score += 40_000
-			}
+			score += moveBonus(actor, action)
 		}
 		if next.GameOver() && next.Winner() == actor {
 			score += 1_000_000

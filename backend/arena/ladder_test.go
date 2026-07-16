@@ -3,7 +3,6 @@ package arena
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -29,22 +28,8 @@ func TestLadderReport(t *testing.T) {
 	if os.Getenv("VS_LADDER") != "1" {
 		t.Skip("set VS_LADDER=1 to run the slow 12x12 ladder report")
 	}
-	openings := 40
-	if v := os.Getenv("VS_LADDER_OPENINGS"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 1 {
-			t.Fatalf("VS_LADDER_OPENINGS=%q must be a positive integer", v)
-		}
-		openings = parsed
-	}
-	nodes := uint64(1000)
-	if v := os.Getenv("VS_LADDER_NODES"); v != "" {
-		parsed, err := strconv.ParseUint(v, 10, 64)
-		if err != nil || parsed < 1 {
-			t.Fatalf("VS_LADDER_NODES=%q must be a positive integer", v)
-		}
-		nodes = parsed
-	}
+	openings := envInt(t, "VS_LADDER_OPENINGS", 40)
+	nodes := uint64(envInt(t, "VS_LADDER_NODES", 1000))
 	eval := TelemetryNodeBudget(nodes, false)
 	incumbent := TelemetryNodeBudget(nodes, true)
 

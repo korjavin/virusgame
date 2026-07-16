@@ -82,8 +82,12 @@ VS_STRANGLER_DIFF=1 go test ./arena -run TestStrangulationEvalNodeBudget -v -tim
 `VS_STRANGLER_OPENINGS` (default 40) and `VS_STRANGLER_NODES` (default 1000,
 secondary gate only) override the sample size and node budget.
 
-Both gates measure each pairing with SPRT-style sequential early stopping
-(see below), so lopsided matchups finish well under the opening cap.
+The secondary gate and the primary gate's log-only BaseAttacker pairs use
+SPRT-style sequential early stopping (see below), so lopsided matchups finish
+well under the opening cap. The primary gate's MobilityAttacker pairs always
+play the full opening set: they feed the hard regression floor, which compares
+the two engines' rates directly and needs full paired samples, not noisy
+early-stopped point estimates.
 
 ## Sequential early stopping
 
@@ -94,6 +98,11 @@ entirely above or below the 50% decision threshold; otherwise it runs to the
 full opening cap. Everything is deterministic — node-budget engines, fixed
 opening order and content — so the same code and seed reproduce the same game
 sequence, stop point, and verdict.
+
+Caveat: checking the interval after every pair inflates the type-I error above
+the nominal 5% (optional stopping), so intervals printed for early-stopped
+runs are descriptive, not exact confidence claims. That is why the strangler
+regression floor compares full fixed-n samples instead.
 
 ## Hybrid sparring opponents
 

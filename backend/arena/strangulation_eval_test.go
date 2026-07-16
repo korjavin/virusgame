@@ -40,14 +40,7 @@ func TestStrangulationEvalNodeBudget(t *testing.T) {
 		t.Skip("set VS_STRANGLER_DIFF=1 to run the node-budget incumbent-differential gate")
 	}
 	openings := stranglerOpenings(t)
-	nodes := uint64(1000)
-	if v := os.Getenv("VS_STRANGLER_NODES"); v != "" {
-		parsed, err := strconv.ParseUint(v, 10, 64)
-		if err != nil || parsed < 1 {
-			t.Fatalf("VS_STRANGLER_NODES=%q must be a positive integer", v)
-		}
-		nodes = parsed
-	}
+	nodes := uint64(envInt(t, "VS_STRANGLER_NODES", 1000))
 	contender := TelemetryNodeBudget(nodes, false)
 	incumbent := TelemetryNodeBudget(nodes, true)
 
@@ -60,16 +53,22 @@ func TestStrangulationEvalNodeBudget(t *testing.T) {
 // stranglerOpenings returns the shared opening count for the strangler gates,
 // overridable via VS_STRANGLER_OPENINGS.
 func stranglerOpenings(t *testing.T) int {
+	return envInt(t, "VS_STRANGLER_OPENINGS", 40)
+}
+
+// envInt returns def, or the value of the named env var, which must parse as
+// a positive integer.
+func envInt(t *testing.T, name string, def int) int {
 	t.Helper()
-	openings := 40
-	if v := os.Getenv("VS_STRANGLER_OPENINGS"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 1 {
-			t.Fatalf("VS_STRANGLER_OPENINGS=%q must be a positive integer", v)
-		}
-		openings = parsed
+	v := os.Getenv(name)
+	if v == "" {
+		return def
 	}
-	return openings
+	parsed, err := strconv.Atoi(v)
+	if err != nil || parsed < 1 {
+		t.Fatalf("%s=%q must be a positive integer", name, v)
+	}
+	return parsed
 }
 
 // playBalancedOpenings plays both seats of every seeded 12x12 opening between
