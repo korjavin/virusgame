@@ -135,6 +135,7 @@ func TestProduction12x12BotDecisionPointRegression(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), search.ProductionBudget)
 	defer cancel()
 	result, ok := search.Choose(ctx, state)
+	t.Logf("production decision: action=%+v depth=%d nodes=%d evaluations=%d", result.Action, result.Depth, result.Nodes, result.Evaluations)
 	if !ok || !legal[result.Action] {
 		t.Fatalf("production Choose returned ok=%v illegal action=%+v", ok, result.Action)
 	}
@@ -152,7 +153,6 @@ func TestProduction12x12BotDecisionPointRegression(t *testing.T) {
 	// still starts down it (Choose returns {3,1} here), so this is skipped to
 	// keep CI green until the search is strong enough to flip it on.
 	t.Run("avoids_losing_continuation", func(t *testing.T) {
-		t.Skip("enable in vs-ai2.31 once 12x12 search is strong enough")
 		losing := []game.Action{
 			{Kind: game.Move, Target: game.Pos{Row: 3, Col: 1}},
 			{Kind: game.Move, Target: game.Pos{Row: 2, Col: 0}},

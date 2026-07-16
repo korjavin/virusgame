@@ -12,3 +12,7 @@ backend/cmd/bot-hoster/bot_client.go
 wasm/ai.wasm
 # Raw /last_games input snapshot used to regenerate replay fixtures; not source.
 _lastgames_snapshot.json
+.gocache/
+.gomodcache/
+.gopath/
+.gotmp/

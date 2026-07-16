@@ -3,7 +3,9 @@ package search
 
 import (
 	"context"
+	"runtime"
 	"sort"
+	"sync"
 	"time"
 
 	"virusgame/game"
@@ -31,7 +33,16 @@ type tableEntry struct {
 	depth  int
 	ply    int
 	values [4]int
+	bound  boundKind
 }
+
+type boundKind uint8
+
+const (
+	boundExact boundKind = iota
+	boundLower
+	boundUpper
+)
 
 type searcher struct {
 	ctx                context.Context
@@ -41,6 +52,9 @@ type searcher struct {
 	nodes, evaluations uint64
 	nodeLimit          uint64
 	eval               evalWorkspace
+	pvs                bool
+	bounded            bool
+	productionOrder    bool
 }
 
 // ChooseNodeBudget performs deterministic iterative deepening without an
@@ -116,9 +130,13 @@ func Choose(ctx context.Context, state game.State) (Result, bool) {
 
 	best := Result{Action: fallback}
 	totalNodes, totalEvaluations := uint64(0), uint64(0)
-	for depth := 1; depth <= maxDepth; depth++ {
+	previousPV := fallback
+	for depth := state.MovesLeft(); depth <= maxDepth; depth += 3 {
 		s := newSearcher(ctx, state)
-		result, complete := s.atDepth(state, depth)
+		s.pvs = true
+		s.productionOrder = true
+		workers := max(1, runtime.GOMAXPROCS(0)-2)
+		result, complete := s.atDepthParallel(state, depth, workers, previousPV)
 		totalNodes += s.nodes
 		totalEvaluations += s.evaluations
 		if !complete {
@@ -128,6 +146,7 @@ func Choose(ctx context.Context, state game.State) (Result, bool) {
 		best.Depth = depth
 		best.Nodes = totalNodes
 		best.Evaluations = totalEvaluations
+		previousPV = result.Action
 	}
 	return best, true
 }
@@ -178,6 +197,113 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 	return best, true
 }
 
+type rootOutcome struct {
+	action             game.Action
+	ordinal            int
+	score              int
+	nodes, evaluations uint64
+	complete           bool
+}
+
+// atDepthParallel evaluates root children independently. A result is
+// publishable only when every child completes before the shared deadline.
+func (s *searcher) atDepthParallel(state game.State, depth, workers int, pv game.Action) (Result, bool) {
+	children, ok := s.orderedChildren(state)
+	if !ok || len(children) == 0 {
+		return Result{}, ok
+	}
+	children = preservingChildren(children, s.root)
+	children = boundedChildren(children, 32)
+	type rootChild struct {
+		child
+		ordinal int
+	}
+	roots := make([]rootChild, len(children))
+	for i, child := range children {
+		roots[i] = rootChild{child: child, ordinal: i}
+	}
+	for i := range roots {
+		if roots[i].action == pv {
+			roots[0], roots[i] = roots[i], roots[0]
+			break
+		}
+	}
+	if workers > len(roots) {
+		workers = len(roots)
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	evaluate := func(root rootChild) rootOutcome {
+		worker := newSearcher(s.ctx, state)
+		worker.pvs = true
+		worker.bounded = true
+		worker.productionOrder = true
+		var values [4]int
+		var complete bool
+		if worker.multi {
+			values, complete = worker.maxN(root.state, depth-1, 1)
+		} else {
+			values[0], complete = worker.minimax(root.state, depth-1, -infScore, infScore, 1)
+		}
+		score := values[0]
+		if worker.multi {
+			score = values[worker.root-1]
+		}
+		return rootOutcome{action: root.action, ordinal: root.ordinal, score: score, nodes: worker.nodes, evaluations: worker.evaluations, complete: complete}
+	}
+
+	outcomes := make([]rootOutcome, 0, len(roots))
+	first := evaluate(roots[0])
+	outcomes = append(outcomes, first)
+	if !first.complete {
+		s.nodes += first.nodes
+		s.evaluations += first.evaluations
+		return Result{}, false
+	}
+	jobs := make(chan rootChild, len(roots)-1)
+	results := make(chan rootOutcome, len(roots)-1)
+	var wg sync.WaitGroup
+	parallel := min(workers, len(roots)-1)
+	for range parallel {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for root := range jobs {
+				results <- evaluate(root)
+			}
+		}()
+	}
+	for _, root := range roots[1:] {
+		jobs <- root
+	}
+	close(jobs)
+	wg.Wait()
+	close(results)
+	for outcome := range results {
+		outcomes = append(outcomes, outcome)
+	}
+
+	best := Result{Action: children[0].action, Score: -infScore}
+	bestOrdinal := len(children)
+	complete := true
+	for _, outcome := range outcomes {
+		s.nodes += outcome.nodes
+		s.evaluations += outcome.evaluations
+		if !outcome.complete {
+			complete = false
+			continue
+		}
+		if outcome.score > best.Score || outcome.score == best.Score && outcome.ordinal < bestOrdinal {
+			best.Action, best.Score, bestOrdinal = outcome.action, outcome.score, outcome.ordinal
+		}
+	}
+	if !complete {
+		return Result{}, false
+	}
+	return best, true
+}
+
 func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, bool) {
 	if !s.running() {
 		return 0, false
@@ -191,8 +317,19 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		return evaluateWithWorkspace(state, s.root, &s.eval), true
 	}
 	key := stateHash(state)
+	alphaOriginal, betaOriginal := alpha, beta
 	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
-		return entry.values[0], true
+		if !s.pvs || entry.bound == boundExact {
+			return entry.values[0], true
+		}
+		if entry.bound == boundLower && entry.values[0] > alpha {
+			alpha = entry.values[0]
+		} else if entry.bound == boundUpper && entry.values[0] < beta {
+			beta = entry.values[0]
+		}
+		if alpha >= beta {
+			return entry.values[0], true
+		}
 	}
 	children, complete := s.orderedChildren(state)
 	if !complete {
@@ -209,10 +346,24 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		best = -infScore
 	}
 	cut := false
-	for _, child := range children {
-		score, ok := s.minimax(child.state, depth-1, alpha, beta, ply+1)
+	for index, child := range children {
+		childAlpha, childBeta := alpha, beta
+		if s.pvs && index > 0 {
+			if maximizing {
+				childBeta = alpha + 1
+			} else {
+				childAlpha = beta - 1
+			}
+		}
+		score, ok := s.minimax(child.state, depth-1, childAlpha, childBeta, ply+1)
 		if !ok {
 			return 0, false
+		}
+		if s.pvs && index > 0 && ((maximizing && score > alpha && score < beta) || (!maximizing && score < beta && score > alpha)) {
+			score, ok = s.minimax(child.state, depth-1, alpha, beta, ply+1)
+			if !ok {
+				return 0, false
+			}
 		}
 		if maximizing {
 			if score > best {
@@ -234,10 +385,20 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 			break
 		}
 	}
-	if !cut {
+	if !s.pvs && !cut {
 		var values [4]int
 		values[0] = best
 		s.table[key] = tableEntry{depth: depth, ply: ply, values: values}
+	} else if s.pvs {
+		bound := boundExact
+		if best <= alphaOriginal {
+			bound = boundUpper
+		} else if best >= betaOriginal {
+			bound = boundLower
+		}
+		var values [4]int
+		values[0] = best
+		s.table[key] = tableEntry{depth: depth, ply: ply, values: values, bound: bound}
 	}
 	return best, true
 }
@@ -332,13 +493,25 @@ func terminalScores(state game.State, ply int) [4]int {
 }
 
 type child struct {
-	action game.Action
-	state  game.State
-	order  int
+	action                                          game.Action
+	state                                           game.State
+	order                                           int
+	win, survives, eliminations, capture, continues int
+	pressure                                        int
 }
 
 func (s *searcher) orderedChildren(state game.State) ([]child, bool) {
-	actions := state.LegalActions()
+	var position game.Position
+	var actions []game.Action
+	if s.productionOrder {
+		position = game.NewPosition(state)
+		position.ForEachSearchAction(func(action game.Action) bool {
+			actions = append(actions, action)
+			return true
+		})
+	} else {
+		actions = state.LegalActions()
+	}
 	children := make([]child, 0, len(actions))
 	actor := state.CurrentPlayer()
 	beforeActive := activeCount(state)
@@ -347,25 +520,128 @@ func (s *searcher) orderedChildren(state game.State) ([]child, bool) {
 			return nil, false
 		}
 		target, _ := state.At(action.Target)
-		next, err := state.Apply(action)
-		if err != nil {
-			continue
+		var next game.State
+		if s.productionOrder {
+			next = position.ApplySearch(action).State()
+		} else {
+			var err error
+			next, err = state.Apply(action)
+			if err != nil {
+				continue
+			}
 		}
 		order := 0
+		win := 0
 		if next.GameOver() && next.Winner() == actor {
 			order += 1_000_000
+			win = 1
 		}
-		order += (beforeActive - activeCount(next)) * 100_000
+		survives := 0
+		if next.Active(actor) {
+			survives = 1
+		}
+		eliminations := beforeActive - activeCount(next)
+		order += eliminations * 100_000
+		capture := 0
 		if action.Kind == game.Move && target.Kind == game.Normal && target.Owner != actor {
 			order += 10_000
+			capture = 1
 		}
+		continues := 0
 		if next.CurrentPlayer() == actor {
 			order += 100
+			continues = 1
 		}
-		children = append(children, child{action: action, state: next, order: order})
+		pressure := 0
+		if action.Kind == game.Move {
+			pressure = -nearestEnemyBaseDistance(state, actor, action.Target)
+		}
+		children = append(children, child{action: action, state: next, order: order, win: win, survives: survives, eliminations: eliminations, capture: capture, continues: continues, pressure: pressure})
 	}
-	sort.SliceStable(children, func(i, j int) bool { return children[i].order > children[j].order })
+	if s.productionOrder {
+		sort.SliceStable(children, func(i, j int) bool { return betterProductionOrder(children[i], children[j]) })
+	} else {
+		sort.SliceStable(children, func(i, j int) bool { return children[i].order > children[j].order })
+	}
+	if s.bounded {
+		children = boundedChildren(children, 12)
+	}
 	return children, true
+}
+
+// boundedChildren retains every tactically forcing action and caps only quiet
+// alternatives. Stable input order remains the deterministic tie order.
+func boundedChildren(children []child, quietLimit int) []child {
+	selected := children[:0]
+	quiet := 0
+	hasSurvivor := false
+	for _, child := range children {
+		if child.survives != 0 {
+			hasSurvivor = true
+			break
+		}
+	}
+	for _, child := range children {
+		if hasSurvivor && child.survives == 0 {
+			continue
+		}
+		forcing := child.survives != 0 && (child.win != 0 || child.eliminations > 0 || child.capture != 0)
+		if forcing || quiet < quietLimit {
+			selected = append(selected, child)
+			if !forcing {
+				quiet++
+			}
+		}
+	}
+	return selected
+}
+
+func betterProductionOrder(a, b child) bool {
+	av := [...]int{a.win, a.survives, a.eliminations, a.capture, a.continues, a.pressure}
+	bv := [...]int{b.win, b.survives, b.eliminations, b.capture, b.continues, b.pressure}
+	for i := range av {
+		if av[i] != bv[i] {
+			return av[i] > bv[i]
+		}
+	}
+	return false
+}
+
+func nearestEnemyBaseDistance(state game.State, actor game.Player, target game.Pos) int {
+	best := state.Rows() + state.Cols()
+	for player := game.Player(1); player <= 4; player++ {
+		if player == actor || !state.Active(player) {
+			continue
+		}
+		base, ok := playerBase(state, player)
+		if !ok {
+			continue
+		}
+		distance := abs(target.Row-base.Row) + abs(target.Col-base.Col)
+		if distance < best {
+			best = distance
+		}
+	}
+	return best
+}
+
+func playerBase(state game.State, player game.Player) (game.Pos, bool) {
+	for row := 0; row < state.Rows(); row++ {
+		for col := 0; col < state.Cols(); col++ {
+			cell, _ := state.At(game.Pos{Row: row, Col: col})
+			if cell.Owner == player && cell.Kind == game.Base {
+				return game.Pos{Row: row, Col: col}, true
+			}
+		}
+	}
+	return game.Pos{}, false
+}
+
+func abs(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func (s *searcher) running() bool {
