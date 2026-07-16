@@ -73,12 +73,12 @@ ALL in `backend/arena/**` (test/measurement code only — zero changes to
 ## Implementation Steps
 
 ### Task 1: Sequential early-stopping engine
-- [ ] Add `backend/arena/sequential_test.go` (package `arena`) with a pure
+- [x] Add `backend/arena/sequential_test.go` (package `arena`) with a pure
       decision helper `wilsonDecision(wins, games int, thresholdPct float64, minGames int) (stop bool, above bool)`:
       returns stop=true only when `games >= minGames` AND the Wilson95 interval
       is entirely above (`Low > thresholdPct`) or entirely below (`High < thresholdPct`)
       the threshold; `above` reports which side.
-- [ ] Add `sequentialResult` struct (`Report`; plus `ThresholdPct float64`,
+- [x] Add `sequentialResult` struct (`Report`; plus `ThresholdPct float64`,
       `Stopped bool`, `Above bool`) and
       `playSequentialOpenings(t *testing.T, label string, maxOpenings int, thresholdPct float64, minGames int, a, b TelemetryAgent) sequentialResult`:
       iterate opening indices in a FIXED-SEED permutation
@@ -88,12 +88,12 @@ ALL in `backend/arena/**` (test/measurement code only — zero changes to
       same snapshots as `playBalancedOpenings`), `report.Add` each, then after
       the pair call `wilsonDecision`; stop early when it says stop, else run to
       `maxOpenings` (cap). Fail on illegal/stalled/maxed like `playBalancedOpenings`.
-- [ ] `TestSequentialEarlyStopDeterministic`: with a deterministic pair of fake
+- [x] `TestSequentialEarlyStopDeterministic`: with a deterministic pair of fake
       `TelemetryAgent`s (e.g. `a` always wins vs a passive `b`) assert the same
       games-played and verdict across two runs; assert a lopsided matchup stops
       BELOW the 2*maxOpenings cap (early stopping saves games); assert a coin-flip
       matchup (agents that split by seat) runs to the cap. Use small maxOpenings.
-- [ ] run `go test ./arena/... -run Sequential` — must pass before next task.
+- [x] run `go test ./arena/... -run Sequential` — must pass before next task.
 
 ### Task 2: Hybrid sparring opponents (mobility+base, cut-seeker)
 - [ ] Add `backend/arena/sparring.go` (package `arena`): `MobilityBaseAttacker(state) (game.Action, bool)`
