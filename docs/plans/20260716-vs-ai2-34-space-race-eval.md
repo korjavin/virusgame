@@ -227,12 +227,14 @@ new values, never weakened to ranges):
     illegal=0 maxed=0 stalled=0 in both. Both smoke matrices clean.
 
 ### Task 6: Documentation touch-up
-- [ ] add a short "Strangler gates" section to `backend/arena/README.md`: the
+- [x] add a short "Strangler gates" section to `backend/arena/README.md`: the
       two opt-in env vars, one reproduce command each, and the vs-ai2.34
       rationale (tune against a strangler, not the incumbent)
-- [ ] verify no stray references to the deleted env hooks
+- [x] verify no stray references to the deleted env hooks
       (`VS_AI2_33_FRAG|VS_AI2_32_MOBW|VS_AI2_32_DANGER|VS_AI2_34_SPACE|VS_AI2_32_MEASURE|VS_AI2_32_NODEGATE`)
       remain outside docs/plans: `git grep` for them
+- ➕ git grep confirms zero matches outside docs/plans; README section verified
+  against the actual env-var names in both gate test files.
 
 ## Technical Details
 
