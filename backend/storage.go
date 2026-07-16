@@ -36,6 +36,23 @@ func InitDB(dbPath string) {
 		log.Printf("Failed to set busy_timeout: %v", err)
 	}
 
+	// Validate returned journal mode
+	var journalMode string
+	if err = db.QueryRow("PRAGMA journal_mode;").Scan(&journalMode); err != nil {
+		log.Printf("Failed to query journal_mode: %v", err)
+	} else if strings.ToLower(journalMode) != "wal" {
+		log.Printf("Warning: SQLite journal_mode is %s, expected WAL", journalMode)
+	} else {
+		log.Printf("SQLite journal_mode successfully configured to %s", journalMode)
+	}
+
+	// Constrain pool to 1 connection.
+	// Trade-off: SQLite is a single-writer database. Constraining the pool to 1 connection
+	// serializes all read/write database requests within this application, eliminating
+	// database lock contention and SQLITE_BUSY errors, with negligible read latency penalty
+	// for our low-traffic '/last_games' endpoint.
+	db.SetMaxOpenConns(1)
+
 	createTableSQL := `
 	CREATE TABLE IF NOT EXISTS games (
 		id TEXT PRIMARY KEY,

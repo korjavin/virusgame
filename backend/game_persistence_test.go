@@ -456,6 +456,138 @@ func Test1v1DisconnectDoesNotOverwriteWinner(t *testing.T) {
 	}
 }
 
+func TestClientCannotForgeCleanupGame(t *testing.T) {
+	InitDB(filepath.Join(t.TempDir(), "forged-cleanup.db"))
+	t.Cleanup(closePersistenceTestDB)
+	h := newHub()
+	player1 := persistenceTestUser("human", "Human")
+	player2 := persistenceTestUser("bot", "OnlineBot")
+	game := persistenceTestGame("forged-cleanup", player1, player2)
+	h.games[game.ID] = game
+
+	// A client attempts to send cleanup_game message for a live game
+	h.handleClientMessage(player1.Client, &Message{Type: "cleanup_game", GameID: game.ID})
+
+	// The game must not be deleted or persisted since the client is not nil
+	if _, exists := h.games[game.ID]; !exists {
+		t.Fatal("connected client forged cleanup_game and deleted the live game")
+	}
+	if game.persisted {
+		t.Fatal("connected client forged cleanup_game and persisted the live game")
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM games WHERE id = ?", game.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("forged cleanup created %d training rows", count)
+	}
+}
+
+func TestActiveGameCleanedUpWithoutPersistence(t *testing.T) {
+	InitDB(filepath.Join(t.TempDir(), "active-cleanup.db"))
+	t.Cleanup(closePersistenceTestDB)
+
+	h := newHub()
+	player1 := persistenceTestUser("human", "Human")
+	player2 := persistenceTestUser("bot", "OnlineBot")
+	game := persistenceTestGame("active-cleanup-id", player1, player2)
+	h.games[game.ID] = game
+
+	// Simulate the game being orphaned (both players disconnected/client nil)
+	player1.Client = nil
+	player2.Client = nil
+
+	// Run cleanup
+	h.cleanupStaleGames()
+
+	// The game should be deleted from h.games (as it's orphaned 1v1)
+	if _, exists := h.games[game.ID]; exists {
+		t.Fatal("orphaned active game was not cleaned up from memory")
+	}
+
+	// But it must NOT have been persisted to the database
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM games WHERE id = ?", game.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("active game was persisted to database during cleanup, count=%d", count)
+	}
+}
+
+func TestSQLiteLockContention(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "contention.db")
+
+	// Open connection A
+	dbA, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dbA.Close()
+
+	// Initialize schema and set WAL on A
+	if _, err := dbA.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = dbA.Exec(`CREATE TABLE test_table (id TEXT PRIMARY KEY, val TEXT)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Open connection B (simulating another client/connection pool)
+	dbB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dbB.Close()
+
+	// Apply busy_timeout on B
+	if _, err := dbB.Exec("PRAGMA busy_timeout=2000;"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Connection A starts a transaction and locks the database
+	txA, err := dbA.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = txA.Rollback() }()
+
+	_, err = txA.Exec(`INSERT INTO test_table VALUES ('1', 'A')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Now connection B attempts to write to the table.
+	// Since connection A has an active transaction holding the write lock,
+	// connection B should wait for A to finish.
+	// We will measure the duration and commit A after 100ms.
+	start := time.Now()
+	errChan := make(chan error, 1)
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		errChan <- txA.Commit()
+	}()
+
+	_, err = dbB.Exec(`INSERT INTO test_table VALUES ('2', 'B')`)
+	if err != nil {
+		t.Fatalf("Connection B failed to write even with busy_timeout: %v", err)
+	}
+
+	duration := time.Since(start)
+	if duration < 100*time.Millisecond {
+		t.Fatalf("Connection B did not block and wait for Connection A, duration=%v", duration)
+	}
+
+	// Check the commit error
+	if commitErr := <-errChan; commitErr != nil {
+		t.Fatalf("Commit A failed: %v", commitErr)
+	}
+}
+
 func performRecentGamesTestRequest(database *sql.DB, method, target, encoding string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, target, nil)
 	request.Header.Set("Accept-Encoding", encoding)

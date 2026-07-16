@@ -456,6 +456,9 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 	case "leave_game":
 		h.handleLeaveGame(client.user, msg)
 	case "cleanup_game":
+		if client != nil {
+			return
+		}
 		h.handleCleanupGame(msg)
 	case "move_timeout":
 		// Only timers inside the hub may end a game by timeout. A connected
@@ -1350,13 +1353,13 @@ func (h *Hub) handleLeaveGame(user *User, msg *Message) {
 
 func (h *Hub) handleCleanupGame(msg *Message) {
 	if game, exists := h.games[msg.GameID]; exists {
+		if !game.GameOver {
+			log.Printf("Defensively refusing to cleanup active game: %s", game.ID)
+			return
+		}
 		termination := game.persistenceTermination
 		if termination == "" {
-			if game.GameOver {
-				termination = "normal"
-			} else {
-				termination = "abandoned"
-			}
+			termination = "normal"
 		}
 		if !PersistGameOnce(game, termination) {
 			log.Printf("Retaining ended game %s in memory because persistence failed during cleanup", game.ID)
@@ -1504,17 +1507,17 @@ func (h *Hub) cleanupStaleGames() {
 		}
 
 		if shouldClean {
-			termination := game.persistenceTermination
-			if termination == "" {
-				if game.GameOver {
+			if game.GameOver {
+				termination := game.persistenceTermination
+				if termination == "" {
 					termination = "normal"
-				} else {
-					termination = "abandoned"
 				}
-			}
-			if !PersistGameOnce(game, termination) {
-				log.Printf("Retaining stale game %s because persistence failed", game.ID)
-				continue
+				if !PersistGameOnce(game, termination) {
+					log.Printf("Retaining stale game %s because persistence failed", game.ID)
+					continue
+				}
+			} else {
+				log.Printf("Cleaning up active game %s from memory without persistence (reason: %s)", game.ID, reason)
 			}
 
 			// Cancel any timers
