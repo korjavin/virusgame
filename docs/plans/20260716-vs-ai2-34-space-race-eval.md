@@ -164,16 +164,19 @@ new values, never weakened to ranges):
   directionally consistent with the n=200 sweep; full-n numbers land in Task 5.
 
 ### Task 4: Promote the secondary incumbent-differential gate
-- [ ] clean `backend/arena/strangulation_eval_test.go`: DELETE
+- [x] clean `backend/arena/strangulation_eval_test.go`: DELETE
       `TestStrangulationEvalHeadToHead` (wall-clock, ~7% seat/timing bias —
       say so in the file comment); keep `TestStrangulationEvalNodeBudget` and
       `randomLegalOpening`
-- [ ] rename its env vars to the vs-ai2.34 convention: opt-in
+- [x] rename its env vars to the vs-ai2.34 convention: opt-in
       `VS_STRANGLER_DIFF=1`, `VS_STRANGLER_OPENINGS`, `VS_STRANGLER_NODES`
       (defaults 40 openings / 1000 nodes); update the doc comment with the
       reproduce command and the parity property (frozen-vs-frozen reads 50%)
-- [ ] wiring check at 4 openings, then `go test ./arena/...` without env —
+- [x] wiring check at 4 openings, then `go test ./arena/...` without env —
       must skip cleanly; `go vet ./...` clean
+- ➕ wiring run (4 openings, 8 games, 1000 nodes): candidate 5/8=62.5%
+  w95[30.6, 86.3] vs frozen incumbent, illegal=0 stalled=0; gate skips
+  without env; vet clean. Full-n run lands in Task 5.
 
 ### Task 5: Verify acceptance criteria (full battery, sequential)
 - [ ] `go build ./... && go vet ./... && go test ./...` — green
