@@ -23,17 +23,23 @@ func noCacheMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
+	log.Printf("event=startup build_sha=%s instance_id=%s", buildSHA, instanceID)
+
 	// Initialize database
 	// We rely on volume mounts to persist this file
 	InitDB(runtimeDBPath)
 
 	hub := newHub()
+	// Replay any terminal records spooled before a crash/restart, then let the
+	// hub's periodic ticker keep the outbox drained.
+	hub.replayOutbox()
 	go hub.run()
 
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(hub, w, r)
 	})
 	http.Handle("/last_games", recentGamesHandler(db))
+	http.Handle("/diag", diagHandler())
 
 	// Determine static files directory
 	// In Docker: files are in /app

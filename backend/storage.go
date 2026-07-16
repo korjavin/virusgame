@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -80,7 +82,56 @@ func InitDB(dbPath string) {
 		log.Fatalf("Failed to migrate games table: %v", err)
 	}
 
-	log.Println("Database initialized successfully at", dbPath)
+	// A stable opaque database identity minted once inside the mounted file.
+	// Unlike a filesystem path it travels WITH the data, so a WS welcome and a
+	// /last_games read that report the same db_id provably share one volume.
+	dbIdentity = ensureDBIdentity()
+	persistHealth.setDBID(dbIdentity)
+
+	// Durable outbox lives alongside the database on the same mounted volume.
+	spool.init(filepath.Dir(dbPath))
+	persistHealth.setOutboxDepth(spool.depth())
+	// Quarantined (lost) records survive restarts: surface the persistent
+	// unhealthy state immediately, before any new game closes.
+	persistHealth.setQuarantineDepth(spool.quarantineDepth())
+
+	// The resolved absolute path is operator-only; log it, never expose it.
+	resolved := dbPath
+	if abs, absErr := filepath.Abs(dbPath); absErr == nil {
+		resolved = abs
+	}
+	log.Printf("Database initialized successfully at %s (db_id=%s)", resolved, dbIdentity)
+}
+
+// dbIdentity is the opaque UUID stored inside the database's metadata table.
+var dbIdentity string
+
+// ensureDBIdentity reads the persistent database UUID, minting one on first init.
+// The mint is race-safe: INSERT OR IGNORE keeps the first writer's value, then a
+// SELECT returns whichever value is durably stored.
+func ensureDBIdentity() string {
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS db_metadata (key TEXT PRIMARY KEY, value TEXT)`); err != nil {
+		log.Fatalf("Failed to create metadata table: %v", err)
+	}
+	// Fast path: once minted, the identity never changes — read it without a write
+	// so a reopen while another writer holds the DB lock does not block on a write.
+	var id string
+	err := db.QueryRow(`SELECT value FROM db_metadata WHERE key = 'db_uuid'`).Scan(&id)
+	if err == nil && id != "" {
+		return id
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		log.Fatalf("Failed to read database identity: %v", err)
+	}
+	// First init: mint race-safely. INSERT OR IGNORE lets concurrent first-inits
+	// converge on a single durable value, which the following SELECT returns.
+	if _, err := db.Exec(`INSERT OR IGNORE INTO db_metadata (key, value) VALUES ('db_uuid', ?)`, uuid.NewString()); err != nil {
+		log.Fatalf("Failed to mint database identity: %v", err)
+	}
+	if err := db.QueryRow(`SELECT value FROM db_metadata WHERE key = 'db_uuid'`).Scan(&id); err != nil {
+		log.Fatalf("Failed to read database identity: %v", err)
+	}
+	return id
 }
 
 // PersistGameOnce captures and saves a game's terminal state exactly once.
@@ -100,32 +151,36 @@ func PersistGameOnce(game *Game, termination string) bool {
 		game.EndTime = time.Now()
 	}
 	if err := saveGame(game, game.persistenceTermination); err != nil {
-		log.Printf("Error saving game %s to database: %v", game.ID, err)
+		persistHealth.recordFailure(err)
+		log.Printf("event=persist_outcome result=failure game=%s termination=%s error=%q",
+			game.ID, game.persistenceTermination, err.Error())
 		return false
 	}
 	game.persisted = true
-	log.Printf("Game %s saved to database", game.ID)
+	persistHealth.recordSuccess(game.ID)
+	log.Printf("event=persist_outcome result=success game=%s termination=%s", game.ID, game.persistenceTermination)
 	return true
 }
 
-// saveGame saves the already-finalized game snapshot to the database.
+// saveGame builds an immutable terminal record from the finalized game and
+// commits it. Kept for callers that persist directly from a live *Game.
 func saveGame(game *Game, termination string) error {
-	if db == nil {
-		return fmt.Errorf("database not initialized")
+	rec, err := buildTerminalRecord(game, termination)
+	if err != nil {
+		return err
 	}
+	return saveRecord(rec)
+}
 
-	// Extract data synchronously to avoid race conditions
+// buildTerminalRecord snapshots everything needed to persist a completed game
+// into a self-contained value, so durability no longer depends on live state.
+func buildTerminalRecord(game *Game, termination string) (terminalRecord, error) {
 	pgnContent, err := generatePGN(game)
 	if err != nil {
-		return fmt.Errorf("generate move history: %w", err)
+		return terminalRecord{}, fmt.Errorf("generate move history: %w", err)
 	}
 
-	// Get player names
-	p1Name := ""
-	p2Name := ""
-	p3Name := ""
-	p4Name := ""
-
+	p1Name, p2Name, p3Name, p4Name := "", "", "", ""
 	if game.IsMultiplayer {
 		if game.Players[0] != nil {
 			p1Name = getPlayerNameSafe(game.Players[0])
@@ -148,32 +203,68 @@ func saveGame(game *Game, termination string) error {
 		}
 	}
 
-	gameID := game.ID
-	startTime := game.StartTime
-	rows := game.Rows
-	cols := game.Cols
-	winner := game.Winner
-	endTime := game.EndTime
-
-	var rejectedAttempt any
+	rejected := ""
 	if game.RejectedAttempt != nil {
 		encoded, err := json.Marshal(game.RejectedAttempt)
 		if err != nil {
-			return fmt.Errorf("encode rejected attempt: %w", err)
+			return terminalRecord{}, fmt.Errorf("encode rejected attempt: %w", err)
 		}
-		rejectedAttempt = string(encoded)
+		rejected = string(encoded)
 	}
 
+	return terminalRecord{
+		ID:           game.ID,
+		StartedAt:    game.StartTime,
+		EndedAt:      game.EndTime,
+		Rows:         game.Rows,
+		Cols:         game.Cols,
+		Player1Name:  p1Name,
+		Player2Name:  p2Name,
+		Player3Name:  p3Name,
+		Player4Name:  p4Name,
+		Result:       game.Winner,
+		Termination:  termination,
+		PGNContent:   pgnContent,
+		RejectedJSON: rejected,
+	}, nil
+}
+
+// saveRecord inserts one immutable terminal record. The games PRIMARY KEY makes
+// re-inserting the same id a constraint error, so replay never duplicates a row.
+func saveRecord(rec terminalRecord) error {
+	if db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	var rejected any
+	if rec.RejectedJSON != "" {
+		rejected = rec.RejectedJSON
+	}
 	insertSQL := `
 		INSERT INTO games (id, started_at, ended_at, rows, cols, player1_name, player2_name, player3_name, player4_name, result, termination, pgn_content, rejected_attempt)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`
-	_, err = db.Exec(insertSQL,
-		gameID, startTime, endTime, rows, cols,
-		p1Name, p2Name, p3Name, p4Name,
-		winner, termination, pgnContent, rejectedAttempt,
+	_, err := db.Exec(insertSQL,
+		rec.ID, rec.StartedAt, rec.EndedAt, rec.Rows, rec.Cols,
+		rec.Player1Name, rec.Player2Name, rec.Player3Name, rec.Player4Name,
+		rec.Result, rec.Termination, rec.PGNContent, rejected,
 	)
 	return err
+}
+
+// gameRowExists reports whether a durable games row already exists for id.
+func gameRowExists(id string) (bool, error) {
+	if db == nil {
+		return false, fmt.Errorf("database not initialized")
+	}
+	var one int
+	err := db.QueryRow(`SELECT 1 FROM games WHERE id = ?`, id).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func isDuplicateColumnError(err error) bool {

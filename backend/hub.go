@@ -51,6 +51,8 @@ type Hub struct {
 	commands      chan hubCommand
 }
 
+const outboxReplayInterval = 5 * time.Second
+
 func newHub() *Hub {
 	return &Hub{
 		clients:       make(map[*Client]bool),
@@ -77,6 +79,10 @@ func (h *Hub) run() {
 	challengeTicker := time.NewTicker(1 * time.Second)
 	defer challengeTicker.Stop()
 
+	// Outbox replay ticker - commits spooled terminal records once the DB recovers.
+	outboxTicker := time.NewTicker(outboxReplayInterval)
+	defer outboxTicker.Stop()
+
 	for {
 		select {
 		case client := <-h.register:
@@ -97,8 +103,103 @@ func (h *Hub) run() {
 			h.checkExpiredChallenges()
 		case <-cleanupTicker.C:
 			h.cleanupStaleGames()
+		case <-outboxTicker.C:
+			h.replayOutbox()
 		}
 	}
+}
+
+// markTerminal records the terminal transition exactly once per game: it fixes
+// the first termination reason and end time and logs a single event=terminal
+// line. It is idempotent and deliberately separate from persistence attempts,
+// which may be retried many times. Returns true only on the first transition.
+func (h *Hub) markTerminal(game *Game, termination string) bool {
+	game.persistenceMu.Lock()
+	defer game.persistenceMu.Unlock()
+	if game.persistenceTermination == "" {
+		game.persistenceTermination = termination
+	}
+	if game.EndTime.IsZero() {
+		game.EndTime = time.Now()
+	}
+	if game.terminalLogged {
+		return false
+	}
+	game.terminalLogged = true
+	log.Printf("event=terminal game=%s termination=%s winner=%d multiplayer=%t turn=%d",
+		game.ID, game.persistenceTermination, game.Winner, game.IsMultiplayer, game.TurnCount)
+	return true
+}
+
+// persistTerminal gives a completed game durable custody. It commits to the
+// games table when possible; otherwise it spools an immutable record to the
+// mounted-volume outbox (which survives a DB outage). It returns true once the
+// record is durably safe — committed OR spooled — so the caller may release the
+// in-memory game. It returns false only when BOTH the DB write and the durable
+// spool fail, in which case the caller must retain the in-memory game (its only
+// remaining custody) and the full record is logged so nothing is silently lost.
+// Runs only on the hub goroutine.
+func (h *Hub) persistTerminal(game *Game, termination string) bool {
+	h.markTerminal(game, termination)
+	reason := game.persistenceTermination
+
+	if PersistGameOnce(game, reason) {
+		spool.discard(game.ID) // drop any stale spooled copy; replay won't duplicate.
+		h.releaseReservation(game)
+		persistHealth.setOutboxDepth(spool.depth())
+		return true
+	}
+
+	rec, err := buildTerminalRecord(game, reason)
+	if err != nil {
+		log.Printf("event=outbox_build_error game=%s error=%q", game.ID, err.Error())
+		return false // retain in memory
+	}
+	if err := spool.Spool(rec); err != nil {
+		// A durability failure (e.g. fsync/disk error), NOT admission backpressure:
+		// custody could not be made durable, so retain the in-memory game (its only
+		// remaining custody) and log the full record so nothing is silently lost.
+		full, _ := json.Marshal(rec)
+		persistHealth.recordFailure(err)
+		log.Printf("event=outbox_durability_failure game=%s error=%q record=%s", game.ID, err.Error(), full)
+		return false // retain in memory; keeps its reservation
+	}
+	// The spooled file now occupies the game's reserved custody slot.
+	h.releaseReservation(game)
+	log.Printf("event=outbox_spooled game=%s termination=%s depth=%d", game.ID, reason, spool.depth())
+	persistHealth.setOutboxDepth(spool.depth())
+	return true
+}
+
+// releaseReservation frees the outbox custody slot an admitted game held, exactly
+// once, after its terminal record is durable (committed or spooled).
+func (h *Hub) releaseReservation(game *Game) {
+	if game.reserved {
+		game.reserved = false
+		spool.release()
+	}
+}
+
+// gameAdmissionRefusedMessage is shown to users when persistence is saturated and
+// a new game cannot be admitted with a guaranteed durable custody slot.
+const gameAdmissionRefusedMessage = "The server is busy saving recent results and can't start a new game right now. Please try again in a moment."
+
+// notifyGameAdmissionRefused tells every human in a lobby why their game did not
+// start, so a refusal is visible rather than a silent no-op.
+func (h *Hub) notifyGameAdmissionRefused(lobby *Lobby) {
+	for i := 0; i < 4; i++ {
+		if lobby.Players[i] != nil && lobby.Players[i].User != nil {
+			h.sendError(lobby.Players[i].User, gameAdmissionRefusedMessage)
+		}
+	}
+}
+
+// replayOutbox commits spooled terminal records once the database is reachable
+// again, removing each file only after its games row is durable. Startup and the
+// periodic ticker both call it.
+func (h *Hub) replayOutbox() {
+	spool.Replay(saveRecord, gameRowExists)
+	persistHealth.setOutboxDepth(spool.depth())
 }
 
 func (h *Hub) handleIllegalMove(game *Game, player int, reason string) {
@@ -170,7 +271,7 @@ func (h *Hub) handleIllegalAction(game *Game, player int, msg *Message, reason s
 			game.Player2.InGame = false
 		}
 		h.broadcastUserList()
-		PersistGameOnce(game, "illegal_move")
+		h.persistTerminal(game, "illegal_move")
 	}
 
 	// If game continues, we need to end the turn of the eliminated player
@@ -323,11 +424,15 @@ func (h *Hub) handleConnect(client *Client) {
 	client.user = user
 	h.users[userID] = user
 
-	// Send welcome message
+	// Send welcome message. Provenance is read after InitDB, so dbId reflects the
+	// exact mounted database this socket will read/write.
 	msg := Message{
-		Type:     "welcome",
-		UserID:   userID,
-		Username: username,
+		Type:       "welcome",
+		UserID:     userID,
+		Username:   username,
+		BuildSHA:   buildSHA,
+		InstanceID: instanceID,
+		DBID:       dbIdentity,
 	}
 	h.sendToClient(client, &msg)
 
@@ -414,7 +519,7 @@ func (h *Hub) handleDisconnect(client *Client) {
 				if game.persistenceTermination != "" {
 					termination = game.persistenceTermination
 				}
-				if !PersistGameOnce(game, termination) {
+				if !h.persistTerminal(game, termination) {
 					log.Printf("Retaining game %s after disconnect because persistence failed", game.ID)
 					continue
 				}
@@ -776,6 +881,16 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 		return
 	}
 
+	// Admission control: reserve a durable terminal-custody slot before allocating
+	// any game state. If persistence is saturated, refuse rather than admit a game
+	// we could not guarantee to persist. The challenge stays pending for a retry.
+	if !spool.Reserve() {
+		log.Printf("event=admission_refused kind=challenge from=%s to=%s", challenge.FromUser.ID, challenge.ToUser.ID)
+		h.sendError(user, gameAdmissionRefusedMessage)
+		h.sendError(challenge.FromUser, gameAdmissionRefusedMessage)
+		return
+	}
+
 	// Create game with board size from challenge
 	gameID := uuid.New().String()
 	rows := challenge.Rows
@@ -809,6 +924,7 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 		LastActionTime:      time.Now(),
 		TurnCount:           1,
 		MoveHistory:         []MoveAction{},
+		reserved:            true, // holds the outbox custody slot reserved above
 	}
 	h.games[gameID] = game
 
@@ -1307,7 +1423,7 @@ func (h *Hub) handleResign(user *User, msg *Message) {
 		game.Player2.InGame = false
 
 		h.broadcastUserList()
-		PersistGameOnce(game, "resignation")
+		h.persistTerminal(game, "resignation")
 
 		log.Printf("Game ended by resignation: %s (winner: player %d)", game.ID, winner)
 	}
@@ -1361,7 +1477,7 @@ func (h *Hub) handleCleanupGame(msg *Message) {
 		if termination == "" {
 			termination = "normal"
 		}
-		if !PersistGameOnce(game, termination) {
+		if !h.persistTerminal(game, termination) {
 			log.Printf("Retaining ended game %s in memory because persistence failed during cleanup", game.ID)
 			return
 		}
@@ -1404,8 +1520,18 @@ func (h *Hub) cleanupUserFromPreviousGame(user *User) {
 			}
 		}
 		if !hasHumanPlayers {
-			delete(h.games, oldGame.ID)
-			log.Printf("Cleaned up orphaned game %s (no human players left)", oldGame.ID)
+			// A GameOver game must reach durable custody (games row or outbox)
+			// before it leaves memory, or the completed match is lost.
+			termination := oldGame.persistenceTermination
+			if termination == "" {
+				termination = "normal"
+			}
+			if !h.persistTerminal(oldGame, termination) {
+				log.Printf("Retaining orphaned ended game %s: persistence not yet durable", oldGame.ID)
+			} else {
+				delete(h.games, oldGame.ID)
+				log.Printf("Cleaned up orphaned game %s (no human players left)", oldGame.ID)
+			}
 		}
 	}
 
@@ -1507,17 +1633,22 @@ func (h *Hub) cleanupStaleGames() {
 		}
 
 		if shouldClean {
-			if game.GameOver {
-				termination := game.persistenceTermination
-				if termination == "" {
-					termination = "normal"
-				}
-				if !PersistGameOnce(game, termination) {
-					log.Printf("Retaining stale game %s because persistence failed", game.ID)
-					continue
-				}
-			} else {
-				log.Printf("Cleaning up active game %s from memory without persistence (reason: %s)", game.ID, reason)
+			termination := game.persistenceTermination
+			if !game.GameOver {
+				// An orphaned active game is a real game whose players vanished.
+				// Finalize an explicit "abandoned" lifecycle record (no winner)
+				// instead of deleting it silently, so production evidence never
+				// disappears without a trace.
+				game.GameOver = true
+				termination = "abandoned"
+				log.Printf("Finalizing orphaned active game %s as abandoned (reason: %s)", game.ID, reason)
+			}
+			if termination == "" {
+				termination = "normal"
+			}
+			if !h.persistTerminal(game, termination) {
+				log.Printf("Retaining stale game %s because persistence failed", game.ID)
+				continue
 			}
 
 			// Cancel any timers
@@ -1608,7 +1739,7 @@ func (h *Hub) handleMoveTimeout(msg *Message) {
 		}
 		h.broadcastToGame(game, &Message{Type: "game_end", GameID: game.ID, Winner: game.Winner})
 		h.broadcastUserList()
-		PersistGameOnce(game, "timeout")
+		h.persistTerminal(game, "timeout")
 	}
 }
 
@@ -1656,7 +1787,7 @@ func (h *Hub) checkWinCondition(game *Game) {
 		// Broadcast updated user list
 		h.broadcastUserList()
 
-		PersistGameOnce(game, "normal")
+		h.persistTerminal(game, "normal")
 
 		log.Printf("Game ended: %s (winner: player %d)", game.ID, winner)
 	}
@@ -2334,6 +2465,16 @@ func (h *Hub) removeUserFromLobby(lobby *Lobby, user *User) {
 }
 
 func (h *Hub) createMultiplayerGame(lobby *Lobby) {
+	// Admission control: refuse to allocate a new game unless a durable terminal
+	// custody slot can be reserved. This is real backpressure — under a sustained
+	// persistence outage we decline to start games rather than admit games we
+	// could not later persist.
+	if !spool.Reserve() {
+		log.Printf("event=admission_refused kind=multiplayer lobby=%s host=%s", lobby.ID, lobby.Host.ID)
+		h.notifyGameAdmissionRefused(lobby)
+		return
+	}
+
 	gameID := uuid.New().String()
 	rows := lobby.Rows
 	cols := lobby.Cols
@@ -2381,6 +2522,7 @@ func (h *Hub) createMultiplayerGame(lobby *Lobby) {
 		LastActionTime: time.Now(),
 		TurnCount:      1,
 		MoveHistory:    []MoveAction{},
+		reserved:       true, // holds the outbox custody slot reserved above
 	}
 
 	h.games[gameID] = game
@@ -2639,7 +2781,7 @@ func (h *Hub) endTurn(game *Game) {
 
 			h.broadcastUserList()
 
-			PersistGameOnce(game, "no_moves")
+			h.persistTerminal(game, "no_moves")
 
 			log.Printf("Game ended: %s (winner: player %d, opponent had no moves)", game.ID, game.Winner)
 			return
@@ -2738,7 +2880,7 @@ func (h *Hub) checkMultiplayerStatus(game *Game) {
 
 		h.broadcastUserList()
 
-		PersistGameOnce(game, "normal")
+		h.persistTerminal(game, "normal")
 
 		log.Printf("Multiplayer game ended: %s (winner: player %d)", game.ID, game.Winner)
 
@@ -2850,7 +2992,7 @@ func (h *Hub) eliminateDisconnectedPlayers(game *Game) {
 
 					h.broadcastUserList()
 
-					PersistGameOnce(game, "no_moves")
+					h.persistTerminal(game, "no_moves")
 
 					log.Printf("Game ended: %s (winner: player %d, opponent had no valid moves)", game.ID, game.Winner)
 					return

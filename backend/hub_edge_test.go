@@ -15,13 +15,13 @@ func TestHubLogic_IllegalMove(t *testing.T) {
 	u2 := &User{ID: "u2", Username: "P2", Client: &Client{send: make(chan []byte, 10)}}
 
 	game := &Game{
-		ID: "illegal-test",
+		ID:      "illegal-test",
 		Player1: u1,
 		Player2: u2,
-		Board: make(Board, 5),
-		Rows: 5, Cols: 5,
+		Board:   make(Board, 5),
+		Rows:    5, Cols: 5,
 		IsMultiplayer: false,
-		MoveHistory: []MoveAction{},
+		MoveHistory:   []MoveAction{},
 	}
 	for i := range game.Board {
 		game.Board[i] = make([]CellValue, 5)
@@ -63,14 +63,14 @@ func TestHubLogic_MoveTimeout(t *testing.T) {
 	p2 := &LobbyPlayer{User: u2, Index: 1}
 
 	game := &Game{
-		ID: "timeout-test",
+		ID:            "timeout-test",
 		IsMultiplayer: true,
-		Players: [4]*LobbyPlayer{p1, p2, nil, nil},
-		Board: make(Board, 5),
-		Rows: 5, Cols: 5,
+		Players:       [4]*LobbyPlayer{p1, p2, nil, nil},
+		Board:         make(Board, 5),
+		Rows:          5, Cols: 5,
 		CurrentPlayer: 1,
 		ActivePlayers: 2,
-		MoveHistory: []MoveAction{},
+		MoveHistory:   []MoveAction{},
 	}
 	for i := range game.Board {
 		game.Board[i] = make([]CellValue, 5)

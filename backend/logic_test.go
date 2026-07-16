@@ -16,12 +16,12 @@ func TestLogicIsValidMove(t *testing.T) {
 
 	// Setup a game
 	game := &Game{
-		ID:    "test-game",
-		Board: board,
-		Rows:  rows,
-		Cols:  cols,
+		ID:          "test-game",
+		Board:       board,
+		Rows:        rows,
+		Cols:        cols,
 		Player1Base: CellPos{0, 0},
-		Player2Base: CellPos{rows-1, cols-1},
+		Player2Base: CellPos{rows - 1, cols - 1},
 	}
 
 	// Setup Base for Player 1
@@ -73,9 +73,9 @@ func TestLogicIsConnectedToBase(t *testing.T) {
 	}
 
 	game := &Game{
-		Board: board,
-		Rows: rows,
-		Cols: cols,
+		Board:       board,
+		Rows:        rows,
+		Cols:        cols,
 		Player1Base: CellPos{0, 0},
 	}
 
@@ -112,15 +112,15 @@ func TestLogicCheckWinCondition(t *testing.T) {
 	p2 := &User{ID: "p2", Username: "Player2"}
 
 	game := &Game{
-		ID:      "test-win",
-		Board:   board,
-		Rows:    rows,
-		Cols:    cols,
-		Player1: p1,
-		Player2: p2,
+		ID:          "test-win",
+		Board:       board,
+		Rows:        rows,
+		Cols:        cols,
+		Player1:     p1,
+		Player2:     p2,
 		Player1Base: CellPos{0, 0},
 		Player2Base: CellPos{2, 2},
-		MovesLeft: 1,
+		MovesLeft:   1,
 	}
 
 	// Base cases
@@ -166,9 +166,9 @@ func TestLogicCanMakeAnyMove(t *testing.T) {
 		board[i] = make([]CellValue, cols)
 	}
 	game := &Game{
-		Board: board,
-		Rows: rows,
-		Cols: cols,
+		Board:       board,
+		Rows:        rows,
+		Cols:        cols,
 		Player1Base: CellPos{0, 0},
 		Player2Base: CellPos{2, 2},
 	}

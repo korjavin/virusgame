@@ -40,6 +40,9 @@ func recentGamesHandler(database *sql.DB) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Vary", "Accept-Encoding")
+		// Bind instance/build/persistence provenance as headers so a stale answer
+		// from a mis-routed instance is detectable without changing the JSON body.
+		setProvenanceHeaders(w, persistHealth.snapshot())
 
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)

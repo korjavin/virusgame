@@ -12,8 +12,12 @@ RUN go mod download
 # Copy backend source
 COPY backend/ .
 
+# Build-time commit SHA injected into the server binary for runtime provenance
+# (/diag, /last_games headers, WS welcome). CI passes COMMIT_SHA as a build-arg.
+ARG COMMIT_SHA=unknown
+
 # Build the Go binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o virusgame-server .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags "-X main.buildSHA=${COMMIT_SHA}" -o virusgame-server .
 
 # Build the bot-hoster binary
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bot-hoster ./cmd/bot-hoster
