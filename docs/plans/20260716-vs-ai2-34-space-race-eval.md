@@ -179,20 +179,20 @@ new values, never weakened to ranges):
   without env; vet clean. Full-n run lands in Task 5.
 
 ### Task 5: Verify acceptance criteria (full battery, sequential)
-- [ ] `go build ./... && go vet ./... && go test ./...` — green
-- [ ] `go test -race ./search/... ./arena/...` — green
-- [ ] primary gate at n>=40 openings:
+- [x] `go build ./... && go vet ./... && go test ./...` — green
+- [x] `go test -race ./search/... ./arena/...` — green
+- [x] primary gate at n>=40 openings:
       `VS_STRANGLER=1 go test ./arena -run TestVsStrangler -v -timeout 120m`;
       record all four win rates + Wilson CIs in this plan; candidate must be
       >50% vs MobilityAttacker (expected ~62-70%), incumbent ~17-25%
-- [ ] secondary gate: `VS_STRANGLER_DIFF=1 go test ./arena -run
+- [x] secondary gate: `VS_STRANGLER_DIFF=1 go test ./arena -run
       TestStrangulationEvalNodeBudget -v -timeout 60m`; candidate >=47.5%
       (expected ~80%); record the number
-- [ ] small boards, SEQUENTIALLY, nothing else running:
+- [x] small boards, SEQUENTIALLY, nothing else running:
       `go run ./cmd/arena -production -opponent=greedy` (>=75% required) then
       `go run ./cmd/arena -production -opponent=legacy` (>=85% required);
       record win rates
-- [ ] ⚠️ small-board latency check — OWNER-AUTHORIZED FIX (supersedes earlier
+- [x] ⚠️ small-board latency check — OWNER-AUTHORIZED FIX (supersedes earlier
       guidance): the binary's gate requires p95 <= 600ms while
       `search.ProductionBudget` is itself 600ms; the anytime search saturates
       its budget BY DESIGN (p50 reads ~600.7ms), so the check fails on pure
@@ -209,7 +209,22 @@ new values, never weakened to ranges):
       both small-board runs must exit 0 with win rates >=75% (greedy) /
       >=85% (legacy) and illegal=0 stalled=0. Record exact win rates and
       p50/p95 numbers honestly in this plan.
-- [ ] record every measured number with ➕ notes in this plan file
+- [x] record every measured number with ➕ notes in this plan file
+- ➕ full-battery results (2026-07-16, otherwise-idle 4-core box):
+  - build/vet/`go test ./...` green; `go test -race ./search/... ./arena/...` green.
+  - primary gate (n=40 openings, 80 games/pair, 1000 nodes, PASS in 379s):
+    candidate vs MobilityAttacker 53/80=66.2% w95[55.4, 75.7];
+    candidate vs BaseAttacker 55/80=68.8% w95[57.9, 77.8];
+    incumbent vs MobilityAttacker 18/80=22.5% w95[14.7, 32.8];
+    incumbent vs BaseAttacker 6/80=7.5% w95[3.5, 15.4].
+  - secondary gate (80 games, 1000 nodes, PASS in 216s): candidate 64/80=80.0%
+    w95[70.0, 87.3] vs frozen incumbent, illegal=0 stalled=0 — matches the
+    n=80 discovery measurement exactly.
+  - small boards, sequential, with the owner-authorized latency cap
+    (`search.ProductionBudget + 50ms`) in `cmd/arena/main.go`:
+    greedy 60/60=100.0% p50=600.7ms p95=601.0ms max=607.5ms, exit 0;
+    legacy 59/60=98.3% p50=600.7ms p95=601.0ms max=604.0ms, exit 0;
+    illegal=0 maxed=0 stalled=0 in both. Both smoke matrices clean.
 
 ### Task 6: Documentation touch-up
 - [ ] add a short "Strangler gates" section to `backend/arena/README.md`: the
