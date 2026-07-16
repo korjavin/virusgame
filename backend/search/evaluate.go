@@ -4,11 +4,10 @@ import "virusgame/game"
 
 const mateScore = 1_000_000_000
 
-// Sweep hooks (throwaway; defaults reproduce the incumbent baseline exactly).
-var fragilityCoef = 0
-var mobilityWeight = 1
-var strangulationDanger = 0
-var spaceRaceCoef = 0
+// spaceRaceWeight scales the Voronoi space-race term. Chosen by the vs-ai2.34
+// sweep: peak of the 2..48 curve, 69.5% vs the MobilityAttacker strangler at
+// n=200 (w95 [63,75]); 48 was already past the peak at 61.2%.
+const spaceRaceWeight = 32
 
 type playerMetrics struct {
 	connected, disconnected    int
@@ -167,10 +166,7 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 	workspace.ensure(size)
 	cells := snapshotCellsInto(state, workspace.cells)
 	connected := allConnectedInto(state, cells, workspace)
-	var space [4]int
-	if spaceRaceCoef > 0 {
-		space = spaceRace(state, cells, connected, workspace)
-	}
+	space := spaceRace(state, cells, connected, workspace)
 	var raw [4]int
 	active := 0
 	for player := game.Player(1); player <= 4; player++ {
@@ -187,19 +183,13 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		owned := m.normal + m.fortified + 1 // include the base
 		raw[player-1] = normalized(m.connected, area, 10) +
 			normalized(m.normal, area, 30) + normalized(m.fortified, area, 6) +
-			normalized(m.mobility, area, mobilityWeight) + normalized(m.captures, area, 1) -
+			normalized(m.mobility, area, 1) + normalized(m.captures, area, 1) -
 			normalized(m.disconnected, owned, 1) +
 			180*m.baseExits + 80*m.baseOpenings + 240*m.baseAnchors -
 			650*m.baseThreat*m.threatTempo -
 			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
-			m.threatTempo*ratio(m.threatened, max(1, m.connected))
-		raw[player-1] -= structuralFragilityPenalty(m)
-		if strangulationDanger > 0 {
-			raw[player-1] -= strangulationDanger / (m.mobility + 1)
-		}
-		if spaceRaceCoef > 0 {
-			raw[player-1] += normalized(space[player-1], area, spaceRaceCoef)
-		}
+			m.threatTempo*ratio(m.threatened, max(1, m.connected)) +
+			normalized(space[player-1], area, spaceRaceWeight)
 		if m.baseExits+m.baseOpenings == 0 {
 			raw[player-1] -= 5000
 		}
@@ -247,16 +237,6 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		}
 	}
 	return utility
-}
-
-func structuralFragilityPenalty(m playerMetrics) int {
-	maxCutLoss := 0
-	for index, cut := range m.articulation {
-		if cut {
-			maxCutLoss = max(maxCutLoss, int(m.cutLoss[index]))
-		}
-	}
-	return normalized(maxCutLoss, m.connected, fragilityCoef)
 }
 
 func analyze(state game.State, player game.Player) playerMetrics {

@@ -97,24 +97,30 @@ new values, never weakened to ranges):
 ## Implementation Steps
 
 ### Task 1: Finalize the space-race term with a fixed constant; delete losing hooks
-- [ ] in `backend/search/evaluate.go`: replace the four sweep vars with a
+- [x] in `backend/search/evaluate.go`: replace the four sweep vars with a
       single `const spaceRaceWeight = 32` (documented: chosen by the vs-ai2.34
       sweep, peak of the 2..48 curve, 69.5% vs strangler at n=200); delete
       `fragilityCoef`, `mobilityWeight` (restore the literal `1` weight in the
       mobility term), `strangulationDanger` and its `if` branch, and
       `structuralFragilityPenalty()`
-- [ ] make the space term unconditional: always compute
+- [x] make the space term unconditional: always compute
       `space := spaceRace(...)` and add
       `normalized(space[player-1], area, spaceRaceWeight)`; keep the
       Voronoi/tempo-bias comments as written
-- [ ] delete `backend/search/zz_tune33.go` entirely
-- [ ] add `TestSpaceRacePartition` in `backend/search/evaluate_test.go`: small
+- [x] delete `backend/search/zz_tune33.go` entirely
+- [x] add `TestSpaceRacePartition` in `backend/search/evaluate_test.go`: small
       hand-built board; assert each player's first-reach count, that
       equidistant cells are contested (counted for nobody), and that walls
       (non-empty cells) block the BFS
-- [ ] run `go build ./... && go test ./search/...` — expect ONLY the three
+- [x] run `go build ./... && go test ./search/...` — expect ONLY the three
       known golden/oracle tests failing (fixed in Task 2); `TestSpaceRacePartition`
       and all other tests must pass
+- ➕ [x] `TestLocalBaseSafetyIsStableAcrossBoardSizes` also failed: it compared
+      full `evaluate()` across board sizes, and the space-race term is global
+      by design (same local structure claims a different board fraction on
+      6x6 vs 6x12). Fixed properly (not weakened): the test now subtracts the
+      space term's exact contribution and keeps pinning the local
+      base-safety terms it was written for.
 
 ### Task 2: Re-pin eval/search goldens to the new evaluator
 - [ ] re-pin `TestEvaluateWorkspaceGoldenStates` want-vectors in

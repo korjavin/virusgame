@@ -144,7 +144,17 @@ func TestLocalBaseSafetyIsStableAcrossBoardSizes(t *testing.T) {
 		if metrics.baseExits != 3 || metrics.baseOpenings != 0 {
 			t.Fatalf("%dx%d exits/openings = %d/%d", dims[0], dims[1], metrics.baseExits, metrics.baseOpenings)
 		}
-		scores = append(scores, evaluate(state, 1))
+		// The vs-ai2.34 space-race term is global by design (fraction of the
+		// board first-reached varies with board shape for the same local
+		// structure), so its exact contribution is subtracted: this test pins
+		// only the size-normalized local base-safety terms.
+		area := dims[0] * dims[1]
+		workspace := &evalWorkspace{}
+		workspace.ensure(area)
+		cells := snapshotCellsInto(state, workspace.cells)
+		space := spaceRace(state, cells, allConnectedInto(state, cells, workspace), workspace)
+		global := normalized(space[0], area, spaceRaceWeight) - normalized(space[1], area, spaceRaceWeight)
+		scores = append(scores, evaluate(state, 1)-global)
 	}
 	for i := 1; i < len(scores); i++ {
 		if delta := absInt(scores[i] - scores[0]); delta > 2000 {
@@ -389,6 +399,52 @@ func matureEvaluationState(t testFataler, rows, cols int) game.State {
 		}
 	}
 	return state
+}
+
+func TestSpaceRacePartition(t *testing.T) {
+	// 5x5, 2 players: bases at (0,0) and (4,4), everything else empty. The
+	// shared BFS is a Chebyshev-distance Voronoi split: each player first-
+	// reaches the 9 cells strictly nearer its base; the 5 anti-diagonal cells
+	// are equidistant and contested.
+	state := mustState(t, 5, 5, 2)
+	size := state.Rows() * state.Cols()
+	workspace := &evalWorkspace{}
+	workspace.ensure(size)
+	cells := snapshotCellsInto(state, workspace.cells)
+	connected := allConnectedInto(state, cells, workspace)
+
+	counts := spaceRace(state, cells, connected, workspace)
+	if counts != [4]int{9, 9, 0, 0} {
+		t.Fatalf("open-board counts = %v, want [9 9 0 0]", counts)
+	}
+	contested := map[int]bool{
+		indexFor(state, game.Pos{Row: 0, Col: 4}): true,
+		indexFor(state, game.Pos{Row: 1, Col: 3}): true,
+		indexFor(state, game.Pos{Row: 2, Col: 2}): true,
+		indexFor(state, game.Pos{Row: 3, Col: 1}): true,
+		indexFor(state, game.Pos{Row: 4, Col: 0}): true,
+	}
+	for index := 0; index < size; index++ {
+		if got := workspace.spaceOwner[index] == -2; got != contested[index] {
+			t.Fatalf("cell %d contested = %v, want %v", index, got, contested[index])
+		}
+	}
+
+	// Wall the whole column 3: player 2 is boxed into column 4 (4 empties),
+	// player 1 takes columns 0-2 (14 empties), nothing is contested. If walls
+	// did not block the BFS the counts would stay 9/9.
+	for row := 0; row < state.Rows(); row++ {
+		cells[indexFor(state, game.Pos{Row: row, Col: 3})] = game.Cell{Kind: game.Fortified}
+	}
+	counts = spaceRace(state, cells, connected, workspace)
+	if counts != [4]int{14, 4, 0, 0} {
+		t.Fatalf("walled-board counts = %v, want [14 4 0 0]", counts)
+	}
+	for index := 0; index < size; index++ {
+		if workspace.spaceOwner[index] == -2 {
+			t.Fatalf("cell %d contested on walled board, regions are disjoint", index)
+		}
+	}
 }
 
 func absInt(value int) int {
