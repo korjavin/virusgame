@@ -66,12 +66,28 @@ func advanceUntilPlayer(state game.State, player game.Player) game.State {
 	return state
 }
 
-// TestPonderWarmStartReachesDeeperPerNode proves the ponder mechanism: a
-// node-budgeted ponder of the opponent-to-move position P fills the shared table
-// with best-action move ordering for the our-to-move descendant Q, so a
-// node-budgeted search of Q that reuses the table reaches at least as deep as a
-// cold search on the same node budget.
-func TestPonderWarmStartReachesDeeperPerNode(t *testing.T) {
+// TestPonderWarmStartDoesNotRegress records the HONEST warm-vs-cold outcome for
+// permanent-brain pondering and guards the only property that actually holds: a
+// ponder-warmed search never searches SHALLOWER than a cold one on the same node
+// budget.
+//
+// Measured finding (vs-ai2.53, do NOT re-label as a "warm benefit proof"):
+// permanent-brain pondering yields ~zero warm benefit. A 600k-node ponder of the
+// opponent-to-move position P fills a ~120k-entry shared table, yet a 150k-node
+// search of the realized descendant Q reaches the SAME depth with ~0.1% fewer
+// evals (70,987 -> 70,916 on this 6x6; equally flat on a 12x12 corpus midgame,
+// and no better at 30x ponder budget). Two structural causes, neither fixable
+// without move prediction (explicitly out of scope for this bead):
+//   1. Dilution: the ponder spreads its budget over ALL opponent replies, but
+//      only the single realized reply leads to Q, so <5% of ponder nodes land in
+//      Q's subtree (measured: warm adds only ~1.4k probe hits over cold's ~46k).
+//   2. Depth handicap: rooted 2 plies above Q, the ponder must complete depth
+//      >= T_q+2 for its entries to satisfy Q's deep-iteration depth gate, which
+//      its budget cannot reach at Q's frame.
+// Relaxing the entry.ply gate (candidate fix) was measured and REGRESSES depth
+// (10 -> 9): fail-soft bounds and ply-relative mate scores are not soundly
+// reusable across plies by a blanket relaxation, so the gate stays.
+func TestPonderWarmStartDoesNotRegress(t *testing.T) {
 	state, err := game.New(6, 6, 2)
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +111,7 @@ func TestPonderWarmStartReachesDeeperPerNode(t *testing.T) {
 	nodeLimitedSearch(shared, maxSessionEntries, P, ponderBudget) // ponder fills the table
 	warm := nodeLimitedSearch(shared, maxSessionEntries, Q, qBudget)
 
-	t.Logf("cold: depth=%d nodes=%d evals=%d ; warm: depth=%d nodes=%d evals=%d",
+	t.Logf("cold: depth=%d nodes=%d evals=%d ; warm: depth=%d nodes=%d evals=%d (honest: ~zero warm benefit, see comment)",
 		cold.Depth, cold.Nodes, cold.Evaluations, warm.Depth, warm.Nodes, warm.Evaluations)
 
 	if warm.Depth < cold.Depth {
