@@ -157,21 +157,21 @@ go run . -data <dir> -epochs 60 -seed 1 -export <dir>/weights_out.go
 Observed loss curve (300 samples, 90/10 split, hidden 48, Adam lr 0.001):
 
 ```
-epoch   1  train_loss 1.161744  val_loss 1.850254  spearman 0.4564
-epoch   2  train_loss 1.039822  val_loss 2.000211  spearman 0.3906
-epoch   4  train_loss 0.908870  val_loss 1.978372  spearman 0.3991
-epoch   9  train_loss 0.823999  val_loss 1.550723  spearman 0.3971
-epoch  19  train_loss 0.711489  val_loss 1.260383  spearman 0.2873
-epoch  29  train_loss 0.603833  val_loss 1.185903  spearman 0.4225
-epoch  39  train_loss 0.513867  val_loss 1.122783  spearman 0.4899
-epoch  49  train_loss 0.455244  val_loss 0.993230  spearman 0.6425
-epoch  59  train_loss 0.400160  val_loss 0.920588  spearman 0.7220
-epoch  60  train_loss 0.386943  val_loss 0.885709  spearman 0.7603
+epoch   1  train_loss 1.170965  val_loss 2.304223  spearman 0.2783
+epoch   2  train_loss 0.985146  val_loss 2.314705  spearman 0.1729
+epoch   4  train_loss 0.851880  val_loss 2.055159  spearman 0.3304
+epoch   9  train_loss 0.767017  val_loss 1.895858  spearman 0.4458
+epoch  19  train_loss 0.641224  val_loss 1.813355  spearman 0.6050
+epoch  29  train_loss 0.569685  val_loss 1.472621  spearman 0.5304
+epoch  39  train_loss 0.475510  val_loss 1.069929  spearman 0.6288
+epoch  49  train_loss 0.420548  val_loss 0.794644  spearman 0.5294
+epoch  59  train_loss 0.384582  val_loss 0.703877  spearman 0.4227
+epoch  60  train_loss 0.371330  val_loss 0.778756  spearman 0.4913
 ```
 
-Train loss falls monotonically after warm-up and val loss roughly halves
-(1.85 → 0.89). Val Spearman rank correlation is noisy on only 300 samples
-(~0.3–0.76, no clean trend), so the smoke set is too small to read a rank
+Train loss falls monotonically after warm-up and val loss roughly thirds
+(2.30 → 0.78). Val Spearman rank correlation is noisy on only 300 samples
+(~0.17–0.63, no clean trend), so the smoke set is too small to read a rank
 signal from — the production run's 1-5M positions is what turns this into a
 usable held-out ranking metric.
 
