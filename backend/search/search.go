@@ -3,7 +3,9 @@ package search
 
 import (
 	"context"
+	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"virusgame/game"
@@ -15,6 +17,10 @@ const (
 	ProductionBudget = 1000 * time.Millisecond
 	maxDepth         = 64
 	infScore         = 1 << 60
+	// quiescePlyCap bounds capture-only extension at leaves; the cap is the
+	// primary cost bound. quiesceDeltaDefault=0 disables delta pruning.
+	quiescePlyCap       = 6
+	quiesceDeltaDefault = 0
 )
 
 // TT bound flags for fail-soft alpha-beta stores.
@@ -50,6 +56,8 @@ type searcher struct {
 	nodes, evaluations uint64
 	nodeLimit          uint64
 	eval               evalWorkspace
+	quiesceCap         int
+	quiesceDelta       int
 }
 
 // ChooseNodeBudget performs deterministic iterative deepening without an
@@ -150,8 +158,21 @@ func newSearcher(ctx context.Context, state game.State) *searcher {
 	}
 	return &searcher{
 		ctx: ctx, root: state.CurrentPlayer(), multi: active > 2,
-		table: make(map[uint64]tableEntry),
+		table:        make(map[uint64]tableEntry),
+		quiesceCap:   envInt("VS_QUIESCE_CAP", quiescePlyCap),
+		quiesceDelta: envInt("VS_QUIESCE_DELTA", quiesceDeltaDefault),
 	}
+}
+
+// envInt reads a non-negative int override from the environment, falling back
+// to def on absent/invalid values so the shipped default is a fixed constant.
+func envInt(name string, def int) int {
+	if v, ok := os.LookupEnv(name); ok {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			return n
+		}
+	}
+	return def
 }
 
 func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
@@ -205,8 +226,7 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		return terminalScore(state, s.root, ply), true
 	}
 	if depth == 0 {
-		s.evaluations++
-		return evaluateWithWorkspace(state, s.root, &s.eval), true
+		return s.quiesce(state, alpha, beta, ply, 0)
 	}
 	key := stateHash(state)
 	entry, hit := s.table[key]
@@ -292,6 +312,111 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 	}
 	s.table[key] = tableEntry{depth: depth, ply: ply, flag: flag, bestAction: bestAction, values: [4]int{best}}
 	return best, true
+}
+
+// quiesce extends capture-only moves at a 1v1 leaf until the position is quiet,
+// so the static eval never prices a position with a pending retaliation capture
+// as if it were resolved. Fail-soft alpha-beta with a stand-pat floor, bounded
+// by s.quiesceCap capture plies. TT-free for determinism/simplicity.
+func (s *searcher) quiesce(state game.State, alpha, beta, ply, qdepth int) (int, bool) {
+	if !s.running() {
+		return 0, false
+	}
+	s.nodes++
+	if state.GameOver() {
+		return terminalScore(state, s.root, ply), true
+	}
+	s.evaluations++
+	standPat := evaluateWithWorkspace(state, s.root, &s.eval)
+	maximizing := state.CurrentPlayer() == s.root
+	if maximizing {
+		if standPat >= beta {
+			return standPat, true
+		}
+		if standPat > alpha {
+			alpha = standPat
+		}
+	} else {
+		if standPat <= alpha {
+			return standPat, true
+		}
+		if standPat < beta {
+			beta = standPat
+		}
+	}
+	if qdepth >= s.quiesceCap {
+		return standPat, true
+	}
+	children, complete := s.captureChildren(state)
+	if !complete {
+		return 0, false
+	}
+	if len(children) == 0 {
+		return standPat, true
+	}
+	best := standPat
+	for _, child := range children {
+		if maximizing {
+			if s.quiesceDelta > 0 && standPat+s.quiesceDelta <= alpha {
+				continue
+			}
+		} else {
+			if s.quiesceDelta > 0 && standPat-s.quiesceDelta >= beta {
+				continue
+			}
+		}
+		score, ok := s.quiesce(child.state, alpha, beta, ply+1, qdepth+1)
+		if !ok {
+			return 0, false
+		}
+		if maximizing {
+			if score > best {
+				best = score
+			}
+			if best > alpha {
+				alpha = best
+			}
+		} else {
+			if score < best {
+				best = score
+			}
+			if best < beta {
+				beta = best
+			}
+		}
+		if alpha >= beta {
+			break
+		}
+	}
+	return best, true
+}
+
+// captureChildren enumerates capture-only children in stable board order: Move
+// actions whose target is an enemy Normal cell (the only capturable target).
+func (s *searcher) captureChildren(state game.State) ([]child, bool) {
+	pos := game.NewPosition(state)
+	actor := state.CurrentPlayer()
+	var children []child
+	stopped := false
+	pos.ForEachSearchAction(func(action game.Action) bool {
+		if !s.running() {
+			stopped = true
+			return false
+		}
+		if action.Kind != game.Move {
+			return true
+		}
+		target, _ := state.At(action.Target)
+		if target.Kind != game.Normal || target.Owner == actor {
+			return true
+		}
+		children = append(children, child{action: action, state: pos.ApplySearch(action).State()})
+		return true
+	})
+	if stopped {
+		return nil, false
+	}
+	return children, true
 }
 
 func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
