@@ -173,12 +173,9 @@ func (s *State) eliminateStuckPlayersGenerated() {
 	queue := make([]int32, len(s.cells))
 	for player := Player(1); int(player) <= s.players; player++ {
 		if s.Active(player) && !s.hasMoveScratch(player, seen, queue) {
+			// vs-ai2.45: eliminated players' cells stay on the board (capturable
+			// per normal rules); only the active flag flips.
 			s.active[player-1] = false
-			for i := range s.cells {
-				if s.cells[i].Owner == player {
-					s.cells[i] = Cell{}
-				}
-			}
 		}
 	}
 }
@@ -328,12 +325,9 @@ func (s *State) connected(player Player) []bool {
 func (s *State) eliminateStuckPlayers() {
 	for player := Player(1); int(player) <= s.players; player++ {
 		if s.Active(player) && !s.hasMove(player) {
+			// vs-ai2.45: eliminated players' cells stay on the board (capturable
+			// per normal rules); only the active flag flips.
 			s.active[player-1] = false
-			for i := range s.cells {
-				if s.cells[i].Owner == player {
-					s.cells[i] = Cell{}
-				}
-			}
 		}
 	}
 }

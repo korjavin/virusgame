@@ -146,13 +146,70 @@ func TestEliminationAndTerminalResult(t *testing.T) {
 	if !next.GameOver() || next.Winner() != 1 || next.Active(2) || next.MovesLeft() != 0 {
 		t.Fatalf("terminal state: over=%v winner=%d p2=%v moves=%d", next.GameOver(), next.Winner(), next.Active(2), next.MovesLeft())
 	}
-	for _, cell := range next.cells {
-		if cell.Owner == 2 {
-			t.Fatal("eliminated ownership remains on board")
-		}
+	// vs-ai2.45: eliminated player's cells stay on the board (owned by the
+	// dead player), they just never move again.
+	if base, _ := next.At(Pos{4, 4}); base.Owner != 2 || base.Kind != Base {
+		t.Fatalf("eliminated player's base was wiped: %+v", base)
 	}
 	if _, err := next.Apply(Action{Kind: Move, Target: Pos{0, 1}}); !errors.Is(err, ErrGameOver) {
 		t.Fatalf("post-game Apply error = %v", err)
+	}
+}
+
+// vs-ai2.45: in a multiplayer game, eliminating one player must leave their
+// cells on the board (owned by the dead player, capturable per normal rules),
+// keep them permanently inactive, and let the remaining players play on.
+func TestMultiplayerEliminatedCellsStayCapturable(t *testing.T) {
+	s := testState(5, 5, 3)
+	// Player 1 territory reaching toward the doomed player's stray cell.
+	s.set(Pos{1, 1}, Cell{Owner: 1, Kind: Normal})
+	s.set(Pos{2, 1}, Cell{Owner: 1, Kind: Normal})
+	// Player 2's base (4,4) is walled by neutrals -> no move -> eliminated.
+	// A stray Normal at (2,2) is disconnected from the base, so it neither
+	// rescues player 2 nor vanishes on elimination.
+	s.set(Pos{2, 2}, Cell{Owner: 2, Kind: Normal})
+	for _, pos := range []Pos{{3, 3}, {3, 4}, {4, 3}} {
+		s.set(pos, Cell{Kind: Neutral})
+	}
+
+	next, err := s.Apply(Action{Kind: Move, Target: Pos{0, 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.GameOver() {
+		t.Fatal("game ended with two players still active")
+	}
+	if next.Active(2) {
+		t.Fatal("stuck player 2 was not eliminated")
+	}
+	if !next.Active(1) || !next.Active(3) {
+		t.Fatal("a surviving player was wrongly eliminated")
+	}
+	if base, _ := next.At(Pos{4, 4}); base.Owner != 2 || base.Kind != Base {
+		t.Fatalf("eliminated player's base was wiped: %+v", base)
+	}
+	stray, _ := next.At(Pos{2, 2})
+	if stray.Owner != 2 || stray.Kind != Normal {
+		t.Fatalf("eliminated player's stray cell was wiped: %+v", stray)
+	}
+
+	// The dead cell is capturable per normal rules: player 1 (still to move,
+	// connected via (2,1)) can take it, and it fortifies as any Normal capture.
+	captured, err := next.Apply(Action{Kind: Move, Target: Pos{2, 2}})
+	if err != nil {
+		t.Fatalf("could not capture eliminated player's cell: %v", err)
+	}
+	if got, _ := captured.At(Pos{2, 2}); got.Owner != 1 || got.Kind != Fortified {
+		t.Fatalf("capture of dead cell = %+v, want owner 1 fortified", got)
+	}
+	// Elimination is permanent: player 2 never reactivates.
+	if captured.Active(2) {
+		t.Fatal("eliminated player 2 reactivated")
+	}
+
+	// The state with a dead player round-trips through the wire snapshot.
+	if _, err := FromSnapshot(next.Snapshot()); err != nil {
+		t.Fatalf("snapshot round-trip rejected state with eliminated player: %v", err)
 	}
 }
 
