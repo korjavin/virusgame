@@ -112,6 +112,72 @@ func TestActionMessageConversion(t *testing.T) {
 	}
 }
 
+// TestPonderCancelUpdateRaceSoak drives the real pondering session through a
+// rapid cancel/update cycle (opponent-turn ponder alternating with our-turn real
+// search, each superseded ~1 ms later) so the -race detector exercises the
+// shared session table under startSearch/cancel/searchMu handoff. No injected
+// fns: the goroutines actually touch the persistent TT.
+func TestPonderCancelUpdateRaceSoak(t *testing.T) {
+	bot := testBot(t, 1)
+	bot.ponder = true // real session.Ponder/Choose, no injected seams
+
+	ourState := bot.Position
+	oppState := advanceToOpponent(t, ourState, bot.YourPlayer)
+	if int(oppState.CurrentPlayer()) == bot.YourPlayer {
+		t.Skip("could not reach an opponent-to-move snapshot")
+	}
+	ourSnap := ourState.Snapshot()
+	oppSnap := oppState.Snapshot()
+
+	for i := 0; i < 300; i++ {
+		snap := ourSnap
+		if i%2 == 0 {
+			snap = oppSnap
+		}
+		local := snap
+		bot.handleGameState(&Message{Type: "game_state", GameID: "g", Snapshot: &local})
+		drainSends(bot)
+		time.Sleep(time.Millisecond)
+	}
+
+	bot.handleGameEnd(&Message{GameID: "g", Winner: 2})
+	// Block until the last in-flight searcher releases the table.
+	bot.searchMu.Lock()
+	bot.searchMu.Unlock()
+	drainSends(bot)
+
+	if bot.State != BotIdle {
+		t.Fatalf("bot did not return to idle: state=%v", bot.State)
+	}
+}
+
+// advanceToOpponent applies legal actions until it is no longer `you`'s move.
+func advanceToOpponent(t *testing.T, state game.State, you int) game.State {
+	t.Helper()
+	for i := 0; i < 100 && !state.GameOver() && int(state.CurrentPlayer()) == you; i++ {
+		actions := state.LegalActions()
+		if len(actions) == 0 {
+			break
+		}
+		next, err := state.Apply(actions[0])
+		if err != nil {
+			break
+		}
+		state = next
+	}
+	return state
+}
+
+func drainSends(bot *Bot) {
+	for {
+		select {
+		case <-bot.send:
+		default:
+			return
+		}
+	}
+}
+
 func testBot(t *testing.T, player int) *Bot {
 	t.Helper()
 	position, err := game.New(6, 6, 2)
