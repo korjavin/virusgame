@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"log"
 	"reflect"
 	"strings"
@@ -70,7 +68,7 @@ type Bot struct {
 	positionVersion uint64
 	searchVersion   uint64
 	searchCancel    context.CancelFunc
-	choose          func(context.Context, game.State, uint64) (gamesearch.Result, bool)
+	choose          func(context.Context, game.State) (gamesearch.Result, bool)
 }
 
 type outboundMessage struct {
@@ -157,7 +155,7 @@ func NewBot(backendURL string, manager *BotManager) *Bot {
 		State:      BotDisconnected,
 		send:       make(chan outboundMessage, 256),
 		done:       make(chan bool),
-		choose:     gamesearch.ChooseSeeded,
+		choose:     gamesearch.Choose,
 	}
 }
 
@@ -558,19 +556,6 @@ func (b *Bot) startSearch() {
 	go b.calculateAndQueueAction(ctx, choose, position, gameID, version)
 }
 
-// gameTurnSeed derives a stable-but-per-game jitter seed. Keyed on the
-// server-assigned game id (unique per game, so a fresh replay of the same
-// opening lands in a different game and diverges) mixed with the per-turn
-// position version (so moves within one game are reproducible, not flip-flopping).
-func gameTurnSeed(gameID string, version uint64) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(gameID))
-	var buf [8]byte
-	binary.LittleEndian.PutUint64(buf[:], version)
-	_, _ = h.Write(buf[:])
-	return h.Sum64()
-}
-
 func (b *Bot) cancelSearchLocked() {
 	if b.searchCancel != nil {
 		b.searchCancel()
@@ -578,8 +563,8 @@ func (b *Bot) cancelSearchLocked() {
 	}
 }
 
-func (b *Bot) calculateAndQueueAction(ctx context.Context, choose func(context.Context, game.State, uint64) (gamesearch.Result, bool), position game.State, gameID string, version uint64) {
-	result, ok := choose(ctx, position, gameTurnSeed(gameID, version))
+func (b *Bot) calculateAndQueueAction(ctx context.Context, choose func(context.Context, game.State) (gamesearch.Result, bool), position game.State, gameID string, version uint64) {
+	result, ok := choose(ctx, position)
 	if !ok {
 		return
 	}
