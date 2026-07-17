@@ -1,0 +1,29 @@
+ralphex v1.6.0-5eff6cf-20260626T231702
+created .ralphex/.gitignore
+starting ralphex loop (max 25 iterations)
+plan: docs/plans/20260717-vs-ai2.52-spsa-tuner.md
+branch: dev/vs-ai2.52-spsa-tuner
+progress log: .ralphex/progress/progress-20260717-vs-ai2.52-spsa-tuner.txt
+
+starting task execution phase
+
+--- task iteration 1 ---
+[26-07-17 17:29:48] Task 1: Expose eval constants as an injectable parameter
+[26-07-17 17:29:48] vector.
+[26-07-17 17:29:48] This first task converts the ~18 hand-set literals in the
+[26-07-17 17:29:48] eval formula into an exported EvalParams struct with a
+[26-07-17 17:29:48] package-global activeEvalParams (defaulting to the current
+[26-07-17 17:29:48] values), plus
+[26-07-17 17:29:48] SetEvalParams/DefaultEvalParams/CurrentEvalParams
+[26-07-17 17:29:48] accessors. Production never injects, so defaults stay
+[26-07-17 17:29:48] byte-equivalent — proven by the existing oracle/golden
+[26-07-17 17:29:48] tests, which I must run unchanged. Key file:
+[26-07-17 17:29:48] backend/search/evaluate.go. Let me read it.
+[26-07-17 17:30:05] Now I'll implement Task 1. Adding the EvalParams struct,
+[26-07-17 17:30:05] defaults, package global, and accessors, then replacing
+[26-07-17 17:30:05] literals.
+[26-07-17 17:30:17] Now replace the literals in the raw formula and
+[26-07-17 17:30:17] predatory-cut loop:
+[26-07-17 17:30:34] Now build, vet, and run the byte-equivalence tests:
+[26-07-17 17:30:40] Tests pass. Task 1 complete. Now marking checkboxes and
+[26-07-17 17:30:40] committing.
