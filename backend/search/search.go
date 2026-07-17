@@ -31,8 +31,8 @@ const (
 // production path.
 var (
 	leverOpponentStrangle = true
-	leverThreatExtend     = true
-	leverRootSafety       = true
+	leverThreatExtend     = false
+	leverRootSafety       = false
 )
 
 // SetSearchLevers overrides the active search levers. Test/measurement-only

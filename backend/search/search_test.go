@@ -407,16 +407,17 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 // this tiny fixture; the payoff is at deeper searches). Action/Score/Depth
 // unchanged. The budget-1000 minimax result and both maxn fixtures are
 // unchanged (maxn immediate pruning only fires when a winning child exists).
-// vs-ai2.35 re-pin (Lever 2, bounded threat extensions): opponent replies that
-// capture a root-owned Normal extend one ply (same depth, up to twice per path),
-// shifting the depth-2 minimax fixture's Nodes 220->223 and the budget-1000
-// minimax fixture's Evaluations 916->914 (the reshaped tree reaches the 1000-node
-// cap having evaluated two fewer leaves). Actions/Scores/Depth unchanged; both
-// maxn fixtures are unchanged (threat extensions are 1v1-only). Task 5
-// re-verifies the final all-on pins: an isolation sweep confirms Lever 1
-// (opponent ordering) and Lever 3 (root safety) leave every fixture
-// byte-identical to all-off on this corpus, so Lever 2 alone accounts for the
-// shift above and the pins below are exactly what the default all-on code emits.
+// vs-ai2.35 ships ONLY Lever 1 (opponent ordering) on by default. Task 7
+// acceptance ran the full suite and caught that Lever 2 (threat extensions) and
+// Lever 3 (root safety) each regress the deterministic legacy strength gate
+// below its 85% floor (62.5% and 75% respectively), while Lever 1 is neutral on
+// it; per the plan's own policy ("a lever that does not measurably improve any
+// gate is disabled/reverted, not shipped") both regressors are defaulted false
+// (code kept, re-enable via SetSearchLevers / the arena lever sweep). Lever 1
+// and Lever 3 leave every fixture in this corpus byte-identical to all-off, so
+// with Lever 2 off the pins revert to their pre-Lever-2 (vs-ai2.42) values:
+// depth-2 minimax Nodes 220, budget-1000 minimax Evaluations 916. Actions/
+// Scores/Depth unchanged; both maxn fixtures are unchanged (all levers 1v1-only).
 func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
@@ -435,8 +436,8 @@ func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	}{
 		{
 			name: "minimax", state: two,
-			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 223, Evaluations: 202},
-			wantNodes: Result{Action: move(3, 4), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 914, BudgetExhausted: true},
+			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 220, Evaluations: 202},
+			wantNodes: Result{Action: move(3, 4), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
 		},
 		{
 			name: "maxn", state: three,
