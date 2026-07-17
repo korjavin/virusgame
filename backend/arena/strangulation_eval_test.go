@@ -1,7 +1,6 @@
 package arena
 
 import (
-	"math/rand"
 	"os"
 	"strconv"
 	"testing"
@@ -98,31 +97,13 @@ func playBalancedOpenings(t *testing.T, label string, openings int, a, b Telemet
 	return report
 }
 
-// randomLegalOpening plays ~8 pseudo-random legal plies from the empty 12x12
-// two-player board and returns the resulting non-terminal snapshot. The seed
-// makes each opening distinct but reproducible. Balancing both seats over this
-// shared position cancels any opening advantage.
+// randomLegalOpening is the t-wrapper around the exported RandomLegalOpening,
+// pinned to the historical 12x12 board and t.Fatalf'ing on a returned error.
 func randomLegalOpening(t *testing.T, seed uint64) game.Snapshot {
 	t.Helper()
-	const plies = 8
-	rng := rand.New(rand.NewSource(int64(seed)))
-	state, err := game.New(12, 12, 2)
+	snapshot, err := RandomLegalOpening(12, 12, seed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for ply := 0; ply < plies; ply++ {
-		actions := state.LegalActions()
-		if len(actions) == 0 || state.GameOver() {
-			t.Fatalf("opening seed %d went terminal after %d plies", seed, ply)
-		}
-		next, err := state.Apply(actions[rng.Intn(len(actions))])
-		if err != nil {
-			t.Fatalf("opening seed %d: illegal random ply: %v", seed, err)
-		}
-		state = next
-	}
-	if state.GameOver() {
-		t.Fatalf("opening seed %d is terminal", seed)
-	}
-	return state.Snapshot()
+	return snapshot
 }

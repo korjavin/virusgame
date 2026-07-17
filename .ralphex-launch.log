@@ -27,3 +27,58 @@ starting task execution phase
 [26-07-17 17:30:34] Now build, vet, and run the byte-equivalence tests:
 [26-07-17 17:30:40] Tests pass. Task 1 complete. Now marking checkboxes and
 [26-07-17 17:30:40] committing.
+[26-07-17 17:31:04] Task 1 done and committed. Eval constants now live in an
+[26-07-17 17:31:04] exported EvalParams vector with a process-global
+[26-07-17 17:31:04] activeEvalParams (defaulting to the old literals), plus
+[26-07-17 17:31:04] SetEvalParams/DefaultEvalParams/CurrentEvalParams. The
+[26-07-17 17:31:04] byte-equivalence oracle/golden tests pass unchanged,
+[26-07-17 17:31:04] confirming the production path is untouched at defaults.
+[26-07-17 17:31:04] Stopping here — the loop will call the next iteration
+[26-07-17 17:31:04] for Task 2.
+
+--- task iteration 2 ---
+[26-07-17 17:31:21] Task 2: Extract a reusable non-test ladder harness
+[26-07-17 17:31:21] (arena/ladder.go)
+[26-07-17 17:31:21] I'll extract the ladder machinery currently trapped in
+[26-07-17 17:31:21] _test.go files into an importable arena/ladder.go so the
+[26-07-17 17:31:21] SPSA cmd can drive the exact gate objective. This creates
+[26-07-17 17:31:21] RandomLegalOpening (generalizing the hardcoded 12x12
+[26-07-17 17:31:21] opening generator), WilsonDecision (the SPRT stop rule),
+[26-07-17 17:31:21] SequentialResult, and PlaySequentialOpenings (parallel
+[26-07-17 17:31:21] worker pool but deterministic permutation-order folding +
+[26-07-17 17:31:21] same early-stop). Then I refactor sequential_test.go and
+[26-07-17 17:31:21] strangulation_eval_test.go to delegate to these exported
+[26-07-17 17:31:21] funcs (single source of truth), verify
+[26-07-17 17:31:21] TestSequentialEarlyStopDeterministic still passes, and add
+[26-07-17 17:31:21] a parallel-matches-serial self-check. Key files:
+[26-07-17 17:31:21] backend/arena/sequential_test.go,
+[26-07-17 17:31:21] strangulation_eval_test.go, arena.go, and new ladder.go +
+[26-07-17 17:31:21] ladder_parallel_test.go.
+[26-07-17 17:31:21] Let me read the existing test files.
+[26-07-17 17:35:33] Now I'll create the ladder harness:
+[26-07-17 17:36:55] Now the `sequentialResult` reference in the test body:
+[26-07-17 17:36:58] Now delegate `randomLegalOpening` in
+[26-07-17 17:36:58] strangulation_eval_test.go:
+[26-07-17 17:37:15] Now the parallel self-check. Let me write
+[26-07-17 17:37:15] ladder_parallel_test.go:
+[26-07-17 17:39:14] Confirmed: a real data race when a stateful agent (Random)
+[26-07-17 17:39:14] is shared across workers. Task 5 forbids touching
+[26-07-17 17:39:14] agents.go, and serializing agent calls would kill
+[26-07-17 17:39:14] parallelism for the expensive search agents. The clean
+[26-07-17 17:39:14] fix: the parallel guarantee holds for goroutine-safe,
+[26-07-17 17:39:14] order-independent agents (all the pure ladder agents +
+[26-07-17 17:39:14] node-budget search qualify); RNG agents (Random/Legacy)
+[26-07-17 17:39:14] carry mutable state and must run at workers=1. Let me make
+[26-07-17 17:39:14] the self-check honest by using goroutine-safe agents for
+[26-07-17 17:39:14] the lopsided case, and document the constraint.
+[26-07-17 17:40:00] Let me strengthen the self-check to assert the early-stop
+[26-07-17 17:40:00] path actually fires (so the determinism check covers
+[26-07-17 17:40:00] Stopped/Above meaningfully):
+[26-07-17 17:40:24] Now the full arena + search build/vet and the broader test
+[26-07-17 17:40:24] suite to confirm nothing else broke:
+[26-07-17 17:40:39] All green. Now mark Task 2 complete in the plan:
+[26-07-17 17:40:52] The self-check bullet says "Greedy vs Random" but I
+[26-07-17 17:40:52] substituted a goroutine-safe first-legal agent (Random is
+[26-07-17 17:40:52] not goroutine-safe and Task 5 forbids modifying
+[26-07-17 17:40:52] agents.go). Let me annotate that deviation:
+[26-07-17 17:41:02] Now commit:
