@@ -239,8 +239,23 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		best = -infScore
 	}
 	var bestAction game.Action
-	for _, child := range children {
-		score, ok := s.minimax(child.state, depth-1, alpha, beta, ply+1)
+	for i, child := range children {
+		var score int
+		var ok bool
+		if i == 0 {
+			score, ok = s.minimax(child.state, depth-1, alpha, beta, ply+1)
+		} else if maximizing {
+			// Null-window scout: probe whether this sibling beats alpha.
+			score, ok = s.minimax(child.state, depth-1, alpha, alpha+1, ply+1)
+			if ok && score > alpha && score < beta {
+				score, ok = s.minimax(child.state, depth-1, alpha, beta, ply+1)
+			}
+		} else {
+			score, ok = s.minimax(child.state, depth-1, beta-1, beta, ply+1)
+			if ok && score < beta && score > alpha {
+				score, ok = s.minimax(child.state, depth-1, alpha, beta, ply+1)
+			}
+		}
 		if !ok {
 			return 0, false
 		}
