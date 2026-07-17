@@ -15,7 +15,17 @@ const spaceRaceWeight = 32
 // (legacy 62.5% < 85%) and the constructed width-2 invariant fails at every
 // weight > 0, and any nonzero penalty diverges from the frozen origin-main eval
 // oracle. No weight fixes the opening without wrecking strength — ship nothing.
-// See docs/plans/20260717-vs-ai2.38-ungated-fragility.md Task 3 for the curve.
+// See docs/plans/completed/20260717-vs-ai2.38-ungated-fragility.md Task 3 for the curve.
+//
+// vs-ai2.38 attempt 2 (ROBUST SPACE) also null: reseed spaceRace from each
+// player's post-worst-cut surviving component (drop the max-cutLoss articulation
+// cell) so a width-1 tendril claims ~no deep space. It changed the opening but
+// did NOT flip the constructed-cut width-1 gate (cutter still wins 27), broke the
+// width-2 invariant (cutter went 35-loss -> 69-win), and regressed 4 tactical
+// tests (defense/reconnect/capture) — discounting fragile space also makes the
+// bot abandon reconnecting its own cuts. Reverted. Abandon the "discount fragile
+// space" family; a structural opening constraint is the next avenue.
+// See docs/plans/completed/20260717-vs-ai2.38-robust-space.md.
 
 type playerMetrics struct {
 	connected, disconnected    int
