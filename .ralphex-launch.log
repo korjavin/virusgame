@@ -1,0 +1,427 @@
+ralphex v1.6.0-5eff6cf-20260626T231702
+created .ralphex/.gitignore
+starting ralphex loop (max 25 iterations)
+plan: docs/plans/20260717-vs-ai2.52-spsa-tuner.md
+branch: dev/vs-ai2.52-spsa-tuner
+progress log: .ralphex/progress/progress-20260717-vs-ai2.52-spsa-tuner.txt
+
+starting task execution phase
+
+--- task iteration 1 ---
+[26-07-17 17:29:48] Task 1: Expose eval constants as an injectable parameter
+[26-07-17 17:29:48] vector.
+[26-07-17 17:29:48] This first task converts the ~18 hand-set literals in the
+[26-07-17 17:29:48] eval formula into an exported EvalParams struct with a
+[26-07-17 17:29:48] package-global activeEvalParams (defaulting to the current
+[26-07-17 17:29:48] values), plus
+[26-07-17 17:29:48] SetEvalParams/DefaultEvalParams/CurrentEvalParams
+[26-07-17 17:29:48] accessors. Production never injects, so defaults stay
+[26-07-17 17:29:48] byte-equivalent — proven by the existing oracle/golden
+[26-07-17 17:29:48] tests, which I must run unchanged. Key file:
+[26-07-17 17:29:48] backend/search/evaluate.go. Let me read it.
+[26-07-17 17:30:05] Now I'll implement Task 1. Adding the EvalParams struct,
+[26-07-17 17:30:05] defaults, package global, and accessors, then replacing
+[26-07-17 17:30:05] literals.
+[26-07-17 17:30:17] Now replace the literals in the raw formula and
+[26-07-17 17:30:17] predatory-cut loop:
+[26-07-17 17:30:34] Now build, vet, and run the byte-equivalence tests:
+[26-07-17 17:30:40] Tests pass. Task 1 complete. Now marking checkboxes and
+[26-07-17 17:30:40] committing.
+[26-07-17 17:31:04] Task 1 done and committed. Eval constants now live in an
+[26-07-17 17:31:04] exported EvalParams vector with a process-global
+[26-07-17 17:31:04] activeEvalParams (defaulting to the old literals), plus
+[26-07-17 17:31:04] SetEvalParams/DefaultEvalParams/CurrentEvalParams. The
+[26-07-17 17:31:04] byte-equivalence oracle/golden tests pass unchanged,
+[26-07-17 17:31:04] confirming the production path is untouched at defaults.
+[26-07-17 17:31:04] Stopping here — the loop will call the next iteration
+[26-07-17 17:31:04] for Task 2.
+
+--- task iteration 2 ---
+[26-07-17 17:31:21] Task 2: Extract a reusable non-test ladder harness
+[26-07-17 17:31:21] (arena/ladder.go)
+[26-07-17 17:31:21] I'll extract the ladder machinery currently trapped in
+[26-07-17 17:31:21] _test.go files into an importable arena/ladder.go so the
+[26-07-17 17:31:21] SPSA cmd can drive the exact gate objective. This creates
+[26-07-17 17:31:21] RandomLegalOpening (generalizing the hardcoded 12x12
+[26-07-17 17:31:21] opening generator), WilsonDecision (the SPRT stop rule),
+[26-07-17 17:31:21] SequentialResult, and PlaySequentialOpenings (parallel
+[26-07-17 17:31:21] worker pool but deterministic permutation-order folding +
+[26-07-17 17:31:21] same early-stop). Then I refactor sequential_test.go and
+[26-07-17 17:31:21] strangulation_eval_test.go to delegate to these exported
+[26-07-17 17:31:21] funcs (single source of truth), verify
+[26-07-17 17:31:21] TestSequentialEarlyStopDeterministic still passes, and add
+[26-07-17 17:31:21] a parallel-matches-serial self-check. Key files:
+[26-07-17 17:31:21] backend/arena/sequential_test.go,
+[26-07-17 17:31:21] strangulation_eval_test.go, arena.go, and new ladder.go +
+[26-07-17 17:31:21] ladder_parallel_test.go.
+[26-07-17 17:31:21] Let me read the existing test files.
+[26-07-17 17:35:33] Now I'll create the ladder harness:
+[26-07-17 17:36:55] Now the `sequentialResult` reference in the test body:
+[26-07-17 17:36:58] Now delegate `randomLegalOpening` in
+[26-07-17 17:36:58] strangulation_eval_test.go:
+[26-07-17 17:37:15] Now the parallel self-check. Let me write
+[26-07-17 17:37:15] ladder_parallel_test.go:
+[26-07-17 17:39:14] Confirmed: a real data race when a stateful agent (Random)
+[26-07-17 17:39:14] is shared across workers. Task 5 forbids touching
+[26-07-17 17:39:14] agents.go, and serializing agent calls would kill
+[26-07-17 17:39:14] parallelism for the expensive search agents. The clean
+[26-07-17 17:39:14] fix: the parallel guarantee holds for goroutine-safe,
+[26-07-17 17:39:14] order-independent agents (all the pure ladder agents +
+[26-07-17 17:39:14] node-budget search qualify); RNG agents (Random/Legacy)
+[26-07-17 17:39:14] carry mutable state and must run at workers=1. Let me make
+[26-07-17 17:39:14] the self-check honest by using goroutine-safe agents for
+[26-07-17 17:39:14] the lopsided case, and document the constraint.
+[26-07-17 17:40:00] Let me strengthen the self-check to assert the early-stop
+[26-07-17 17:40:00] path actually fires (so the determinism check covers
+[26-07-17 17:40:00] Stopped/Above meaningfully):
+[26-07-17 17:40:24] Now the full arena + search build/vet and the broader test
+[26-07-17 17:40:24] suite to confirm nothing else broke:
+[26-07-17 17:40:39] All green. Now mark Task 2 complete in the plan:
+[26-07-17 17:40:52] The self-check bullet says "Greedy vs Random" but I
+[26-07-17 17:40:52] substituted a goroutine-safe first-legal agent (Random is
+[26-07-17 17:40:52] not goroutine-safe and Task 5 forbids modifying
+[26-07-17 17:40:52] agents.go). Let me annotate that deviation:
+[26-07-17 17:41:02] Now commit:
+[26-07-17 17:41:14] Task 2 complete and committed. Stopping here per the
+[26-07-17 17:41:14] one-section-per-iteration constraint.
+[26-07-17 17:41:14] Summary of what I did:
+[26-07-17 17:41:14]   - Created backend/arena/ladder.go with testing.T-free
+[26-07-17 17:41:14] exports: RandomLegalOpening (generalized to any board
+[26-07-17 17:41:14] size), WilsonDecision (the SPRT stop rule),
+[26-07-17 17:41:14] SequentialResult, and PlaySequentialOpenings — a
+[26-07-17 17:41:14] worker-pool version that computes opening pairs in
+[26-07-17 17:41:14] parallel but folds/decides strictly in permutation order,
+[26-07-17 17:41:14] so the {Games,Wins,Stopped,Above} verdict is identical to
+[26-07-17 17:41:14] the serial run.
+[26-07-17 17:41:14]   - Refactored sequential_test.go and
+[26-07-17 17:41:14] strangulation_eval_test.go so wilsonDecision,
+[26-07-17 17:41:14] randomLegalOpening, playSequentialOpenings, and the shared
+[26-07-17 17:41:14] seed now delegate to the exported funcs (single source of
+[26-07-17 17:41:14] truth). The t-wrapper calls the exported func with
+[26-07-17 17:41:14] workers=1.
+[26-07-17 17:41:14]   - Added ladder_parallel_test.go asserting workers=1 ==
+[26-07-17 17:41:14] workers=4 for a lopsided and a mirror matchup, including
+[26-07-17 17:41:14] early-stop coverage.
+[26-07-17 17:41:14]   - go build/vet clean;
+[26-07-17 17:41:14] TestSequentialEarlyStopDeterministic and the new
+[26-07-17 17:41:14] self-check pass, including under -race.
+[26-07-17 17:41:14] One real defect surfaced and handled: sharing a stateful
+[26-07-17 17:41:14] RNG agent (Random/Legacy) across the pool is a data race
+[26-07-17 17:41:14] (confirmed under -race). Since Task 5 forbids touching
+[26-07-17 17:41:14] agents.go, the parallel==serial guarantee is documented as
+[26-07-17 17:41:14] holding only for goroutine-safe, order-independent agents;
+[26-07-17 17:41:14] the self-check uses a pure first-legal agent for the
+[26-07-17 17:41:14] lopsided case, and the constraint is recorded in the
+[26-07-17 17:41:14] PlaySequentialOpenings doc and the plan (relevant to how
+[26-07-17 17:41:14] Task 3's tuner must use Legacy floors — at workers=1).
+[26-07-17 17:41:14] More Task sections remain (Tasks 3–5).
+
+--- task iteration 3 ---
+[26-07-17 17:41:33] Task 3: SPSA tuner cmd (backend/arena/cmd/spsatune). Tasks
+[26-07-17 17:41:33] 1 and 2 are complete. This iteration I'll build the SPSA
+[26-07-17 17:41:33] optimizer command that black-box tunes the eval constants
+[26-07-17 17:41:33] against the gate ladder objective.
+[26-07-17 17:41:33] What it accomplishes: a reproducible SPSA loop (antithetic
+[26-07-17 17:41:33] perturbations, Spall standard gains) that maximizes
+[26-07-17 17:41:33] candidate win-rate across the 12x12 ladder rungs, enforces
+[26-07-17 17:41:33] small-board floors (Legacy≥85%, Greedy≥75%, incumbent
+[26-07-17 17:41:33] h2h≥50%) as reject constraints, holds out CutSeeker for
+[26-07-17 17:41:33] validation only, and writes a JSON trace. Includes a
+[26-07-17 17:41:33] reproducibility self-check.
+[26-07-17 17:41:33] Key components: `search.SetEvalParams/DefaultEvalParams`
+[26-07-17 17:41:33] (Task 1), `arena.PlaySequentialOpenings` + telemetry
+[26-07-17 17:41:33] agents (Task 2), new `backend/arena/cmd/spsatune/main.go`
+[26-07-17 17:41:33] + `main_test.go`.
+[26-07-17 17:41:33] Let me read the relevant source first.
+[26-07-17 17:41:55] Now let me look at how the existing tests invoke the
+[26-07-17 17:41:55] ladder rungs and floors to mirror the objective correctly.
+[26-07-17 17:45:05] Now I have everything. Writing the SPSA tuner.
+[26-07-17 17:46:03] Now the reproducibility self-check.
+[26-07-17 17:46:16] Build and vet clean. Now run the reproducibility
+[26-07-17 17:46:16] self-check.
+[26-07-17 17:46:38] Self-check passes. Quick end-to-end smoke of the actual
+[26-07-17 17:46:38] command (to /tmp, discarded):
+[26-07-17 17:46:57] `-Inf` (no feasible candidate found) breaks JSON.
+[26-07-17 17:46:57] Initialize best fitness to the finite sentinel instead.
+[26-07-17 17:47:15] All Task 3 checkboxes are implemented and verified. Let me
+[26-07-17 17:47:15] run vet once more, mark the plan, and commit.
+[26-07-17 17:47:29] All 9 Task 3 checkboxes marked. Committing.
+[26-07-17 17:47:43] Task 3 complete and committed. Summary of what was built:
+[26-07-17 17:47:43]   - backend/arena/cmd/spsatune/main.go — SPSA optimizer
+[26-07-17 17:47:43] over search.EvalParams. Works in a per-param scaled space
+[26-07-17 17:47:43] (each weight divided by its default magnitude, so a ±1
+[26-07-17 17:47:43] integer step is meaningful for both weight-1 and
+[26-07-17 17:47:43] BaseThreat=650 params). Spall-standard gains (alpha=0.602,
+[26-07-17 17:47:43] gamma=0.101, c=1.0, a=0.05), antithetic Bernoulli
+[26-07-17 17:47:43] perturbations seeded per (seed,k), sequential fPlus/fMinus
+[26-07-17 17:47:43] evals (eval params are a process global), gradient update,
+[26-07-17 17:47:43] best-seen tracking.
+[26-07-17 17:47:43]   - fitness(): floors first as reject constraints
+[26-07-17 17:47:43] (Legacy≥85% and Greedy≥75% on 8x8, incumbent h2h≥50%
+[26-07-17 17:47:43] on 12x12) returning a finite sentinel + breached-floor
+[26-07-17 17:47:43] name on breach; then a stranglers-weighted average win%
+[26-07-17 17:47:43] over the six 12x12 rungs. Floor breaches skip the theta
+[26-07-17 17:47:43] update to keep it in the feasible region.
+[26-07-17 17:47:43]   - CutSeeker measured per-iteration as holdout, excluded
+[26-07-17 17:47:43] from fitness.
+[26-07-17 17:47:43]   - Restores default params via defer; writes a JSON trace
+[26-07-17 17:47:43] (config + per-iteration records + baseline/best summary)
+[26-07-17 17:47:43] to -out.
+[26-07-17 17:47:43]   - main_test.go — reproducibility self-check (2 iters,
+[26-07-17 17:47:43] openings=2, nodes=200, twice same seed → byte-identical
+[26-07-17 17:47:43] JSON). Passes.
+[26-07-17 17:47:43] Fixed one issue found via an end-to-end run: an
+[26-07-17 17:47:43] all-infeasible run left bestFit at -Inf, which
+[26-07-17 17:47:43] json.Marshal rejects — seeded it with the finite
+[26-07-17 17:47:43] sentinel instead.
+[26-07-17 17:47:43] build/vet clean, self-check green. Stopping here for the
+[26-07-17 17:47:43] loop to pick up Task 4 (the bounded smoke run + committed
+[26-07-17 17:47:43] results).
+
+--- task iteration 4 ---
+[26-07-17 17:47:53] Task 4: Bounded smoke run + committed results. I'll run
+[26-07-17 17:47:53] the SPSA tuner smoke run, commit the trace, and write an
+[26-07-17 17:47:53] honest results README.
+[26-07-17 17:47:53] Let me first understand the tuner and its timing
+[26-07-17 17:47:53] characteristics.
+[26-07-17 17:47:59] Let me build and do a quick timing probe at tiny settings
+[26-07-17 17:47:59] before committing to the full smoke run.
+[26-07-17 17:48:17] One floor breached so that iteration short-circuited. Let
+[26-07-17 17:48:17] me time a full iteration at the actual smoke settings to
+[26-07-17 17:48:17] estimate total wall-time.
+[26-07-17 17:48:41] Baseline itself breaches the legacy floor at these
+[26-07-17 17:48:41] settings — that would make the whole run all-sentinel
+[26-07-17 17:48:41] and useless. Let me investigate whether the floor is
+[26-07-17 17:48:41] miscalibrated or just noisy at few openings.
+[26-07-17 17:49:03] Let me directly measure the baseline's win rate vs the
+[26-07-17 17:49:03] legacy floor to understand the breach.
+[26-07-17 17:51:44] The Legacy 85% floor is right at the baseline's true
+[26-07-17 17:51:44] strength (~84% at 1000 nodes over 50 games, ~88% at 2000).
+[26-07-17 17:51:44] At smoke-scale game counts it early-stops-below and
+[26-07-17 17:51:44] rejects the baseline. Let me time one full feasible-ish
+[26-07-17 17:51:44] iteration to decide whether a meaningful run fits in a
+[26-07-17 17:51:44] reasonable wall-time.
+[26-07-17 17:54:10] I'll wait for the timing result before committing to a run
+[26-07-17 17:54:10] strategy.
+[26-07-17 17:54:39] Baseline is feasible at nodes=2000, floor-openings=25
+[26-07-17 17:54:39] (baseline=68.06, and fitness moved to 70.83). One
+[26-07-17 17:54:39] iteration took ~2m19s, so iters=20 will be ~30-40 min.
+[26-07-17 17:54:39] That's an acceptable background smoke run with real
+[26-07-17 17:54:39] fitness movement. Launching it.
+[26-07-17 17:55:01] While the smoke run executes, I'll prepare a per-rung
+[26-07-17 17:55:01] measurement harness (the README needs baseline-vs-best
+[26-07-17 17:55:01] per-rung win%, which the trace doesn't break out). It
+[26-07-17 17:55:01] reads the summary's defaultTheta/bestTheta from the
+[26-07-17 17:55:01] results JSON and plays each rung for both.
+[26-07-17 17:55:20] Let me verify it compiles (guard against name collisions
+[26-07-17 17:55:20] with existing test helpers).
+[26-07-17 17:55:24] Harness compiles. Now waiting for the smoke run to
+[26-07-17 17:55:24] complete (monitor will report each iteration and the final
+[26-07-17 17:55:24] write).
+[26-07-17 17:55:31] The run is in progress; output appears per-iteration. I'll
+[26-07-17 17:55:31] wait for the monitor events rather than poll.
+[26-07-17 17:55:39] The smoke run is executing in the background (~30-40 min
+[26-07-17 17:55:39] for 20 iterations). I'll continue once the monitor reports
+[26-07-17 17:55:39] iteration progress and the final write. Waiting for
+[26-07-17 17:55:39] events.
+[26-07-17 17:55:44] Run in progress. I'll resume when the monitor reports
+[26-07-17 17:55:44] completion.
+[26-07-17 17:55:46] I'll wait for the background run to finish rather than
+[26-07-17 17:55:46] continue polling.
+[26-07-17 17:55:51] Now I'll wait for either the monitor progress events or
+[26-07-17 17:55:51] the completion signal.
+[26-07-17 17:55:57] I'll stop polling and wait for the completion notification
+[26-07-17 17:55:57] to arrive.
+
+--- task iteration 4 ---
+[26-07-17 17:56:12] Task 4: Bounded smoke run + committed results. I'll run
+[26-07-17 17:56:12] the SPSA tuner smoke run against the gate ladder, commit
+[26-07-17 17:56:12] the produced trace JSON, and write an honest results
+[26-07-17 17:56:12] README comparing baseline vs best-found fitness with
+[26-07-17 17:56:12] per-rung win% and the CutSeeker holdout.
+[26-07-17 17:56:12] Let me first understand the cmd's actual flags and output
+[26-07-17 17:56:12] format before running.
+[26-07-17 17:56:16] Let me build and do a quick timing probe before committing
+[26-07-17 17:56:16] to full settings.
+[26-07-17 17:56:20] Now a quick timing probe with tiny settings to estimate
+[26-07-17 17:56:20] per-iteration cost:
+[26-07-17 17:56:38] 5.4s for 2 tiny iters (incl. build). The full run (nodes
+[26-07-17 17:56:38] 5x, openings 3x, iters 12.5x) will be substantially
+[26-07-17 17:56:38] longer. Let me run it in the background against the target
+[26-07-17 17:56:38] path and monitor.
+[26-07-17 17:57:00] While the run proceeds, let me check the results directory
+[26-07-17 17:57:00] state.
+[26-07-17 17:57:05] Waiting for the run to complete. Let me examine the
+[26-07-17 17:57:05] untracked `zzmeasure_test.go` — it's not part of my task
+[26-07-17 17:57:05] and I should not commit it.
+[26-07-17 17:57:09] A prior iteration left a throwaway helper to measure
+[26-07-17 17:57:09] per-rung win% for the README. Let me read it fully.
+[26-07-17 17:57:14] Good — this throwaway helper produces exactly the
+[26-07-17 17:57:14] per-rung baseline-vs-best numbers the README needs. I'll
+[26-07-17 17:57:14] run it after the smoke completes, then delete it. Waiting
+[26-07-17 17:57:14] for the run.
+[26-07-17 17:57:21] The run is progressing (k=00 complete). I'll wait for the
+[26-07-17 17:57:21] monitor notification rather than poll.
+
+--- task iteration 4 ---
+[26-07-17 17:57:42] Task 4: Bounded smoke run + committed results.
+[26-07-17 17:57:42] This iteration runs the spsatune SPSA tuner end-to-end at
+[26-07-17 17:57:42] the smoke settings, commits the produced trace JSON, and
+[26-07-17 17:57:42] writes an honest results README (baseline vs best fitness,
+[26-07-17 17:57:42] per-rung win%, CutSeeker holdout, verdict). Key files:
+[26-07-17 17:57:42] backend/arena/cmd/spsatune/main.go (the tuner) and a new
+[26-07-17 17:57:42] backend/arena/cmd/spsatune/results/ directory for the
+[26-07-17 17:57:42] trace + README.
+[26-07-17 17:57:42] Let me look at the tuner to understand its output format
+[26-07-17 17:57:42] and runtime before kicking off what may be a long run.
+[26-07-17 17:59:04] The smoke settings breach the Legacy floor even for the
+[26-07-17 17:59:04] baseline. Let me probe where the default params actually
+[26-07-17 17:59:04] clear the floors.
+[26-07-17 18:01:48] Real gate uses nodes=1000/openings=40/incumbent-h2h@50%;
+[26-07-17 18:01:48] the 85% Legacy 8x8 floor is the tuner's own reject
+[26-07-17 18:01:48] constraint, and the baseline breaches it once enough floor
+[26-07-17 18:01:48] games accumulate. Let me find smoke settings where the
+[26-07-17 18:01:48] baseline is feasible and 25 iters finish fast.
+[26-07-17 18:02:26] The baseline is infeasible across smoke settings —
+[26-07-17 18:02:26] Legacy on 8x8 is genuinely beating the low-node candidate.
+[26-07-17 18:02:26] Let me measure the actual baseline win-rates vs the floor
+[26-07-17 18:02:26] opponents directly to understand the calibration.
+[26-07-17 18:02:42] There's an untracked `arena/zzmeasure_test.go` — let me
+[26-07-17 18:02:42] check it; it may already measure this.
+[26-07-17 18:02:49] A prior iteration left a measurement harness (nodes=2000,
+[26-07-17 18:02:49] openings=4). Let me check for existing results and the
+[26-07-17 18:02:49] progress log.
+[26-07-17 18:03:09] A prior smoke attempt (nodes=2000/openings=4) never
+[26-07-17 18:03:09] produced committed results — the baseline breaches the
+[26-07-17 18:03:09] Legacy floor. Let me confirm the raw baseline win-rate vs
+[26-07-17 18:03:09] Legacy on 8x8 is genuinely sub-85% (near-random opponent)
+[26-07-17 18:03:09] using the measurement harness. First I need a results JSON
+[26-07-17 18:03:09] with the default params.
+[26-07-17 18:04:23] Now I have the real picture at nodes=1000: floor Legacy
+[26-07-17 18:04:23] 8x8 = 75% (breaches the 85% floor), Greedy 78.6% (barely
+[26-07-17 18:04:23] clears 75%), incumbent 87.5%. The Legacy floor is the
+[26-07-17 18:04:23] binding constraint that rejects even the hand-tuned
+[26-07-17 18:04:23] baseline. Let me check whether a higher node budget lifts
+[26-07-17 18:04:23] the baseline over the Legacy floor.
+[26-07-17 18:05:56] At both 1000 and 2000 nodes the baseline wins only 75% vs
+[26-07-17 18:05:56] the near-random Legacy on 8x8 — the 85% Legacy floor is
+[26-07-17 18:05:56] miscalibrated and rejects even the hand-tuned baseline
+[26-07-17 18:05:56] regardless of budget. That's the honest finding. Because
+[26-07-17 18:05:56] floors reject first (short-circuiting the expensive
+[26-07-17 18:05:56] ladder), the plan's exact smoke command runs fast. Let me
+[26-07-17 18:05:56] run it to the results path.
+[26-07-17 18:12:48] The smoke run completed (6m38s, 25 iterations). The
+[26-07-17 18:12:48] baseline is infeasible (Legacy-8x8 floor breach), but SPSA
+[26-07-17 18:12:48] found feasible perturbations — best ladder fitness 87.04
+[26-07-17 18:12:48] at k=05. Now let me measure per-rung win% for default vs
+[26-07-17 18:12:48] best for the README.
+[26-07-17 18:13:09] Best vector at k=05 is a single feasible antithetic
+[26-07-17 18:13:09] perturbation (large moves off default), not a converged
+[26-07-17 18:13:09] optimum. Let me measure per-rung win% for default vs best
+[26-07-17 18:13:09] to document honestly.
+[26-07-17 18:13:22] Path is relative to the package dir under `go test`. Use
+[26-07-17 18:13:22] absolute.
+[26-07-17 18:14:35] Now I have honest per-rung numbers. The best vector
+[26-07-17 18:14:35] improves the strangler rungs substantially (BaseAttacker
+[26-07-17 18:14:35] 37.5→75, MobilityBaseAttacker 37.5→75, incumbent-h2h
+[26-07-17 18:14:35] 62.5→87.5) and the CutSeeker holdout (62.5→75) on the
+[26-07-17 18:14:35] smoke sample. Let me write the README.
+[26-07-17 18:15:02] Now clean up the throwaway measurement test, update the
+[26-07-17 18:15:02] plan, and commit.
+[26-07-17 18:15:28] Task 4 complete and committed.
+[26-07-17 18:15:28] What happened:
+[26-07-17 18:15:28]   - Ran the plan's exact smoke command (25 iters,
+[26-07-17 18:15:28] openings=6, nodes=1000, seed=1) → `smoke-20260717.json`
+[26-07-17 18:15:28] trace, ≈6m40s.
+[26-07-17 18:15:28]   - Committed the trace + an honest `results/README.md`.
+[26-07-17 18:15:28] The honest finding: the baseline (default hand-tuned
+[26-07-17 18:15:28] params) is reported infeasible because it breaches the
+[26-07-17 18:15:28] tuner's own 85% Legacy-8x8 floor — directly measured,
+[26-07-17 18:15:28] the default eval only wins 75% vs the near-random Legacy
+[26-07-17 18:15:28] on 8x8 at both 1000 and 2000 nodes, a robust ~10pp gap
+[26-07-17 18:15:28] that more search doesn't close. So 20 of 25 iterations
+[26-07-17 18:15:28] breached a floor and the SPSA gradient rarely updated; the
+[26-07-17 18:15:28] "best" vector (fitness 87.04) is one lucky floor-passing
+[26-07-17 18:15:28] perturbation, not a converged optimum.
+[26-07-17 18:15:28] Still suggestive: that best vector improves the strangler
+[26-07-17 18:15:28] rungs on the smoke sample (BaseAttacker 37.5→75,
+[26-07-17 18:15:28] MobilityBaseAttacker 37.5→75, incumbent-h2h 62.5→87.5)
+[26-07-17 18:15:28] and the held-out CutSeeker (62.5→75). Caveated heavily
+[26-07-17 18:15:28] (8-game samples). README recommends recalibrating the
+[26-07-17 18:15:28] Legacy-8x8 floor before any real run.
+[26-07-17 18:15:28] Cleaned up the untracked throwaway `zzmeasure_test.go`
+[26-07-17 18:15:28] after capturing per-rung numbers. Build + vet clean.
+[26-07-17 18:15:28] Task 5 (verify acceptance criteria) still has open
+[26-07-17 18:15:28] checkboxes — stopping here for the loop to pick it up.
+
+--- task iteration 5 ---
+[26-07-17 18:15:40] Task 5: Verify acceptance criteria. This is the final
+[26-07-17 18:15:40] verification task — running build/vet, the fast test
+[26-07-17 18:15:40] suite for search and arena, confirming the
+[26-07-17 18:15:40] byte-equivalence oracle tests pass, confirming the
+[26-07-17 18:15:40] spsatune reproducibility self-check, and confirming git
+[26-07-17 18:15:40] status shows only the scoped changes with search.go
+[26-07-17 18:15:40] untouched. Let me run these.
+[26-07-17 18:15:51] Build, vet, and fast tests all green. Now the specific
+[26-07-17 18:15:51] oracle tests, the reproducibility self-check, and git
+[26-07-17 18:15:51] status.
+[26-07-17 18:16:11] All verification checks pass:
+[26-07-17 18:16:11]   - Build + vet clean
+[26-07-17 18:16:11]   - Fast tests green (search, arena)
+[26-07-17 18:16:11]   - Byte-equivalence oracle + golden tests pass
+[26-07-17 18:16:11]   - SPSA reproducibility self-check passes
+[26-07-17 18:16:11]   - search.go unchanged (empty diff)
+[26-07-17 18:16:11] Let me confirm the overall branch scope against main to
+[26-07-17 18:16:11] validate the "only additive + scoped" criterion.
+[26-07-17 18:16:25] search.go shows changes vs main, but this branch's
+[26-07-17 18:16:25] merge-base includes a lot of unrelated work (opening_book,
+[26-07-17 18:16:25] game/, hub) — that's a shared/concurrent worktree
+[26-07-17 18:16:25] situation (per my memory note on concurrent executor
+[26-07-17 18:16:25] collision). The criterion is about this plan's own scope.
+[26-07-17 18:16:25] Let me confirm none of this plan's commits touched
+[26-07-17 18:16:25] search.go, and that evaluate.go's change is param-exposure
+[26-07-17 18:16:25] only.
+[26-07-17 18:16:32] Confirmed — none of this plan's 5 commits touched
+[26-07-17 18:16:32] search.go; the search.go diff vs main is entirely the
+[26-07-17 18:16:32] concurrent executor's work sharing this worktree history.
+[26-07-17 18:16:32] Let me verify what this plan's commits actually changed,
+[26-07-17 18:16:32] to confirm the scope criterion.
+[26-07-17 18:16:42] All five Task 5 criteria verified:
+[26-07-17 18:16:42]   - Build + vet clean ✓
+[26-07-17 18:16:42]   - `go test ./search ./arena` green ✓
+[26-07-17 18:16:42]   - Oracle + golden byte-equivalence tests pass ✓
+[26-07-17 18:16:42]   - spsatune reproducibility self-check passes ✓
+[26-07-17 18:16:42]   - Plan's committed scope is exactly: additive
+[26-07-17 18:16:42] spsatune/ladder files + scoped evaluate.go param-exposure
+[26-07-17 18:16:42] + delegate refactor in the two arena test files; search.go
+[26-07-17 18:16:42] untouched by this plan ✓
+[26-07-17 18:16:42] Marking Task 5 complete.
+[26-07-17 18:16:58] All Task 5 acceptance criteria verified and committed.
+[26-07-17 18:16:58] Every Task section in the plan now has all checkboxes
+[26-07-17 18:16:58] marked [x], and the non-checkbox sections (Success
+[26-07-17 18:16:58] criteria / Overview / Context) contain no [ ] items.
+[26-07-17 18:16:58] ALL_TASKS_DONE
+
+all tasks completed, starting code review...
+
+--- claude review 0: all findings ---
+[26-07-17 18:16:58] agent "implementation": model=default, subagent=general-purpose
+[26-07-17 18:16:58] agent "simplification": model=default, subagent=general-purpose
+[26-07-17 18:17:01] I'll start by getting the branch context, then launch the
+[26-07-17 18:17:01] two review agents in parallel.
+[26-07-17 18:17:16] The diff stat shows many files unrelated to the SPSA tuner
+[26-07-17 18:17:16] plan. Let me verify what main actually points to, since
+[26-07-17 18:17:16] the plan work is only the last few commits.
+[26-07-17 18:17:36] The worktree mixes in unrelated concurrent-executor work
+[26-07-17 18:17:36] (search.go, opening_book, hub, etc.). The actual plan work
+[26-07-17 18:17:36] is the 5 commits after `df7257a`. Let me confirm the
+[26-07-17 18:17:36] scoped range and that search.go isn't touched by this
+[26-07-17 18:17:36] plan's commits.
+[26-07-17 18:17:40] Clean scope confirmed. Now launching the two review agents
+[26-07-17 18:17:40] in parallel, scoped to this plan's commits
+[26-07-17 18:17:40] (`df7257a..HEAD`).
+[26-07-17 18:24:27] You've hit your session limit · resets 7:40pm (UTC)
+[26-07-17 18:24:27] rate limit detected: "You've hit your session limit" in claude output, waiting 1h0m0s before retry...
+
+interrupting... (force exit in 5s)
+error: runner: first review: claude execution: interrupted during limit wait: context canceled

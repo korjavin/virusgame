@@ -42,6 +42,57 @@ const spaceRaceWeight = 32
 // arena/exchange_evidence_test.go + arena/exchange_gate_test.go.
 // See docs/plans/20260717-vs-ai2.47-exchange-ratio.md Task 4 for the sweep data.
 
+// EvalParams is the flat vector of hand-set evaluation weights. Every field
+// defaults (via defaultEvalParams) to the constant it replaced, so the
+// production path is byte-equivalent to the old literals — proven by the
+// oracle/golden tests. The tuner (cmd/spsatune) is the ONLY injection point,
+// through SetEvalParams; production never calls it.
+type EvalParams struct {
+	Connected           int
+	Normal              int
+	Fortified           int
+	Mobility            int
+	Captures            int
+	Disconnected        int
+	BaseExits           int
+	BaseOpenings        int
+	BaseAnchors         int
+	BaseThreat          int
+	ThreatenedLossMult  int
+	ThreatenedMult      int
+	SpaceRace           int
+	SealedBasePenalty   int
+	NeutralUnusedBonus  int
+	MovesLeftTempo      int
+	PredatoryCutBase    int
+	PredatoryCutLossDiv int
+}
+
+// defaultEvalParams returns the current hand-tuned literal values.
+func defaultEvalParams() EvalParams {
+	return EvalParams{
+		Connected: 10, Normal: 30, Fortified: 6, Mobility: 1, Captures: 1,
+		Disconnected: 1, BaseExits: 180, BaseOpenings: 80, BaseAnchors: 240,
+		BaseThreat: 650, ThreatenedLossMult: 1, ThreatenedMult: 1,
+		SpaceRace: spaceRaceWeight, SealedBasePenalty: 5000, NeutralUnusedBonus: 20,
+		MovesLeftTempo: 12, PredatoryCutBase: 150, PredatoryCutLossDiv: 2,
+	}
+}
+
+// activeEvalParams holds the weights used by evaluateAllWithWorkspace. It is a
+// process global: only SetEvalParams mutates it, and only the tuner calls that.
+var activeEvalParams = defaultEvalParams()
+
+// SetEvalParams overrides the active evaluation weights. It is the tuner-only
+// injection point (cmd/spsatune) and is NOT called on the production path.
+func SetEvalParams(p EvalParams) { activeEvalParams = p }
+
+// DefaultEvalParams returns the hand-tuned baseline weights.
+func DefaultEvalParams() EvalParams { return defaultEvalParams() }
+
+// CurrentEvalParams returns the currently active weights.
+func CurrentEvalParams() EvalParams { return activeEvalParams }
+
 type playerMetrics struct {
 	connected, disconnected    int
 	normal, fortified          int
@@ -214,23 +265,24 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		m := metrics[player-1]
 		area := state.Rows() * state.Cols()
 		owned := m.normal + m.fortified + 1 // include the base
-		raw[player-1] = normalized(m.connected, area, 10) +
-			normalized(m.normal, area, 30) + normalized(m.fortified, area, 6) +
-			normalized(m.mobility, area, 1) + normalized(m.captures, area, 1) -
-			normalized(m.disconnected, owned, 1) +
-			180*m.baseExits + 80*m.baseOpenings + 240*m.baseAnchors -
-			650*m.baseThreat*m.threatTempo -
-			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
-			m.threatTempo*ratio(m.threatened, max(1, m.connected)) +
-			normalized(space[player-1], area, spaceRaceWeight)
+		p := activeEvalParams
+		raw[player-1] = normalized(m.connected, area, p.Connected) +
+			normalized(m.normal, area, p.Normal) + normalized(m.fortified, area, p.Fortified) +
+			normalized(m.mobility, area, p.Mobility) + normalized(m.captures, area, p.Captures) -
+			normalized(m.disconnected, owned, p.Disconnected) +
+			p.BaseExits*m.baseExits + p.BaseOpenings*m.baseOpenings + p.BaseAnchors*m.baseAnchors -
+			p.BaseThreat*m.baseThreat*m.threatTempo -
+			m.threatTempo*p.ThreatenedLossMult*ratio(m.threatenedLoss, max(1, m.connected)) -
+			m.threatTempo*p.ThreatenedMult*ratio(m.threatened, max(1, m.connected)) +
+			normalized(space[player-1], area, p.SpaceRace)
 		if m.baseExits+m.baseOpenings == 0 {
-			raw[player-1] -= 5000
+			raw[player-1] -= p.SealedBasePenalty
 		}
 		if !state.NeutralUsed(player) {
-			raw[player-1] += 20
+			raw[player-1] += p.NeutralUnusedBonus
 		}
 		if state.CurrentPlayer() == player {
-			raw[player-1] += state.MovesLeft() * 12
+			raw[player-1] += state.MovesLeft() * p.MovesLeftTempo
 		}
 	}
 
@@ -246,7 +298,7 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			for index, cut := range metrics[opponent-1].articulation {
 				if cut && adjacentConnected(state, index, own.connectedCells) {
 					loss := int(metrics[opponent-1].cutLoss[index])
-					raw[player-1] += 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
+					raw[player-1] += activeEvalParams.PredatoryCutBase + ratio(loss, max(1, metrics[opponent-1].connected))/activeEvalParams.PredatoryCutLossDiv
 				}
 			}
 		}
