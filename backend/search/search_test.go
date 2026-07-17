@@ -407,6 +407,13 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 // this tiny fixture; the payoff is at deeper searches). Action/Score/Depth
 // unchanged. The budget-1000 minimax result and both maxn fixtures are
 // unchanged (maxn immediate pruning only fires when a winning child exists).
+// vs-ai2.35 re-pin (Lever 2, bounded threat extensions): opponent replies that
+// capture a root-owned Normal extend one ply (same depth, up to twice per path),
+// shifting the depth-2 minimax fixture's Nodes 220->223 and the budget-1000
+// minimax fixture's Evaluations 916->914 (the reshaped tree reaches the 1000-node
+// cap having evaluated two fewer leaves). Actions/Scores/Depth unchanged; both
+// maxn fixtures are unchanged (threat extensions are 1v1-only). Task 5
+// re-verifies the final all-on pins.
 func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
@@ -425,8 +432,8 @@ func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	}{
 		{
 			name: "minimax", state: two,
-			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 220, Evaluations: 202},
-			wantNodes: Result{Action: move(3, 4), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
+			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 223, Evaluations: 202},
+			wantNodes: Result{Action: move(3, 4), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 914, BudgetExhausted: true},
 		},
 		{
 			name: "maxn", state: three,
@@ -649,6 +656,109 @@ func TestLeverOpponentStrangleOffMatchesBaseline(t *testing.T) {
 	// No strangle bonus: only the retain-turn term survives.
 	if c.order != 100 {
 		t.Fatalf("lever off: squeeze order = %d, want 100 (no strangle bonus)", c.order)
+	}
+}
+
+// threatFixture builds a 5x5 1v1 board (player 1 to move = root) where player 2
+// owns a Normal at (2,3) directly left-adjacent to player 1's Normal at (2,2),
+// so player 2 has a move that captures a root-owned Normal — a Lever 2 threat
+// edge that appears at every opponent-to-move node in the search.
+func threatFixture(t *testing.T) game.State {
+	t.Helper()
+	board := make([][]game.Cell, 5)
+	for r := range board {
+		board[r] = make([]game.Cell, 5)
+	}
+	board[0][0] = game.Cell{Owner: 1, Kind: game.Base}
+	board[0][1] = game.Cell{Owner: 1, Kind: game.Normal}
+	board[2][2] = game.Cell{Owner: 1, Kind: game.Normal} // capture target
+	board[2][4] = game.Cell{Owner: 2, Kind: game.Base}
+	board[2][3] = game.Cell{Owner: 2, Kind: game.Normal} // connected to base; can move-capture (2,2)
+	state, err := game.FromSnapshot(game.Snapshot{
+		Rows: 5, Cols: 5, Board: board,
+		Bases:       []game.Pos{{Row: 0, Col: 0}, {Row: 2, Col: 4}},
+		Active:      []bool{true, true},
+		NeutralUsed: []bool{false, false},
+		Current:     1, MovesLeft: 1, // last move of the turn: one root move hands over to player 2
+	})
+	if err != nil {
+		t.Fatalf("FromSnapshot: %v", err)
+	}
+	return state
+}
+
+func TestLeverThreatExtendFiresAndIsBounded(t *testing.T) {
+	defer SetSearchLevers(true, true, true)
+	state := threatFixture(t)
+
+	// Sanity: player 2 really does have a capture of our (2,2) Normal.
+	opp := play(t, state, move(1, 1)) // any root move; player 2 to move next
+	if opp.CurrentPlayer() != 2 {
+		t.Fatalf("fixture did not reach player-2 to move: %d", opp.CurrentPlayer())
+	}
+	s := newSearcher(context.Background(), state)
+	children, ok := s.orderedChildren(opp, game.Action{}, false)
+	if !ok {
+		t.Fatal("ordering canceled")
+	}
+	c, found := findChild(children, move(2, 2))
+	if !found || !c.threat {
+		t.Fatalf("expected a threat edge capturing (2,2); found=%v threat=%v", found, found && c.threat)
+	}
+
+	// Extension on searches the threatened line deeper => strictly more nodes.
+	SetSearchLevers(true, true, true)
+	on, ok := ChooseDepth(context.Background(), state, 3)
+	if !ok {
+		t.Fatal("extend-on search did not complete")
+	}
+	onAgain, ok := ChooseDepth(context.Background(), state, 3)
+	if !ok || on != onAgain {
+		t.Fatalf("extend-on not deterministic: %+v / %+v", on, onAgain)
+	}
+
+	SetSearchLevers(true, false, true)
+	off, ok := ChooseDepth(context.Background(), state, 3)
+	if !ok {
+		t.Fatal("extend-off search did not complete")
+	}
+	if on.Nodes <= off.Nodes {
+		t.Fatalf("extension did not fire: on nodes %d <= off nodes %d", on.Nodes, off.Nodes)
+	}
+
+	// Bounded: a node-budgeted search with the extension on still terminates.
+	SetSearchLevers(true, true, true)
+	budget, ok := ChooseNodeBudget(state, 2000)
+	if !ok {
+		t.Fatal("budgeted extend-on search returned no action")
+	}
+	if budget.Nodes > 2000 {
+		t.Fatalf("extension blew the node budget: %d > 2000", budget.Nodes)
+	}
+}
+
+func TestLeverThreatExtendOffMatchesNonExtended(t *testing.T) {
+	defer SetSearchLevers(true, true, true)
+	state := threatFixture(t)
+
+	// Hold ordering+rootSafety fixed; only the extend lever moves. Turning it off
+	// must return the search to its non-extended node count, deterministically.
+	SetSearchLevers(true, true, true)
+	on, ok := ChooseDepth(context.Background(), state, 3)
+	if !ok {
+		t.Fatal("extend-on search did not complete")
+	}
+	SetSearchLevers(true, false, true)
+	off, ok := ChooseDepth(context.Background(), state, 3)
+	if !ok {
+		t.Fatal("extend-off search did not complete")
+	}
+	offAgain, ok := ChooseDepth(context.Background(), state, 3)
+	if !ok || off != offAgain {
+		t.Fatalf("extend-off not deterministic: %+v / %+v", off, offAgain)
+	}
+	if off.Nodes >= on.Nodes {
+		t.Fatalf("disabling extend did not reduce nodes: off %d >= on %d", off.Nodes, on.Nodes)
 	}
 }
 

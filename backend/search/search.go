@@ -205,12 +205,12 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 		if s.multi {
 			values, complete = s.maxN(child.state, depth-1, 1)
 		} else if i == 0 {
-			values[0], complete = s.minimax(child.state, depth-1, alpha, beta, 1)
+			values[0], complete = s.minimax(child.state, depth-1, alpha, beta, 1, 2)
 		} else {
 			// Null-window scout; re-search full window on a fail that lands inside.
-			values[0], complete = s.minimax(child.state, depth-1, alpha, alpha+1, 1)
+			values[0], complete = s.minimax(child.state, depth-1, alpha, alpha+1, 1, 2)
 			if complete && values[0] > alpha && values[0] < beta {
-				values[0], complete = s.minimax(child.state, depth-1, alpha, beta, 1)
+				values[0], complete = s.minimax(child.state, depth-1, alpha, beta, 1, 2)
 			}
 		}
 		if !complete {
@@ -231,7 +231,7 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 	return best, true
 }
 
-func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, bool) {
+func (s *searcher) minimax(state game.State, depth, alpha, beta, ply, ext int) (int, bool) {
 	if !s.running() {
 		return 0, false
 	}
@@ -283,18 +283,25 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 	for i, child := range children {
 		var score int
 		var ok bool
+		// Lever 2: extend a threatened line one ply deeper (same depth, not
+		// depth-1) up to `ext` times per path so the search sees the reply to a
+		// capture of our material without exploding.
+		childDepth, childExt := depth-1, ext
+		if leverThreatExtend && child.threat && ext > 0 {
+			childDepth, childExt = depth, ext-1
+		}
 		if i == 0 {
-			score, ok = s.minimax(child.state, depth-1, alpha, beta, ply+1)
+			score, ok = s.minimax(child.state, childDepth, alpha, beta, ply+1, childExt)
 		} else if maximizing {
 			// Null-window scout: probe whether this sibling beats alpha.
-			score, ok = s.minimax(child.state, depth-1, alpha, alpha+1, ply+1)
+			score, ok = s.minimax(child.state, childDepth, alpha, alpha+1, ply+1, childExt)
 			if ok && score > alpha && score < beta {
-				score, ok = s.minimax(child.state, depth-1, alpha, beta, ply+1)
+				score, ok = s.minimax(child.state, childDepth, alpha, beta, ply+1, childExt)
 			}
 		} else {
-			score, ok = s.minimax(child.state, depth-1, beta-1, beta, ply+1)
+			score, ok = s.minimax(child.state, childDepth, beta-1, beta, ply+1, childExt)
 			if ok && score < beta && score > alpha {
-				score, ok = s.minimax(child.state, depth-1, alpha, beta, ply+1)
+				score, ok = s.minimax(child.state, childDepth, alpha, beta, ply+1, childExt)
 			}
 		}
 		if !ok {
@@ -432,6 +439,7 @@ type child struct {
 	action game.Action
 	state  game.State
 	order  int
+	threat bool
 }
 
 func (s *searcher) orderedChildren(state game.State, ttMove game.Action, hasTT bool) ([]child, bool) {
@@ -467,7 +475,15 @@ func (s *searcher) orderedChildren(state game.State, ttMove game.Action, hasTT b
 		if next.CurrentPlayer() == actor {
 			order += 100
 		}
-		children = append(children, child{action: action, state: next, order: order})
+		// Lever 2: mark edges where an opponent move captures one of our Normal
+		// cells — a direct attack on our material — so minimax can spend a bounded
+		// depth extension on that line.
+		// ponytail: cheap capture-of-our-Normal proxy; if it measures neutral on
+		// the gate the upgrade path is articulation-based detection
+		// (analyzeWithConnectivity), which sees squeezes that don't capture yet.
+		threat := action.Kind == game.Move && actor != s.root &&
+			target.Owner == s.root && target.Kind == game.Normal
+		children = append(children, child{action: action, state: next, order: order, threat: threat})
 		return true
 	})
 	if stopped {
