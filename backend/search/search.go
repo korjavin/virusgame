@@ -17,6 +17,13 @@ const (
 	infScore         = 1 << 60
 )
 
+// TT bound flags for fail-soft alpha-beta stores.
+const (
+	flagExact uint8 = iota
+	flagLower
+	flagUpper
+)
+
 type Result struct {
 	Action          game.Action
 	Score           int
@@ -28,9 +35,11 @@ type Result struct {
 }
 
 type tableEntry struct {
-	depth  int
-	ply    int
-	values [4]int
+	depth      int
+	ply        int
+	flag       uint8
+	bestAction game.Action
+	values     [4]int
 }
 
 type searcher struct {
