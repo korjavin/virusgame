@@ -15,8 +15,17 @@ import (
 // favorable capture that severs >=2 enemy cells for at most one exposed cell.
 // The vs-ai2.47 static-eval sweep could NOT flip (a) without breaking (b) — see
 // the negative-result comment in search/evaluate.go and the Task-4 sweep data in
-// docs/plans/20260717-vs-ai2.47-exchange-ratio.md. A future fix (likely
-// quiescence in search) flips the (a) assertion to "declined".
+// docs/plans/20260717-vs-ai2.47-exchange-ratio.md.
+//
+// vs-ai2.49 NEGATIVE RESULT: adding bounded capture-only quiescence at 1v1
+// minimax leaves (search/search.go) did NOT flip (a). The bot still takes the
+// La=(6,8) capture (exposedAfter=3) across the whole 20k-500k node band, at
+// production wall-clock (depth 5), and with the quiescence cap raised to 16.
+// Quiescence resolves the pending recapture but the static eval still prices the
+// forward-group RECONNECTION above the material it costs — a static-eval
+// property, not a search-horizon one, so a horizon tool cannot fix it. The (a)
+// assertion therefore stays "taken"; quiescence is retained only if it holds
+// strength elsewhere (see plan Tasks 4-5).
 //
 // The negative scenario uses the anchor's real mechanism (see
 // exchange_evidence_test.go): the bot advances INTO contact — here by capturing a
@@ -164,9 +173,10 @@ func scenarioFavorableExchange() game.Snapshot {
 }
 
 // TestExchangeGate asserts the CURRENT eval's behavior: (a) the bot TAKES the
-// negative capture (>=2 own cells left exposed), (b) the bot TAKES the favorable
-// 2-for-1. A future exchange-aware fix flips (a) to the declined behavior
-// (exposedAfter <= 1) and must keep (b) taken.
+// negative capture (>=2 own cells left exposed) — quiescence (vs-ai2.49) did NOT
+// change this; see the negative-result note above — (b) the bot TAKES the
+// favorable 2-for-1. A future exchange-aware fix must flip (a) to the declined
+// behavior (exposedAfter <= 1) while keeping (b) taken.
 //
 //	VS_EXCHANGE=1 go test ./arena -run TestExchangeGate -v
 func TestExchangeGate(t *testing.T) {
