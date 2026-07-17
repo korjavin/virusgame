@@ -19,18 +19,18 @@ import (
 // mode; the hashes pin every reconstruction so a rules or replay change cannot
 // silently move the positions.
 var twelveNoMovesLosses = map[string]string{
-	"323e3f1f-d1a9-4534-973c-5df2fd4302b4": "c156d0f67b213b6f",
-	"86ecfde5-f313-4bec-bd6e-9a2e79f46227": "cd2ad91679cc2449",
-	"6ad8b536-4f29-4c41-9b7e-fa5eb350f545": "c83f29d76d53cfdc",
-	"c3f39595-38f2-46a0-891e-2ca7efce4655": "d3104de26aa02ea0",
-	"b2ef469b-470c-41d5-ac6a-5e3e2ded7776": "2273f285d05550e4",
-	"6eaa8f07-719a-4663-aa11-90f3a9465b3a": "09b1dbe78e935dc6",
-	"4558d2fe-c22f-4940-8012-8f4f43fac728": "1e6523f0e84702fc",
-	"913c33f7-1f0c-41ce-9cee-65d3d9688073": "aa34bed517bde90c",
-	"550cfd27-6c5c-48a2-928c-c36354f9db87": "76f133e032952674",
-	"fd6627c8-3d46-408d-bd48-17f081e1113b": "117269c21ce6f629",
-	"99796a56-2238-4408-851d-4c548d3d3a44": "27bda30be456e244",
-	"6c8513fe-3c07-4471-9ea6-cc3da798bcc9": "c7cca88bdcda50b5",
+	"323e3f1f-d1a9-4534-973c-5df2fd4302b4": "0e4098eeddaa3133",
+	"86ecfde5-f313-4bec-bd6e-9a2e79f46227": "85bfc857ea8ec590",
+	"6ad8b536-4f29-4c41-9b7e-fa5eb350f545": "5f9472288504ec43",
+	"c3f39595-38f2-46a0-891e-2ca7efce4655": "c8580deb139e4606",
+	"b2ef469b-470c-41d5-ac6a-5e3e2ded7776": "9df4b443408592d2",
+	"6eaa8f07-719a-4663-aa11-90f3a9465b3a": "9c0f49f740d92e14",
+	"4558d2fe-c22f-4940-8012-8f4f43fac728": "fd4079756008f119",
+	"913c33f7-1f0c-41ce-9cee-65d3d9688073": "de785595fcd685a1",
+	"550cfd27-6c5c-48a2-928c-c36354f9db87": "b3f60b083b26a10b",
+	"fd6627c8-3d46-408d-bd48-17f081e1113b": "291f48c21aeb8106",
+	"99796a56-2238-4408-851d-4c548d3d3a44": "f0327f116be24d89",
+	"6c8513fe-3c07-4471-9ea6-cc3da798bcc9": "a79474e3e9ee7843",
 }
 
 // TestTwelveNoMovesLossesAreFrozenTerminals reconstructs each of the twelve

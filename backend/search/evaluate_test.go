@@ -226,7 +226,9 @@ func TestEvaluateWorkspaceGoldenStates(t *testing.T) {
 		{"contact-threatened-cut", contact, [4]int{2036, -2036, -500000000, -500000000}},
 		{"neutral", neutral, [4]int{-2639, 2639, -500000000, -500000000}},
 		{"terminal", terminal, [4]int{mateScore, -mateScore, -mateScore, -mateScore}},
-		{"eliminated", eliminated, [4]int{-500000000, -768, 768, -500000000}},
+		// vs-ai2.45 re-pin: eliminated players' cells now stay on the board
+		// (walls/targets), shifting the active players' space and territory terms.
+		{"eliminated", eliminated, [4]int{-500000000, 472, -472, -500000000}},
 	} {
 		workspace := evalWorkspace{}
 		if got := evaluateAllWithWorkspace(fixture.state, &workspace); got != fixture.want {

@@ -68,13 +68,20 @@ func FromSnapshot(snapshot Snapshot) (State, error) {
 		}
 	}
 	for player := Player(1); int(player) <= players; player++ {
-		if state.Active(player) != hasPieces[player-1] {
+		// vs-ai2.45: eliminated players keep their cells on the board, so an
+		// inactive player MAY still own pieces. Only require the forward
+		// direction: an active player must have pieces (and an intact base).
+		if state.Active(player) && !hasPieces[player-1] {
 			return State{}, ErrInvalidAction
 		}
 		cell, _ := state.At(state.bases[player-1])
 		if state.Active(player) && (cell.Kind != Base || cell.Owner != player) {
 			return State{}, ErrInvalidAction
 		}
+	}
+	// The side to move is never an eliminated player.
+	if !state.over && !state.Active(state.current) {
+		return State{}, ErrInvalidAction
 	}
 	if !state.over && state.winner != 0 {
 		return State{}, ErrInvalidAction
