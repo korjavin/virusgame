@@ -2,14 +2,14 @@ package arena
 
 import "virusgame/game"
 
-// CutSeeker is a strangler baseline that drives a thin tendril toward the
+// TendrilCutSeeker is a strangler baseline that drives a thin tendril toward the
 // opponent and prizes cutting the opponent's mobility. Where MobilityAttacker
-// only counts the opponent's immediate replies, CutSeeker weights that cut an
+// only counts the opponent's immediate replies, TendrilCutSeeker weights that cut an
 // order of magnitude harder and, on ties, advances whichever move gets closest
 // to the opponent base — which from an empty board reproduces the width-1
 // diagonal tendril (1,1/2,2/3,3 …) that the frozen production losses were beaten
 // by. It is deterministic: stable board-order ties, no wall clock.
-func CutSeeker(state game.State) (game.Action, bool) {
+func TendrilCutSeeker(state game.State) (game.Action, bool) {
 	actions := state.LegalActions()
 	if len(actions) == 0 {
 		return game.Action{}, false

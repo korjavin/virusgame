@@ -170,7 +170,7 @@ func TestBotOpeningReplyInvariance(t *testing.T) {
 // node-budget (N=1000) balanced-seat 12x12 games starting from the real empty
 // board, with variety injected as a family of seat-1 opening lines. It measures
 // both the live eval (candidate) and the byte-frozen incumbent against the
-// strangler baselines CutSeeker and MobilityAttacker, with vs-ai2.37-style early
+// strangler baselines TendrilCutSeeker and MobilityAttacker, with vs-ai2.37-style early
 // stopping (decisive Wilson interval) wired in. It is a MEASUREMENT — it fails
 // only on illegal/stalled/maxed games, never on strength — because its whole
 // point is to expose how weak the current eval is from empty. The numbers it
@@ -197,7 +197,7 @@ func TestFromEmptyOpeningGate(t *testing.T) {
 		name  string
 		agent TelemetryAgent
 	}{
-		{"CutSeeker", Instrument(CutSeeker)},
+		{"TendrilCutSeeker", Instrument(TendrilCutSeeker)},
 		{"MobilityAttacker", Instrument(MobilityAttacker)},
 	}
 	t.Logf("| engine | opponent | openings | wins/games | win%% | wilson95 | early-stopped |")
