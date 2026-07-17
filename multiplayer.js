@@ -83,24 +83,28 @@ class MultiplayerClient {
         };
 
         this.ws.onmessage = (event) => {
-            try {
-                // Handle multiple JSON messages separated by newlines
-                const messages = event.data.trim().split('\n');
-                messages.forEach(msgStr => {
-                    if (msgStr.trim()) {
-                        const msg = JSON.parse(msgStr);
-                        this.handleMessage(msg);
-                    }
-                });
-            } catch (error) {
-                console.error('Error parsing message:', error, 'Data:', event.data);
-            }
+            // Handle multiple JSON messages separated by newlines. Each message
+            // gets its own try/catch: one bad handler must not drop the rest of
+            // the frame (which may contain the lock-clearing turn_change/game_end).
+            const messages = event.data.trim().split('\n');
+            messages.forEach(msgStr => {
+                if (!msgStr.trim()) return;
+                try {
+                    this.handleMessage(JSON.parse(msgStr));
+                } catch (error) {
+                    console.error('Error handling message:', error, 'Data:', msgStr);
+                }
+            });
         };
 
         this.ws.onclose = () => {
             console.log('Disconnected from multiplayer server');
             this.connected = false;
             this.updateConnectionStatus(false);
+            // A response lost in the disconnect window must not wedge input
+            // forever: the in-flight lock's clearing message will never arrive
+            // on this socket (vs-ai2.50 stuck-game bug).
+            this.clearInFlightAction();
             // Attempt to reconnect after 3 seconds
             setTimeout(() => this.connect(), 3000);
         };
