@@ -517,6 +517,46 @@ func completedDepth(t *testing.T, state game.State, depth int) Result {
 	return result
 }
 
+func TestStrangleCount(t *testing.T) {
+	// 5x5 board; player 1 owns a ring of Normal cells around target (2,2), plus
+	// one Base neighbor. Player 2 owns one neighbor (must not count). One
+	// neighbor stays Empty. Expected root-owned (Normal|Base) neighbors: 6.
+	board := make([][]game.Cell, 5)
+	for r := range board {
+		board[r] = make([]game.Cell, 5)
+	}
+	// 8 neighbors of (2,2): rows 1..3, cols 1..3 except (2,2).
+	board[1][1] = game.Cell{Owner: 1, Kind: game.Base}   // counts
+	board[1][2] = game.Cell{Owner: 1, Kind: game.Normal} // counts
+	board[1][3] = game.Cell{Owner: 1, Kind: game.Normal} // counts
+	board[2][1] = game.Cell{Owner: 1, Kind: game.Normal} // counts
+	board[2][3] = game.Cell{Owner: 1, Kind: game.Fortified} // Fortified: does NOT count
+	board[3][1] = game.Cell{Owner: 1, Kind: game.Normal} // counts
+	board[3][2] = game.Cell{Owner: 2, Kind: game.Normal} // opponent: does NOT count
+	board[3][3] = game.Cell{Owner: 1, Kind: game.Normal} // counts; (empty otherwise)
+	// player 2 base off in a corner so the snapshot validates.
+	board[4][4] = game.Cell{Owner: 2, Kind: game.Base}
+
+	snapshot := game.Snapshot{
+		Rows: 5, Cols: 5, Board: board,
+		Bases:       []game.Pos{{Row: 1, Col: 1}, {Row: 4, Col: 4}},
+		Active:      []bool{true, true},
+		NeutralUsed: []bool{false, false},
+		Current:     1, MovesLeft: 3,
+	}
+	state, err := game.FromSnapshot(snapshot)
+	if err != nil {
+		t.Fatalf("FromSnapshot: %v", err)
+	}
+	if got := strangleCount(state, 1, game.Pos{Row: 2, Col: 2}); got != 6 {
+		t.Fatalf("strangleCount = %d, want 6", got)
+	}
+	// A corner target has only 3 in-bounds neighbors; none owned by root here.
+	if got := strangleCount(state, 1, game.Pos{Row: 0, Col: 0}); got != 1 {
+		t.Fatalf("corner strangleCount = %d, want 1 (only (1,1) base)", got)
+	}
+}
+
 func mustState(t *testing.T, rows, cols, players int) game.State {
 	t.Helper()
 	state, err := game.New(rows, cols, players)

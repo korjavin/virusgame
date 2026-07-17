@@ -24,6 +24,41 @@ const (
 	flagUpper
 )
 
+// vs-ai2.35 strangler-aware search levers. Each is independently toggleable so
+// it can be measured in isolation on the strangler gate and disabled without
+// deleting code. They default true; SetSearchLevers is the test/measurement-only
+// injection point (mirrors the SetEvalParams motif) and is NOT called on the
+// production path.
+var (
+	leverOpponentStrangle = true
+	leverThreatExtend     = true
+	leverRootSafety       = true
+)
+
+// SetSearchLevers overrides the active search levers. Test/measurement-only
+// injection point (arena lever sweep); production never calls it.
+func SetSearchLevers(ordering, extend, rootSafety bool) {
+	leverOpponentStrangle = ordering
+	leverThreatExtend = extend
+	leverRootSafety = rootSafety
+}
+
+// strangleCount returns how many of target's 8 neighbors are owned by root as a
+// standing cell (Normal or Base) — a cheap proxy for how squeezed target is.
+// O(8), no allocation, no eval.
+func strangleCount(state game.State, root game.Player, target game.Pos) int {
+	var nearby [8]game.Pos
+	count := neighbors(state, target, &nearby)
+	strangled := 0
+	for i := 0; i < count; i++ {
+		cell, _ := state.At(nearby[i])
+		if cell.Owner == root && (cell.Kind == game.Normal || cell.Kind == game.Base) {
+			strangled++
+		}
+	}
+	return strangled
+}
+
 type Result struct {
 	Action          game.Action
 	Score           int
