@@ -24,9 +24,8 @@ func openingBookResult(state game.State) (Result, bool) {
 // cell is an articulation point, so a single enemy cut forfeits the whole distal
 // chain (prod losses b543fe02/bbfc5e0c/82d29155). Sweeps proved this shape is
 // genuinely eval-optimal from empty, so no eval term dislodges it at a safe
-// weight — so we place the reply by fiat. The line is the "spear" (two anchors +
-// forward probe along the inward column), the winner of the vs-ai2.47 opening
-// shootout. Deterministic, no data files, no tuning.
+// weight — so we place the reply by fiat. The line is the "wedge" (one base-adjacent
+// anchor, then a width-2 advancing pair) — minimal base halo, vs-ai2.48. Deterministic, no data files, no tuning.
 //
 // Fires only while the current player owns exactly its base plus a prefix of that
 // block (the opening turn, spread over its three per-move Choose calls). Any own
@@ -56,17 +55,17 @@ func openingBookMove(state game.State) (game.Action, bool) {
 	if base.Col*2 < state.Cols()-1 {
 		dc = 1
 	}
-	// The "spear": two robust anchors (no articulation at the base junction) plus
-	// one forward probe — width-2 AND advancing. The vs-ai2.47 shootout measured it
-	// as the only line that decisively beats the base-hugging block (22-8, Wilson95
-	// [55.6%,85.8%]) while halving the block's base halo (2 capturable base-adjacent
-	// cells vs 3 — captured cells become enemy fortified footholds, the owner's
-	// "no gratuitous own-base halo" motif). Order is load-bearing: the probe is only
-	// connected via the diagonal anchor, so cells must be placed in array order.
+	// The "wedge": one base-adjacent cell, then a width-2 advancing pair. In the
+	// vs-ai2.47 shootout it tied the spear head-to-head (16-14, within noise) and
+	// never lost a duel, and it has the MINIMUM possible base halo — exactly 1
+	// capturable base-adjacent cell (connectivity requires at least one; captured
+	// cells become enemy fortified footholds, the owner's "no gratuitous own-base
+	// halo" motif — owner ruled halo 2 still too many, vs-ai2.48). Order is
+	// load-bearing: later cells connect via earlier ones, place in array order.
 	block := [3]game.Pos{
-		{Row: base.Row, Col: base.Col + dc},          // base-adjacent anchor
-		{Row: base.Row + dr, Col: base.Col + dc},     // diagonal anchor
-		{Row: base.Row + 2*dr, Col: base.Col + dc},   // forward probe
+		{Row: base.Row + dr, Col: base.Col + dc},     // base-adjacent diagonal anchor
+		{Row: base.Row + 2*dr, Col: base.Col + dc},   // advancing pair, straight
+		{Row: base.Row + 2*dr, Col: base.Col + 2*dc}, // advancing pair, diagonal
 	}
 	inBlock := func(p game.Pos) bool {
 		return p == block[0] || p == block[1] || p == block[2]
@@ -84,9 +83,9 @@ func openingBookMove(state game.State) (game.Action, bool) {
 		}
 	}
 
-	// Every spear cell must be reachable: already ours from an earlier book move,
-	// or a legal empty placement (the anchors touch the base; the probe touches the
-	// diagonal anchor, which array order guarantees is placed first). A collision —
+	// Every wedge cell must be reachable: already ours from an earlier book move,
+	// or a legal empty placement (the anchor touches the base; each later cell
+	// touches an earlier one, which array order guarantees is placed first). A collision —
 	// out of bounds, or another player's cell/base on a tiny board — voids the
 	// book. The first still-empty cell in array order is the next move.
 	next := game.Pos{Row: -1}
