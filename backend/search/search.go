@@ -197,6 +197,7 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 		return Result{}, ok
 	}
 	children = preservingChildren(children, s.root)
+	children = s.rootSafetyFilter(children)
 	best := Result{Action: children[0].action, Score: -infScore}
 	alpha, beta := -infScore, infScore
 	for i, child := range children {
@@ -418,6 +419,93 @@ func preservingChildren(children []child, actor game.Player) []child {
 		}
 	}
 	return children
+}
+
+// Lever 3: root safety filter. In 1v1, drop root candidates that END our turn
+// and hand the opponent a reply forcing us into a 0-mobility strangulation
+// (catastrophe). Only the K most-strangling opponent replies are inspected, so
+// it stays cheap and runs once per root iteration. It NEVER empties the list:
+// turn-keeping candidates are always kept, and if every turn-ending candidate is
+// catastrophic the single least-bad (highest-floor) one survives.
+func (s *searcher) rootSafetyFilter(children []child) []child {
+	if !leverRootSafety || s.multi {
+		return children
+	}
+	var kept []child
+	var bestFloorChild child
+	bestFloor, haveBest := -1, false
+	for _, c := range children {
+		// A candidate that keeps our turn does not expose us to an opponent
+		// reply this ply, so it is always safe to keep.
+		if c.state.CurrentPlayer() == s.root {
+			kept = append(kept, c)
+			continue
+		}
+		floor := s.rootSafetyFloor(c.state)
+		if floor > 0 {
+			kept = append(kept, c)
+		}
+		if !haveBest || floor > bestFloor {
+			bestFloor, bestFloorChild, haveBest = floor, c, true
+		}
+	}
+	if len(kept) == 0 {
+		if haveBest {
+			return []child{bestFloorChild}
+		}
+		return children
+	}
+	return kept
+}
+
+// rootSafetyFloor returns our worst-case one-ply own-mobility after a turn-ending
+// candidate: the minimum, over the K most-strangling opponent replies, of the
+// post-reply preserving-action count (legal actions that keep s.root active). A
+// floor of 0 means some inspected reply strangles us dead. No opponent reply
+// means no threat, reported as a large non-catastrophic floor.
+func (s *searcher) rootSafetyFloor(childState game.State) int {
+	const (
+		topK    = 3
+		noReply = 1 << 30
+	)
+	replies := childState.LegalActions()
+	if len(replies) == 0 {
+		return noReply
+	}
+	// Rank replies by how much they squeeze our cells; inspect only the top K.
+	sort.SliceStable(replies, func(i, j int) bool {
+		return strangleCount(childState, s.root, replies[i].Target) >
+			strangleCount(childState, s.root, replies[j].Target)
+	})
+	floor := -1
+	for i := 0; i < len(replies) && i < topK; i++ {
+		next, err := childState.Apply(replies[i])
+		if err != nil {
+			continue
+		}
+		mobility := countPreservingActions(next, s.root)
+		if floor < 0 || mobility < floor {
+			floor = mobility
+		}
+	}
+	if floor < 0 {
+		return noReply
+	}
+	return floor
+}
+
+// countPreservingActions counts legal actions on state that keep actor active —
+// the preservingFallback active-after-apply idea, tallied instead of short-
+// circuited.
+func countPreservingActions(state game.State, actor game.Player) int {
+	count := 0
+	for _, action := range state.LegalActions() {
+		next, err := state.Apply(action)
+		if err == nil && next.Active(actor) {
+			count++
+		}
+	}
+	return count
 }
 
 func terminalScore(state game.State, player game.Player, ply int) int {

@@ -762,6 +762,93 @@ func TestLeverThreatExtendOffMatchesNonExtended(t *testing.T) {
 	}
 }
 
+// catastropheChild builds a 3x3 1v1 state with player 2 to move where player 2's
+// board-first reply captures player 1's sole bridge Normal at (1,1). Capturing a
+// Normal fortifies it (uncapturable), stranding player 1's base with no move: a
+// 0-mobility strangulation. Used as the state AFTER a turn-ending root candidate.
+func catastropheChild(t *testing.T) game.State {
+	t.Helper()
+	board := make([][]game.Cell, 3)
+	for r := range board {
+		board[r] = make([]game.Cell, 3)
+	}
+	board[0][0] = game.Cell{Owner: 1, Kind: game.Base}
+	board[0][1] = game.Cell{Owner: 2, Kind: game.Fortified}
+	board[0][2] = game.Cell{Owner: 2, Kind: game.Base}
+	board[1][0] = game.Cell{Owner: 2, Kind: game.Fortified}
+	board[1][1] = game.Cell{Owner: 1, Kind: game.Normal} // sole bridge to open space
+	state, err := game.FromSnapshot(game.Snapshot{
+		Rows: 3, Cols: 3, Board: board,
+		Bases:       []game.Pos{{Row: 0, Col: 0}, {Row: 0, Col: 2}},
+		Active:      []bool{true, true},
+		NeutralUsed: []bool{false, false},
+		Current:     2, MovesLeft: 1,
+	})
+	if err != nil {
+		t.Fatalf("FromSnapshot: %v", err)
+	}
+	return state
+}
+
+func TestLeverRootSafetyDropsCatastrophe(t *testing.T) {
+	defer SetSearchLevers(true, true, true)
+	bad := catastropheChild(t)
+	// Sanity: player 2's capture of (1,1) really strangles player 1 dead.
+	if dead := play(t, bad, move(1, 1)); dead.Active(1) {
+		t.Fatal("fixture is not catastrophic: player 1 survives the capture")
+	}
+
+	safe := strangleFixture(t, 2) // player 2 to move, player 1 stays mobile
+	s := newSearcher(context.Background(), strangleFixture(t, 1))
+	if s.root != 1 || s.multi {
+		t.Fatalf("bad searcher: root=%d multi=%v", s.root, s.multi)
+	}
+	children := []child{
+		{action: move(9, 9), state: bad},
+		{action: move(8, 8), state: safe},
+	}
+
+	SetSearchLevers(true, true, true)
+	kept := s.rootSafetyFilter(children)
+	if _, found := findChild(kept, move(8, 8)); !found {
+		t.Fatal("safe candidate dropped")
+	}
+	if _, found := findChild(kept, move(9, 9)); found {
+		t.Fatalf("catastrophic candidate survived: kept %d children", len(kept))
+	}
+
+	// Determinism: identical repeat call.
+	again := s.rootSafetyFilter(children)
+	if !reflect.DeepEqual(kept, again) {
+		t.Fatal("rootSafetyFilter not deterministic across calls")
+	}
+
+	// Fallback: when EVERY turn-ending candidate is catastrophic, the filter
+	// still returns a non-empty list (the least-bad one).
+	allBad := []child{
+		{action: move(9, 9), state: catastropheChild(t)},
+		{action: move(8, 8), state: catastropheChild(t)},
+	}
+	if kept := s.rootSafetyFilter(allBad); len(kept) == 0 {
+		t.Fatal("filter emptied the candidate list on the all-catastrophic fixture")
+	}
+}
+
+func TestLeverRootSafetyOffKeepsCatastrophe(t *testing.T) {
+	defer SetSearchLevers(true, true, true)
+	children := []child{
+		{action: move(9, 9), state: catastropheChild(t)},
+		{action: move(8, 8), state: strangleFixture(t, 2)},
+	}
+	s := newSearcher(context.Background(), strangleFixture(t, 1))
+
+	SetSearchLevers(true, true, false)
+	kept := s.rootSafetyFilter(children)
+	if !reflect.DeepEqual(kept, children) {
+		t.Fatalf("filter off changed candidates: %d -> %d", len(children), len(kept))
+	}
+}
+
 func mustState(t *testing.T, rows, cols, players int) game.State {
 	t.Helper()
 	state, err := game.New(rows, cols, players)
