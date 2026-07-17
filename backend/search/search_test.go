@@ -557,6 +557,101 @@ func TestStrangleCount(t *testing.T) {
 	}
 }
 
+// strangleFixture builds a 5x5 1v1 board where player 2 is the given `current`
+// mover. Player 1 owns a cluster (base + normals) so that player 2's empty move
+// target (1,1) is surrounded by 5 root cells; no player-2 cell touches a player-1
+// normal, so no capture move exists to dominate the strangle ordering term.
+func strangleFixture(t *testing.T, current game.Player) game.State {
+	t.Helper()
+	board := make([][]game.Cell, 5)
+	for r := range board {
+		board[r] = make([]game.Cell, 5)
+	}
+	board[0][0] = game.Cell{Owner: 1, Kind: game.Base}
+	board[0][1] = game.Cell{Owner: 1, Kind: game.Normal}
+	board[0][2] = game.Cell{Owner: 1, Kind: game.Normal}
+	board[1][2] = game.Cell{Owner: 1, Kind: game.Normal}
+	board[2][2] = game.Cell{Owner: 1, Kind: game.Normal}
+	board[2][0] = game.Cell{Owner: 2, Kind: game.Base}
+	state, err := game.FromSnapshot(game.Snapshot{
+		Rows: 5, Cols: 5, Board: board,
+		Bases:       []game.Pos{{Row: 0, Col: 0}, {Row: 2, Col: 0}},
+		Active:      []bool{true, true},
+		NeutralUsed: []bool{false, false},
+		Current:     current, MovesLeft: 3,
+	})
+	if err != nil {
+		t.Fatalf("FromSnapshot: %v", err)
+	}
+	return state
+}
+
+func findChild(children []child, action game.Action) (child, bool) {
+	for _, c := range children {
+		if c.action == action {
+			return c, true
+		}
+	}
+	return child{}, false
+}
+
+func TestLeverOpponentStrangleOrdersSqueezeFirst(t *testing.T) {
+	defer SetSearchLevers(true, true, true)
+	// Root is player 1 (searcher built from a player-1-to-move state), but the
+	// node being ordered has player 2 to move — an opponent node in 1v1.
+	root := strangleFixture(t, 1)
+	opp := strangleFixture(t, 2)
+	s := newSearcher(context.Background(), root)
+	if s.root != 1 || s.multi {
+		t.Fatalf("bad searcher: root=%d multi=%v", s.root, s.multi)
+	}
+	squeeze := move(1, 1) // empty target surrounded by 5 root cells
+
+	SetSearchLevers(true, true, true)
+	children, ok := s.orderedChildren(opp, game.Action{}, false)
+	if !ok {
+		t.Fatal("ordering canceled")
+	}
+	if children[0].action != squeeze {
+		t.Fatalf("lever on: first child = %+v, want %+v", children[0].action, squeeze)
+	}
+	c, found := findChild(children, squeeze)
+	if !found {
+		t.Fatal("squeeze move missing from children")
+	}
+	if c.order != 100+5*1000 {
+		t.Fatalf("squeeze order = %d, want %d (retain-turn + 5*1000)", c.order, 100+5*1000)
+	}
+
+	// Determinism: identical repeat call.
+	again, _ := s.orderedChildren(opp, game.Action{}, false)
+	if !reflect.DeepEqual(children, again) {
+		t.Fatal("orderedChildren not deterministic across calls")
+	}
+}
+
+func TestLeverOpponentStrangleOffMatchesBaseline(t *testing.T) {
+	defer SetSearchLevers(true, true, true)
+	root := strangleFixture(t, 1)
+	opp := strangleFixture(t, 2)
+	s := newSearcher(context.Background(), root)
+	squeeze := move(1, 1)
+
+	SetSearchLevers(false, true, true)
+	children, ok := s.orderedChildren(opp, game.Action{}, false)
+	if !ok {
+		t.Fatal("ordering canceled")
+	}
+	c, found := findChild(children, squeeze)
+	if !found {
+		t.Fatal("squeeze move missing from children")
+	}
+	// No strangle bonus: only the retain-turn term survives.
+	if c.order != 100 {
+		t.Fatalf("lever off: squeeze order = %d, want 100 (no strangle bonus)", c.order)
+	}
+}
+
 func mustState(t *testing.T, rows, cols, players int) game.State {
 	t.Helper()
 	state, err := game.New(rows, cols, players)

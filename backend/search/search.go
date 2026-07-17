@@ -458,6 +458,12 @@ func (s *searcher) orderedChildren(state game.State, ttMove game.Action, hasTT b
 		if action.Kind == game.Move && target.Kind == game.Normal && target.Owner != actor {
 			order += 10_000
 		}
+		// Lever 1: at a 1v1 opponent-to-move node, sort the reply that squeezes
+		// our cells most to the front (≤8000, below the capture tier, above the
+		// retain-turn tier). Move actions only — PlaceNeutrals has no Target.
+		if leverOpponentStrangle && !s.multi && actor != s.root && action.Kind == game.Move {
+			order += strangleCount(state, s.root, action.Target) * 1000
+		}
 		if next.CurrentPlayer() == actor {
 			order += 100
 		}
