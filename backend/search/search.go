@@ -211,7 +211,23 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 	key := stateHash(state)
 	entry, hit := s.table[key]
 	if hit && entry.depth >= depth && entry.ply == ply {
-		return entry.values[0], true
+		switch entry.flag {
+		case flagExact:
+			return entry.values[0], true
+		case flagLower:
+			if entry.values[0] >= beta {
+				return entry.values[0], true
+			}
+			alpha = max(alpha, entry.values[0])
+		case flagUpper:
+			if entry.values[0] <= alpha {
+				return entry.values[0], true
+			}
+			beta = min(beta, entry.values[0])
+		}
+		if alpha >= beta {
+			return entry.values[0], true
+		}
 	}
 	children, complete := s.orderedChildren(state, entry.bestAction, hit)
 	if !complete {
@@ -222,12 +238,13 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		return evaluateWithWorkspace(state, s.root, &s.eval), true
 	}
 
+	alphaOrig, betaOrig := alpha, beta
 	maximizing := state.CurrentPlayer() == s.root
 	best := infScore
 	if maximizing {
 		best = -infScore
 	}
-	cut := false
+	var bestAction game.Action
 	for _, child := range children {
 		score, ok := s.minimax(child.state, depth-1, alpha, beta, ply+1)
 		if !ok {
@@ -235,29 +252,30 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		}
 		if maximizing {
 			if score > best {
-				best = score
+				best, bestAction = score, child.action
 			}
 			if best > alpha {
 				alpha = best
 			}
 		} else {
 			if score < best {
-				best = score
+				best, bestAction = score, child.action
 			}
 			if best < beta {
 				beta = best
 			}
 		}
 		if alpha >= beta {
-			cut = true
 			break
 		}
 	}
-	if !cut {
-		var values [4]int
-		values[0] = best
-		s.table[key] = tableEntry{depth: depth, ply: ply, values: values}
+	flag := flagExact
+	if best <= alphaOrig {
+		flag = flagUpper
+	} else if best >= betaOrig {
+		flag = flagLower
 	}
+	s.table[key] = tableEntry{depth: depth, ply: ply, flag: flag, bestAction: bestAction, values: [4]int{best}}
 	return best, true
 }
 

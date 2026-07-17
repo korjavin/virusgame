@@ -83,7 +83,7 @@ func TestNeutralActionsAreSearchedAsWholeTurns(t *testing.T) {
 		move(4, 4), move(4, 5), move(5, 4),
 	)
 	s := newSearcher(context.Background(), state)
-	children, ok := s.orderedChildren(state)
+	children, ok := s.orderedChildren(state, game.Action{}, false)
 	if !ok {
 		t.Fatal("ordering canceled")
 	}
