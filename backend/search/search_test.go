@@ -401,6 +401,12 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 // ID loop + fail-soft bound fix. Only the budget-1000 minimax Action moved
 // (equal-Score tie now broken by the persisted TT move); Nodes/Evals/Score
 // unchanged.
+// vs-ai2.42 re-pin: 1v1 PVS (null-window scout + re-search) shifted the
+// depth-2 minimax fixture's Nodes 216->220, Evaluations 199->202 (scouts that
+// fail inside the window trigger a full-window re-search, adding a few nodes at
+// this tiny fixture; the payoff is at deeper searches). Action/Score/Depth
+// unchanged. The budget-1000 minimax result and both maxn fixtures are
+// unchanged (maxn immediate pruning only fires when a winning child exists).
 func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
@@ -419,7 +425,7 @@ func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	}{
 		{
 			name: "minimax", state: two,
-			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 216, Evaluations: 199},
+			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 220, Evaluations: 202},
 			wantNodes: Result{Action: move(3, 4), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
 		},
 		{
