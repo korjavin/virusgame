@@ -8,6 +8,9 @@ import (
 type Config struct {
 	BackendURL string
 	PoolSize   int
+	// NamePrefix is passed to the server so this hoster's bots are named e.g.
+	// "Canary Bot 1234". Empty (default) keeps the plain "Bot 1234" names.
+	NamePrefix string
 }
 
 func LoadConfig() *Config {
@@ -17,6 +20,7 @@ func LoadConfig() *Config {
 	return &Config{
 		BackendURL: backendURL,
 		PoolSize:   poolSize,
+		NamePrefix: getEnv("BOT_NAME_PREFIX", ""),
 	}
 }
 

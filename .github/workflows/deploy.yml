@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - 'canary/**'
   workflow_dispatch:
     inputs:
       deploy:
@@ -71,8 +72,10 @@ jobs:
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           git checkout -B deploy
-          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:.*|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" docker-compose.yml
-          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:.*|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" bot-hoster-compose.yml
+          # Anchor on a literal tag ([alnum] to end of line) so ${CANARY_IMAGE_TAG:-canary}
+          # and other env-templated image tags are left untouched.
+          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:[a-zA-Z0-9]*$|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" docker-compose.yml
+          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:[a-zA-Z0-9]*$|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" bot-hoster-compose.yml
 
           git add docker-compose.yml bot-hoster-compose.yml
           git commit -m "ci: Update image tag to ${{ github.sha }}"
@@ -89,3 +92,38 @@ jobs:
         with:
           webhook_url: ${{ secrets.PORTAINER_REDEPLOY_HOOK_BOT }}
           webhook_secret: "trigger"
+
+  # Canary branches (canary/**) push a branch-tagged image only. It does NOT
+  # touch the deploy branch or the production Portainer hooks; the canary
+  # bot-hoster on the host pulls the moving `canary` tag. Promotion = merge to
+  # main (the normal flow above). Rollback = stop the canary container.
+  canary-build-and-push:
+    if: >-
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/heads/canary/')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push canary Docker image
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:canary
+            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:canary-${{ github.sha }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}

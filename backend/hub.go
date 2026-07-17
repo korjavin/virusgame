@@ -408,7 +408,7 @@ func (h *Hub) handleConnect(client *Client) {
 	// Generate random username
 	var username string
 	if client.IsBot {
-		username = GenerateBotName()
+		username = GenerateBotNameWithPrefix(client.NamePrefix)
 	} else {
 		username = GenerateRandomName()
 	}

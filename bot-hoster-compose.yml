@@ -10,4 +10,20 @@ services:
       - BACKEND_URL=${BACKEND_URL:-ws://virusgame-backend:8080/ws}
       - BOT_POOL_SIZE=${BOT_POOL_SIZE:-10}
 
-
+  # Optional canary bot-hoster: runs a CANDIDATE build's bots alongside the
+  # stable pool, named "Canary Bot NNNN" so they are distinguishable in the
+  # lobby and in last_games telemetry. Opt-in via the "canary" compose profile.
+  # Image tag defaults to the moving "canary" tag pushed by CI for canary/*
+  # branches; pin CANARY_IMAGE_TAG=canary-<sha> to freeze a specific build.
+  # Deploy:  docker compose -f bot-hoster-compose.yml --profile canary up -d --pull always bot-hoster-canary
+  # Stop:    docker compose -f bot-hoster-compose.yml stop bot-hoster-canary
+  bot-hoster-canary:
+    image: ghcr.io/korjavin/virusgame:${CANARY_IMAGE_TAG:-canary}
+    container_name: virusgame-bot-hoster-canary
+    command: ["./bot-hoster"]
+    restart: unless-stopped
+    profiles: ["canary"]
+    environment:
+      - BACKEND_URL=${BACKEND_URL:-ws://virusgame-backend:8080/ws}
+      - BOT_POOL_SIZE=${CANARY_BOT_POOL_SIZE:-3}
+      - BOT_NAME_PREFIX=${CANARY_BOT_NAME_PREFIX:-Canary}

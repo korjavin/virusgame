@@ -15,6 +15,9 @@ func main() {
 	log.Printf("Configuration:")
 	log.Printf("  Backend URL: %s", config.BackendURL)
 	log.Printf("  Pool Size: %d", config.PoolSize)
+	if config.NamePrefix != "" {
+		log.Printf("  Bot Name Prefix: %q", config.NamePrefix)
+	}
 
 	manager := NewBotManager(config)
 
