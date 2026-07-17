@@ -18,9 +18,8 @@ const (
 	maxDepth         = 64
 	infScore         = 1 << 60
 	// quiescePlyCap bounds capture-only extension at leaves; the cap is the
-	// primary cost bound. quiesceDeltaDefault=0 disables delta pruning.
-	quiescePlyCap       = 6
-	quiesceDeltaDefault = 0
+	// primary cost bound.
+	quiescePlyCap = 6
 )
 
 // TT bound flags for fail-soft alpha-beta stores.
@@ -57,7 +56,6 @@ type searcher struct {
 	nodeLimit          uint64
 	eval               evalWorkspace
 	quiesceCap         int
-	quiesceDelta       int
 }
 
 // ChooseNodeBudget performs deterministic iterative deepening without an
@@ -158,9 +156,8 @@ func newSearcher(ctx context.Context, state game.State) *searcher {
 	}
 	return &searcher{
 		ctx: ctx, root: state.CurrentPlayer(), multi: active > 2,
-		table:        make(map[uint64]tableEntry),
-		quiesceCap:   envInt("VS_QUIESCE_CAP", quiescePlyCap),
-		quiesceDelta: envInt("VS_QUIESCE_DELTA", quiesceDeltaDefault),
+		table:      make(map[uint64]tableEntry),
+		quiesceCap: envInt("VS_QUIESCE_CAP", quiescePlyCap),
 	}
 }
 
@@ -356,15 +353,6 @@ func (s *searcher) quiesce(state game.State, alpha, beta, ply, qdepth int) (int,
 	}
 	best := standPat
 	for _, child := range children {
-		if maximizing {
-			if s.quiesceDelta > 0 && standPat+s.quiesceDelta <= alpha {
-				continue
-			}
-		} else {
-			if s.quiesceDelta > 0 && standPat-s.quiesceDelta >= beta {
-				continue
-			}
-		}
 		score, ok := s.quiesce(child.state, alpha, beta, ply+1, qdepth+1)
 		if !ok {
 			return 0, false
