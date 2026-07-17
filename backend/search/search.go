@@ -50,6 +50,9 @@ func ChooseNodeBudget(state game.State, limit uint64) (Result, bool) {
 }
 
 func chooseNodeBudget(state game.State, limit uint64) (Result, bool) {
+	if result, ok := openingBookResult(state); ok {
+		return result, true
+	}
 	fallback, ok := preservingFallback(state)
 	if !ok || limit == 0 {
 		return Result{}, false
@@ -101,6 +104,9 @@ func ChooseDepth(ctx context.Context, state game.State, depth int) (Result, bool
 // Choose returns the best action from the last fully completed iteration. If
 // ctx has no deadline, a production-safe default deadline is applied.
 func Choose(ctx context.Context, state game.State) (Result, bool) {
+	if result, ok := openingBookResult(state); ok {
+		return result, true
+	}
 	fallback, ok := preservingFallback(state)
 	if !ok {
 		return Result{}, false
