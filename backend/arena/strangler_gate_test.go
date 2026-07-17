@@ -15,13 +15,19 @@ import (
 // beat the incumbent head-to-head while still losing to strangulation, and
 // head-to-head self-play cannot expose that failure mode.
 //
-// The gate plays the candidate (live eval) and the byte-frozen incumbent from
-// the SAME seeded openings, balanced seats, each against MobilityAttacker and
-// BaseAttacker, under a deterministic 1000-node search budget (no wall clock),
-// and logs wins/games with Wilson 95% CIs per (engine, opponent) pair. It is a
-// measurement, failing only on illegal/stalled/maxed games — plus one regression
-// floor: the candidate's MobilityAttacker win-rate must exceed the incumbent's
-// (measured vs-ai2.34: candidate ~62-70%, incumbent ~17-25%).
+// The gate plays the candidate (live eval) and the byte-frozen incumbent
+// against MobilityAttacker and BaseAttacker under a deterministic 1000-node
+// search budget (no wall clock), balanced seats, and logs wins/games with
+// Wilson 95% CIs per (engine, opponent) pair. The MobilityAttacker pairs feed
+// the hard regression floor, so both engines play the FULL opening set from
+// the SAME seeded openings — a paired sample; independently early-stopped
+// point estimates (as few as 8 games each) would be far too noisy to compare
+// across engines. The log-only BaseAttacker pairs run with SPRT-style early
+// stopping (threshold 50%): each ends as soon as its Wilson CI clears 50%,
+// else at the opening cap. It is a measurement, failing only on
+// illegal/stalled/maxed games — plus one regression floor: the candidate's
+// MobilityAttacker win-rate must exceed the incumbent's (measured vs-ai2.34:
+// candidate ~62-70%, incumbent ~17-25%).
 //
 // Reproduce (full gate, ~40 openings = 80 games per pair):
 //
@@ -46,20 +52,27 @@ func TestVsStrangler(t *testing.T) {
 	opponents := []struct {
 		name  string
 		agent TelemetryAgent
+		floor bool // floor pairs play the full paired sample; log-only pairs early-stop
 	}{
-		{"MobilityAttacker", Instrument(MobilityAttacker)},
-		{"BaseAttacker", Instrument(BaseAttacker)},
+		{"MobilityAttacker", Instrument(MobilityAttacker), true},
+		{"BaseAttacker", Instrument(BaseAttacker), false},
 	}
 
 	rates := map[string]float64{}
 	for _, engine := range engines {
 		for _, opponent := range opponents {
-			report := playBalancedOpenings(t, engine.name+" vs "+opponent.name, openings, engine.agent, opponent.agent)
+			label := engine.name + " vs " + opponent.name
+			var report Report
+			if opponent.floor {
+				report = playBalancedOpenings(t, label, openings, engine.agent, opponent.agent)
+			} else {
+				report = playSequentialOpenings(t, label, openings, 50, sequentialMinGames, engine.agent, opponent.agent).Report
+			}
 			interval := Wilson95(report.Wins, report.Games)
 			rate := 100 * float64(report.Wins) / float64(report.Games)
 			rates[engine.name+"/"+opponent.name] = rate
-			t.Logf("%s vs %s (nodes=%d): %d/%d=%.1f%% wilson95=[%.1f%%, %.1f%%]",
-				engine.name, opponent.name, nodes, report.Wins, report.Games, rate, interval.Low, interval.High)
+			t.Logf("%s vs %s (nodes=%d): %d/%d=%.1f%% wilson95=[%.1f%%, %.1f%%] games-played=%d/%d",
+				engine.name, opponent.name, nodes, report.Wins, report.Games, rate, interval.Low, interval.High, report.Games, 2*openings)
 		}
 	}
 	if rates["candidate/MobilityAttacker"] <= rates["incumbent/MobilityAttacker"] {

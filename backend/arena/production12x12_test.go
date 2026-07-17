@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"testing"
 
 	"virusgame/game"
@@ -54,12 +53,12 @@ func TestTwelveNoMovesLossesAreFrozenTerminals(t *testing.T) {
 		}
 		replay, states, decodeErr := DecodeReplay(fixture)
 		fixture.Close()
+		if decodeErr != nil {
+			t.Fatalf("%s: decode: %v", path, decodeErr)
+		}
 		want, selected := remaining[replay.SourceID]
 		if !selected {
 			continue
-		}
-		if decodeErr != nil {
-			t.Fatalf("%s: decode: %v", path, decodeErr)
 		}
 		if replay.Rows != 12 || replay.Cols != 12 || replay.Termination != "no_moves" || replay.Winner != 1 {
 			t.Fatalf("%s: not a 12x12 no_moves loss won by seat 1: %+v", replay.SourceID, replay)
@@ -206,14 +205,7 @@ func TestProduction12x12StrengthMeasurement(t *testing.T) {
 	if os.Getenv("VS_AI2_30_MEASURE") != "1" {
 		t.Skip("set VS_AI2_30_MEASURE=1 to run the slow production-budget 12x12 measurement")
 	}
-	seeds := 1
-	if v := os.Getenv("VS_AI2_30_SEEDS"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 1 {
-			t.Fatalf("VS_AI2_30_SEEDS=%q must be a positive integer", v)
-		}
-		seeds = parsed
-	}
+	seeds := envInt(t, "VS_AI2_30_SEEDS", 1)
 	boards := []Board{{Rows: 12, Cols: 12}}
 	opponents := []struct {
 		name    string
