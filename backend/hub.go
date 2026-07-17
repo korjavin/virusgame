@@ -560,6 +560,8 @@ func (h *Hub) handleClientMessage(client *Client, msg *Message) {
 		h.handleResign(client.user, msg)
 	case "leave_game":
 		h.handleLeaveGame(client.user, msg)
+	case "resync":
+		h.handleResync(client.user, msg)
 	case "cleanup_game":
 		if client != nil {
 			return
@@ -1465,6 +1467,36 @@ func (h *Hub) handleLeaveGame(user *User, msg *Message) {
 	log.Printf("Player %s left game %s (player index %d)", user.Username, game.ID, leavingPlayerIndex+1)
 
 	h.broadcastUserList()
+}
+
+// handleResync answers a client's reconnect resync request (multiplayer.js
+// ws.onopen). The client still holds its old gameId locally; after a disconnect
+// window it may be rendering a phantom live turn for a game that already ended.
+// We reuse the existing snapshot-bearing message types so no new client handler
+// is needed:
+//   - game still live  -> game_state + authoritative snapshot (reconciles board,
+//     currentPlayer and the optimistically-decremented movesLeft).
+//   - game gone         -> game_end. Instant-resign-on-disconnect (owner ruling,
+//     vs-ai2.48) means the reconnecting client is the one that dropped and thus
+//     auto-resigned; a game_end with no winner renders as "You lose", the correct
+//     authoritative outcome for it.
+//
+// ponytail: looked up by gameId only, not user identity — the reconnected socket
+// is a brand-new user (new welcome id) and is never a "participant" of its prior
+// game, so an identity check would break the legitimate case. gameIds are
+// unguessable UUIDs and snapshots already go to every game participant, so the
+// disclosure surface is a board state you already needed the UUID to name.
+func (h *Hub) handleResync(user *User, msg *Message) {
+	if user == nil {
+		return
+	}
+	game, exists := h.games[msg.GameID]
+	if !exists {
+		h.sendToUser(user, &Message{Type: "game_end", GameID: msg.GameID})
+		return
+	}
+	snapshot := gameSnapshot(game)
+	h.sendToUser(user, &Message{Type: "game_state", GameID: game.ID, Snapshot: &snapshot})
 }
 
 func (h *Hub) handleCleanupGame(msg *Message) {
