@@ -131,11 +131,14 @@ func ExportGo(t *Trained, pkg string) string {
 			}
 			fmt.Fprintf(&b, "%d", q)
 		}
-		fmt.Fprintf(&b, "}\nvar %sScale = %v\n\n", name, qv.Scale)
+		// Explicit float64 type: %v on a whole-number float (e.g. the scale=1
+		// zero-guard) prints no decimal point and would otherwise infer int,
+		// breaking the loader stub's float arithmetic.
+		fmt.Fprintf(&b, "}\nvar %sScale float64 = %v\n\n", name, qv.Scale)
 	}
 	writeVec("B1", "B1 hidden biases (int8).", qm.B1)
 	writeVec("W2", "W2 output weights (int8).", qm.W2)
-	fmt.Fprintf(&b, "// B2 output bias (scalar, kept float).\nvar B2 = %v\n\n", qm.B2)
+	fmt.Fprintf(&b, "// B2 output bias (scalar, kept float).\nvar B2 float64 = %v\n\n", qm.B2)
 
 	b.WriteString(loaderStub)
 	return b.String()

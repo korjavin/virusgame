@@ -1,8 +1,11 @@
 package main
 
 import (
+	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"math"
 	"strings"
 	"testing"
@@ -80,7 +83,22 @@ func TestInt8RoundTrip(t *testing.T) {
 	}
 }
 
-func TestExportGoParses(t *testing.T) {
+// typeCheck parses and fully type-checks generated Go source. Parsing alone
+// misses e.g. an int-inferred scale var breaking the stub's float arithmetic.
+func typeCheck(t *testing.T, src string) {
+	t.Helper()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "weights_out.go", src, parser.AllErrors)
+	if err != nil {
+		t.Fatalf("exported source does not parse: %v", err)
+	}
+	conf := types.Config{Importer: importer.Default()}
+	if _, err := conf.Check("nnueweights", fset, []*ast.File{f}, nil); err != nil {
+		t.Fatalf("exported source does not type-check: %v", err)
+	}
+}
+
+func TestExportGoCompiles(t *testing.T) {
 	samples := synth(50)
 	trained, err := Train(samples, 8, 5, 0.01, 0.05, 1, nil)
 	if err != nil {
@@ -90,8 +108,14 @@ func TestExportGoParses(t *testing.T) {
 	if !strings.Contains(src, "func Predict(") || !strings.Contains(src, "UNUSED BY PRODUCTION") {
 		t.Fatal("exported source missing loader stub")
 	}
-	fset := token.NewFileSet()
-	if _, err := parser.ParseFile(fset, "weights_out.go", src, parser.AllErrors); err != nil {
-		t.Fatalf("exported source does not parse: %v", err)
+	typeCheck(t, src)
+
+	// Degenerate model (epochs=0): zero-init biases/W2 hit quantVec's scale=1
+	// zero-guard, which prints whole-number scales — the case that must still
+	// emit float64-typed vars and type-check.
+	zero, err := Train(samples, 8, 0, 0.01, 0.05, 1, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	typeCheck(t, ExportGo(zero, "nnueweights"))
 }
