@@ -17,7 +17,11 @@ func NewPosition(state State) Position {
 	p := Position{state: state, moves: state.moveTargetsFrom(state.current, connected), analyzed: true}
 	if p.canPlaceNeutrals() {
 		p.owned = p.scanOwnedNormals()
-		p.searchPairs = p.strategicNeutralPairs(p.owned, connected)
+		// ForEachSearchAction only consults searchPairs above the exact-branch
+		// threshold; below it the pairs are discarded, so skip the Tarjan work.
+		if len(p.moves)+len(p.owned)*(len(p.owned)-1)/2 > 32 {
+			p.searchPairs = p.strategicNeutralPairs(p.owned, connected)
+		}
 	}
 	return p
 }
