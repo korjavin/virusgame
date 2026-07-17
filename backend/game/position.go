@@ -10,6 +10,17 @@ type Position struct {
 	analyzed    bool
 }
 
+// exactBranchLimit is the branch-count ceiling at or below which
+// ForEachSearchAction enumerates every neutral pair exactly. Above it the
+// strategicNeutralPairs (Tarjan) analysis is used instead. Both the
+// compute-cache site (NewPosition) and the consume site (ForEachSearchAction)
+// must agree, so the decision lives in one predicate.
+const exactBranchLimit = 32
+
+func usesStrategicPairs(moves, owned int) bool {
+	return moves+owned*(owned-1)/2 > exactBranchLimit
+}
+
 func NewPosition(state State) Position {
 	// connected(current) is the same pre-move floodfill needed by both the move
 	// frontier and strategicNeutralPairs; compute it once and share it.
@@ -19,7 +30,7 @@ func NewPosition(state State) Position {
 		p.owned = p.scanOwnedNormals()
 		// ForEachSearchAction only consults searchPairs above the exact-branch
 		// threshold; below it the pairs are discarded, so skip the Tarjan work.
-		if len(p.moves)+len(p.owned)*(len(p.owned)-1)/2 > 32 {
+		if usesStrategicPairs(len(p.moves), len(p.owned)) {
 			p.searchPairs = p.strategicNeutralPairs(p.owned, connected)
 		}
 	}
@@ -82,7 +93,7 @@ func (p Position) ForEachSearchAction(yield func(Action) bool) {
 	}
 	// Keep small positions exact. Besides avoiding needless analysis, this
 	// preserves authoritative action order for deterministic tie breaking.
-	if len(p.moveList())+len(owned)*(len(owned)-1)/2 <= 32 {
+	if !usesStrategicPairs(len(p.moveList()), len(owned)) {
 		p.forEachNeutralPair(owned, yield)
 		return
 	}
