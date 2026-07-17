@@ -1,9 +1,6 @@
 package arena
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,13 +43,24 @@ func TestAllCapturedProductionGamesReplayWithDistinctOutcomes(t *testing.T) {
 		"b543fe02-f760-4d2c-9deb-d43b66fd061b": "no_moves",
 		"bbfc5e0c-bf9f-44b3-b6b8-6af57f32e7ce": "no_moves",
 	}
+	// The owner-loss corpus (harvested human wins) is its own data-form allowlist
+	// pinned in TestOwnerLossCorpusAnchors, so it is excluded from this curated map.
+	ownerCorpus, err := LoadOwnerCorpus(OwnerCorpusManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inOwnerCorpus := map[string]bool{}
+	for _, entry := range ownerCorpus {
+		inOwnerCorpus[entry.SourceID] = true
+	}
 	fixtures, err := filepath.Glob("testdata/*.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, path := range fixtures {
 		base := filepath.Base(path)
-		if base == "production-motifs-v1.json" || !strings.HasPrefix(base, "production-") && !strings.Contains(base, "happyotter97-") {
+		if base == "production-motifs-v1.json" || base == filepath.Base(OwnerCorpusManifest) ||
+			!strings.HasPrefix(base, "production-") && !strings.Contains(base, "happyotter97-") {
 			continue
 		}
 		fixture, err := os.Open(path)
@@ -63,6 +71,9 @@ func TestAllCapturedProductionGamesReplayWithDistinctOutcomes(t *testing.T) {
 		fixture.Close()
 		if decodeErr != nil {
 			t.Fatalf("%s: %v", path, decodeErr)
+		}
+		if inOwnerCorpus[replay.SourceID] {
+			continue // pinned by TestOwnerLossCorpusAnchors instead
 		}
 		want, ok := expected[replay.SourceID]
 		if !ok || replay.Termination != want || len(states) != len(replay.Turns) {
@@ -217,10 +228,9 @@ func TestTelemetryIncumbentComparison(t *testing.T) {
 
 func snapshotFingerprint(t *testing.T, state game.State) string {
 	t.Helper()
-	encoded, err := json.Marshal(state.Snapshot())
+	fingerprint, err := StateFingerprint(state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum := sha256.Sum256(encoded)
-	return hex.EncodeToString(sum[:8])
+	return fingerprint
 }

@@ -15,7 +15,8 @@ func TestProductionMotifsAreFrozenAnnotatedReplayPositions(t *testing.T) {
 	}
 	for _, path := range paths {
 		base := filepath.Base(path)
-		if base == "production-motifs-v1.json" || base == "strength-corpus-v1.json" {
+		if base == "production-motifs-v1.json" || base == "strength-corpus-v1.json" ||
+			base == filepath.Base(OwnerCorpusManifest) {
 			continue
 		}
 		fixture, err := os.Open(path)
