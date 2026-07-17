@@ -159,6 +159,57 @@ func TestResumeSkipsExisting(t *testing.T) {
 	}
 }
 
+// TestResumeRepairsTornRecord simulates a killed writer: the shard's final
+// record is left half-written (no trailing newline). Resume must repair it,
+// scan cleanly, and append the missing record on a valid line boundary rather
+// than aborting on the unparseable tail or concatenating onto the garbage.
+func TestResumeRepairsTornRecord(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Generate(tinyConfig(dir)); err != nil {
+		t.Fatal(err)
+	}
+	shard := filepath.Join(dir, "shard-000.jsonl")
+	full := len(readShard(t, shard))
+
+	// Drop the last record's trailing newline and half its bytes.
+	data, err := os.ReadFile(shard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lastNL := -1
+	for i := len(data) - 2; i >= 0; i-- { // -2 skips the file's final newline
+		if data[i] == '\n' {
+			lastNL = i
+			break
+		}
+	}
+	torn := data[:lastNL+1+((len(data)-lastNL-1)/2)] // keep a partial final record
+	if err := os.WriteFile(shard, torn, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := tinyConfig(dir)
+	cfg.Resume = true
+	if _, err := Generate(cfg); err != nil {
+		t.Fatalf("resume after torn record: %v", err)
+	}
+	lines := readShard(t, shard)
+	if len(lines) != full {
+		t.Fatalf("resume did not restore full shard: got %d lines, want %d", len(lines), full)
+	}
+	seen := map[string]bool{}
+	for i, line := range lines {
+		var record Record
+		if err := json.Unmarshal(line, &record); err != nil {
+			t.Fatalf("line %d does not parse after resume: %v", i, err)
+		}
+		if seen[record.Fingerprint] {
+			t.Fatalf("line %d: duplicate fingerprint after resume: %s", i, record.Fingerprint)
+		}
+		seen[record.Fingerprint] = true
+	}
+}
+
 func TestSmokeFixtureParses(t *testing.T) {
 	lines := readShard(t, "testdata/smoke.jsonl")
 	if len(lines) == 0 {

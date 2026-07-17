@@ -34,6 +34,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -59,6 +60,12 @@ import (
 // positions (which the book short-circuits, so NNUE never evaluates them) would
 // pin a false 0 target.
 var errNoDeepScore = errors.New("no deep score for position")
+
+// mateMagnitude is the floor for treating a deep score as a forced-mate result.
+// search's mateScore is 1e9 (unexported); forced wins/losses back up ±(mateScore
+// − ply), while a normal eval stays well under ~1e6. Half of mateScore cleanly
+// separates the two without a fragile exact match.
+const mateMagnitude = 500_000_000
 
 // Outcome is the eventual game result attached to a sampled position. Zero
 // values (Winner 0, Placement 0) are the sentinel for "no completed game".
@@ -94,6 +101,13 @@ func Label(state game.State, budget uint64, source string) (Record, error) {
 	// Score 0) or a budget too small to finish depth 1. Both leave Score at the
 	// placeholder 0; recording that as a label would poison the target.
 	if !ok || result.Depth == 0 {
+		return Record{}, errNoDeepScore
+	}
+	// A forced mate within the node budget backs up ±mateScore(~1e9) − ply, orders
+	// of magnitude above the ~1e3–1e4 of a normal eval. A single such outlier blows
+	// up the trainer's global z-score std and collapses every normal target into a
+	// dead band, so drop mate-magnitude positions (search finds those anyway).
+	if result.Score >= mateMagnitude || result.Score <= -mateMagnitude {
 		return Record{}, errNoDeepScore
 	}
 	feats := arena.NNUEFeatures(state)
@@ -211,6 +225,27 @@ func loadFingerprints(dir string) (map[string]bool, error) {
 		file.Close()
 	}
 	return seen, nil
+}
+
+// truncatePartialRecord drops a torn trailing line from a shard. A killed writer
+// flushes bufio in 4 KB chunks, so an interrupted run can leave the final record
+// half-written (no trailing newline). Left in place it aborts the -resume scan
+// (json.Unmarshal fails) and the next append concatenates onto the garbage.
+// Truncating back to the last newline makes resume both scannable and append-safe;
+// a file that is entirely one partial line becomes empty.
+func truncatePartialRecord(path string) error {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if len(data) == 0 || data[len(data)-1] == '\n' {
+		return nil // clean shard (or empty) — no torn tail
+	}
+	cut := bytes.LastIndexByte(data, '\n') + 1 // 0 when the whole file is one partial line
+	return os.Truncate(path, int64(cut))
 }
 
 // cloneSet returns a shallow copy of s (nil for nil), so each worker mutates its
@@ -474,6 +509,17 @@ func Generate(cfg Config) (int, error) {
 	// private clone so per-shard dedupe writes don't race across workers.
 	var resumeSeen map[string]bool
 	if cfg.Resume {
+		// Repair torn trailing records left by a killed writer before scanning or
+		// counting, so both see clean shards and appends resume on a newline.
+		shards, gerr := filepath.Glob(filepath.Join(cfg.Out, "shard-*.jsonl"))
+		if gerr != nil {
+			return 0, gerr
+		}
+		for _, shard := range shards {
+			if terr := truncatePartialRecord(shard); terr != nil {
+				return 0, terr
+			}
+		}
 		resumeSeen, err = loadFingerprints(cfg.Out)
 		if err != nil {
 			return 0, err
