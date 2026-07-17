@@ -139,7 +139,7 @@ func receiveAction(t *testing.T, bot *Bot) *Message {
 			t.Fatal(err)
 		}
 		return &message
-	case <-time.After(time.Second):
+	case <-time.After(gamesearch.ProductionBudget + 2*time.Second):
 		t.Fatal("timed out waiting for action")
 		return nil
 	}
