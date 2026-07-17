@@ -585,6 +585,10 @@ function endTurn() {
 
 function checkWinCondition() {
     if (gameOver) return;
+    // 3-4 player games: the server's game_end is authoritative (handleGameEnd);
+    // the 2-player piece count below would falsely end the game on the first
+    // mid-game elimination (vs-ai2.46).
+    if (typeof mpClient !== 'undefined' && mpClient.isMultiplayerGame) return;
     const player1Pieces = board.flat().filter(cell => getPlayer(cell) === 1).length;
     const player2Pieces = board.flat().filter(cell => getPlayer(cell) === 2).length;
 
