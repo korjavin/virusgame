@@ -50,6 +50,8 @@ func TestLadderReport(t *testing.T) {
 		{"incumbent vs MobilityBaseAttacker", incumbent, Instrument(MobilityBaseAttacker), false},
 		{"eval vs CutSeeker", eval, Instrument(CutSeeker), true},
 		{"incumbent vs CutSeeker", incumbent, Instrument(CutSeeker), false},
+		{"eval vs OwnerBot", eval, Instrument(OwnerBot), true},
+		{"incumbent vs OwnerBot", incumbent, Instrument(OwnerBot), false},
 		{"eval vs incumbent", eval, incumbent, false},
 	}
 
