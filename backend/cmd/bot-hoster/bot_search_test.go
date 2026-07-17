@@ -14,7 +14,7 @@ import (
 func TestSameTurnSnapshotsDriveOneSequentialActionEach(t *testing.T) {
 	bot := testBot(t, 1)
 	var calls atomic.Int32
-	bot.choose = func(_ context.Context, state game.State) (gamesearch.Result, bool) {
+	bot.choose = func(_ context.Context, state game.State, _ uint64) (gamesearch.Result, bool) {
 		calls.Add(1)
 		return gamesearch.Result{Action: state.LegalActions()[0], Depth: 1}, true
 	}
@@ -43,7 +43,7 @@ func TestNewSnapshotCancelsStaleSearchAndPreventsDoubleSend(t *testing.T) {
 	bot := testBot(t, 1)
 	started := make(chan struct{})
 	release := make(chan struct{})
-	bot.choose = func(ctx context.Context, state game.State) (gamesearch.Result, bool) {
+	bot.choose = func(ctx context.Context, state game.State, _ uint64) (gamesearch.Result, bool) {
 		close(started)
 		<-release
 		return gamesearch.Result{Action: state.LegalActions()[0]}, true
@@ -73,7 +73,7 @@ func TestGameEndAndGameChangeInvalidateSearch(t *testing.T) {
 		bot := testBot(t, 1)
 		started := make(chan struct{})
 		release := make(chan struct{})
-		bot.choose = func(_ context.Context, state game.State) (gamesearch.Result, bool) {
+		bot.choose = func(_ context.Context, state game.State, _ uint64) (gamesearch.Result, bool) {
 			close(started)
 			<-release
 			return gamesearch.Result{Action: state.LegalActions()[0]}, true

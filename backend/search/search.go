@@ -50,15 +50,20 @@ type searcher struct {
 	nodes, evaluations uint64
 	nodeLimit          uint64
 	eval               evalWorkspace
+	// jitterSeed != 0 turns on production tie-break jitter: atDepth collects the
+	// near-equal root moves into rootCandidates instead of the deterministic fast
+	// path. Zero (all deterministic TEST entry points) leaves search bit-identical.
+	jitterSeed     uint64
+	rootCandidates []scoredAction
 }
 
 // ChooseNodeBudget performs deterministic iterative deepening without an
 // implicit wall-clock deadline.
 func ChooseNodeBudget(state game.State, limit uint64) (Result, bool) {
-	return chooseNodeBudget(state, limit)
+	return chooseNodeBudget(state, limit, 0)
 }
 
-func chooseNodeBudget(state game.State, limit uint64) (Result, bool) {
+func chooseNodeBudget(state game.State, limit uint64, seed uint64) (Result, bool) {
 	if result, ok := openingBookResult(state); ok {
 		return result, true
 	}
@@ -69,6 +74,7 @@ func chooseNodeBudget(state game.State, limit uint64) (Result, bool) {
 	best := Result{Action: fallback}
 	s := newSearcher(context.Background(), state)
 	s.nodeLimit = limit
+	s.jitterSeed = seed
 	for depth := 1; depth <= maxDepth && s.nodes < limit; depth++ {
 		result, complete := s.atDepth(state, depth)
 		if !complete {
@@ -80,12 +86,17 @@ func chooseNodeBudget(state game.State, limit uint64) (Result, bool) {
 	best.Nodes, best.Evaluations = s.nodes, s.evaluations
 	best.BudgetExhausted = s.nodes >= limit
 	best.SearchComplete = best.Depth == maxDepth
+	best.Action = pickJittered(s.rootCandidates, seed, best.Action)
 	return best, true
 }
 
 // ChooseDepth performs one deterministic, fully completed action-depth search.
 // It is intended for reproducible benchmarks; production callers should use Choose.
 func ChooseDepth(ctx context.Context, state game.State, depth int) (Result, bool) {
+	return chooseDepth(ctx, state, depth, 0)
+}
+
+func chooseDepth(ctx context.Context, state game.State, depth int, seed uint64) (Result, bool) {
 	if depth < 1 || depth > maxDepth {
 		return Result{}, false
 	}
@@ -97,6 +108,7 @@ func ChooseDepth(ctx context.Context, state game.State, depth int) (Result, bool
 		ctx = context.Background()
 	}
 	s := newSearcher(ctx, state)
+	s.jitterSeed = seed
 	result, complete := s.atDepth(state, depth)
 	if !complete {
 		return Result{Action: fallback}, false
@@ -104,12 +116,17 @@ func ChooseDepth(ctx context.Context, state game.State, depth int) (Result, bool
 	result.Depth = depth
 	result.Nodes = s.nodes
 	result.Evaluations = s.evaluations
+	result.Action = pickJittered(s.rootCandidates, seed, result.Action)
 	return result, true
 }
 
 // Choose returns the best action from the last fully completed iteration. If
 // ctx has no deadline, a production-safe default deadline is applied.
 func Choose(ctx context.Context, state game.State) (Result, bool) {
+	return choose(ctx, state, 0)
+}
+
+func choose(ctx context.Context, state game.State, seed uint64) (Result, bool) {
 	if result, ok := openingBookResult(state); ok {
 		return result, true
 	}
@@ -128,6 +145,7 @@ func Choose(ctx context.Context, state game.State) (Result, bool) {
 
 	best := Result{Action: fallback}
 	s := newSearcher(ctx, state)
+	s.jitterSeed = seed
 	for depth := 1; depth <= maxDepth; depth++ {
 		result, complete := s.atDepth(state, depth)
 		if !complete {
@@ -138,6 +156,7 @@ func Choose(ctx context.Context, state game.State) (Result, bool) {
 		best.Nodes = s.nodes
 		best.Evaluations = s.evaluations
 	}
+	best.Action = pickJittered(s.rootCandidates, seed, best.Action)
 	return best, true
 }
 
@@ -155,6 +174,9 @@ func newSearcher(ctx context.Context, state game.State) *searcher {
 }
 
 func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
+	if s.jitterSeed != 0 {
+		return s.atDepthCollecting(state, depth)
+	}
 	key := stateHash(state)
 	rootEntry, hasRoot := s.table[key]
 	children, ok := s.orderedChildren(state, rootEntry.bestAction, hasRoot)

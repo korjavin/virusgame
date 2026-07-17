@@ -52,6 +52,18 @@ func Tournament(depth int) Agent {
 	}
 }
 
+// TournamentJitter is the fixed-depth agent with production tie-break jitter
+// forced ON at a fixed seed. It exists only for the vs-ai2.39 strength guard:
+// it must play within CI of Tournament(depth) (jitter off), proving jitter never
+// trades away a real edge. Production uses ChooseSeeded (wall clock); CI stays
+// deterministic via Tournament.
+func TournamentJitter(depth int, seed uint64) Agent {
+	return func(state game.State) (game.Action, bool) {
+		result, ok := search.ChooseDepthSeeded(context.Background(), state, depth, seed)
+		return result.Action, ok
+	}
+}
+
 // TelemetryTournament is the fixed-depth CI agent with deterministic search
 // counters. CompletedTurnDepth is a conservative lower bound derived from the
 // root's remaining actions in the current turn.
