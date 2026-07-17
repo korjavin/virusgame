@@ -74,10 +74,10 @@ func TestOpeningBookBlockPerCorner(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[game.Player][]game.Pos{
-		1: {p(0, 1), p(1, 0), p(1, 1)},       // base (0,0)
-		2: {p(10, 10), p(10, 11), p(11, 10)}, // base (11,11) — the sweep-proven reply
-		3: {p(0, 10), p(1, 10), p(1, 11)},    // base (0,11)
-		4: {p(10, 0), p(10, 1), p(11, 1)},    // base (11,0)
+		1: {p(0, 1), p(1, 1), p(2, 1)},       // base (0,0) — spear along col 1
+		2: {p(9, 10), p(10, 10), p(11, 10)},  // base (11,11) — the vs-ai2.47 shootout winner
+		3: {p(0, 10), p(1, 10), p(2, 10)},    // base (0,11)
+		4: {p(9, 1), p(10, 1), p(11, 1)},     // base (11,0)
 	}
 	for player := game.Player(1); player <= 4; player++ {
 		if state.CurrentPlayer() != player {
@@ -99,8 +99,8 @@ func TestOpeningBookBlockPerCorner(t *testing.T) {
 		t.Fatal(err)
 	}
 	oddWant := map[game.Player][]game.Pos{
-		1: {p(0, 1), p(1, 0), p(1, 1)},       // base (0,0)
-		2: {p(11, 11), p(11, 12), p(12, 11)}, // base (12,12)
+		1: {p(0, 1), p(1, 1), p(2, 1)},       // base (0,0)
+		2: {p(10, 11), p(11, 11), p(12, 11)}, // base (12,12)
 	}
 	for player := game.Player(1); player <= 2; player++ {
 		odd = playOneBookTurn(t, odd)
