@@ -3,9 +3,13 @@
 // writes deterministic JSONL shards. Output feeds tools/nnue-train (Stage 2);
 // Stage 3 (int8 inference inside search) is a separate later bead.
 //
-// This file (Task 2) defines the on-disk record, the labeling pipeline, and the
-// per-worker shard writer. The multi-source sampling (self-play / owner-corpus /
-// ladder openings), workers, resume, and determinism harness land in Task 3.
+// Positions come from three sources, interleaved per worker under a seeded
+// xorshift64 stream (Task 3):
+//   - "selfplay": self-contained telemetry-agent games; every intermediate
+//     position is recorded and backfilled with the game's winner/placement.
+//   - "corpus": owner-corpus replays (loaded via -corpus); positions carry the
+//     replay's known winner.
+//   - "ladder": RandomLegalOpening seeds; no completed game, sentinel outcome.
 //
 // JSONL schema — one Record per line:
 //
@@ -23,7 +27,7 @@
 //	budget         uint64        node budget used to produce deepScore
 //	outcome        {winner int, placement int}  eventual game result for the
 //	                             source game; winner 0 / placement 0 = unknown
-//	                             (corpus/ladder positions with no completed game).
+//	                             (ladder positions with no completed game).
 //	                             Placement is the mover's finishing rank (1=won).
 //	source         string        "selfplay" | "corpus" | "ladder"
 package main
@@ -35,6 +39,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
 
 	"virusgame/arena"
 	"virusgame/game"
@@ -63,8 +70,8 @@ type Record struct {
 
 // Label builds a Record for a position: deep score from ChooseNodeBudget,
 // features from arena.NNUEFeatures, dedupe key from arena.StateFingerprint. The
-// outcome is filled by the caller (self-play backfills winner/placement; corpus
-// and ladder positions keep the zero sentinel).
+// outcome is filled by the caller (self-play/corpus backfill winner+placement;
+// ladder positions keep the zero sentinel).
 func Label(state game.State, budget uint64, source string) (Record, error) {
 	fingerprint, err := arena.StateFingerprint(state)
 	if err != nil {
@@ -90,16 +97,30 @@ func Label(state game.State, budget uint64, source string) (Record, error) {
 	}, nil
 }
 
+// placement returns the mover's finishing rank given the game winner: 1 if the
+// mover won, 2 otherwise. Self-play and corpus games here are 2-player.
+func placement(mover, winner int) int {
+	if winner == 0 {
+		return 0
+	}
+	if mover == winner {
+		return 1
+	}
+	return 2
+}
+
 // ShardWriter appends JSONL records to a per-worker shard file. Append-safe
-// (O_APPEND) so -resume in Task 3 can continue an existing shard.
+// (O_APPEND) so -resume can continue an existing shard.
 type ShardWriter struct {
 	file *os.File
 	buf  *bufio.Writer
-	seen map[string]bool // dedupe by fingerprint within this writer
+	seen map[string]bool // dedupe by fingerprint
 }
 
 // NewShardWriter opens (creating/appending) shard-NNN.jsonl in dir for worker.
-func NewShardWriter(dir string, worker int) (*ShardWriter, error) {
+// seen pre-seeds the dedupe set (used by -resume to skip already-written
+// fingerprints); pass nil for a fresh writer.
+func NewShardWriter(dir string, worker int, seen map[string]bool) (*ShardWriter, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -108,11 +129,14 @@ func NewShardWriter(dir string, worker int) (*ShardWriter, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ShardWriter{file: file, buf: bufio.NewWriter(file), seen: map[string]bool{}}, nil
+	if seen == nil {
+		seen = map[string]bool{}
+	}
+	return &ShardWriter{file: file, buf: bufio.NewWriter(file), seen: seen}, nil
 }
 
-// Write emits one record as a JSON line, skipping fingerprints already written
-// by this writer. Returns true if the record was written.
+// Write emits one record as a JSON line, skipping fingerprints already written.
+// Returns true if the record was written.
 func (w *ShardWriter) Write(record Record) (bool, error) {
 	if w.seen[record.Fingerprint] {
 		return false, nil
@@ -137,54 +161,368 @@ func (w *ShardWriter) Close() error {
 	return w.file.Close()
 }
 
+// loadFingerprints scans every shard-*.jsonl in dir and returns the set of
+// fingerprints already recorded, so -resume skips them.
+// ponytail: O(total-records) startup scan + in-memory set; fine for the
+// smoke/local runs. A production 1-5M run would want a compacted index file.
+func loadFingerprints(dir string) (map[string]bool, error) {
+	seen := map[string]bool{}
+	shards, err := filepath.Glob(filepath.Join(dir, "shard-*.jsonl"))
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range shards {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		scanner := bufio.NewScanner(file)
+		scanner.Buffer(make([]byte, 0, 1<<20), 1<<24)
+		for scanner.Scan() {
+			var record Record
+			if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+				file.Close()
+				return nil, fmt.Errorf("%s: %w", path, err)
+			}
+			seen[record.Fingerprint] = true
+		}
+		if err := scanner.Err(); err != nil {
+			file.Close()
+			return nil, err
+		}
+		file.Close()
+	}
+	return seen, nil
+}
+
+// countLines returns the number of JSONL records in path, or 0 if it is absent.
+func countLines(path string) (int, error) {
+	file, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	defer file.Close()
+	count := 0
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 1<<20), 1<<24)
+	for scanner.Scan() {
+		count++
+	}
+	return count, scanner.Err()
+}
+
+// Config parameterizes a generation run so tests can drive it in-process.
+type Config struct {
+	Out        string
+	Workers    int
+	Positions  int
+	Budget     uint64
+	Seed       uint64
+	Boards     []arena.Board
+	CorpusPath string // owner-corpus manifest; "" disables the corpus source
+	Resume     bool
+}
+
+func next(rng *uint64) uint64 {
+	*rng ^= *rng << 13
+	*rng ^= *rng >> 7
+	*rng ^= *rng << 17
+	return *rng
+}
+
+// roster is the fixed set of deterministic self-play agents. Every entry is a
+// TelemetryAgent (per the plan); we only need the chosen action.
+func roster() []arena.TelemetryAgent {
+	return []arena.TelemetryAgent{
+		arena.TelemetryNodeBudget(2000, false),
+		arena.TelemetryNodeBudget(8000, false),
+		arena.TelemetryTournament(2),
+		arena.Instrument(arena.Greedy),
+		arena.Instrument(arena.BaseAttacker),
+		arena.Instrument(arena.MobilityAttacker),
+	}
+}
+
+func plain(agent arena.TelemetryAgent) arena.Agent {
+	return func(state game.State) (game.Action, bool) {
+		action, _, ok := agent(state)
+		return action, ok
+	}
+}
+
+// corpusPosition carries a replay position plus its game's known winner.
+type corpusPosition struct {
+	state  game.State
+	winner int
+}
+
+// loadCorpus reads the owner-corpus manifest and reconstructs every within-turn
+// position from each replay fixture, deterministically ordered.
+func loadCorpus(manifest string) ([]corpusPosition, error) {
+	entries, err := arena.LoadOwnerCorpus(manifest)
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Dir(manifest)
+	var positions []corpusPosition
+	for _, entry := range entries {
+		fixture, err := os.Open(filepath.Join(dir, entry.FixtureName()))
+		if err != nil {
+			return nil, err
+		}
+		replay, _, err := arena.DecodeReplay(fixture)
+		fixture.Close()
+		if err != nil {
+			return nil, err
+		}
+		points, err := arena.ReplayPositions(replay)
+		if err != nil {
+			return nil, err
+		}
+		// Deterministic order: sort points by (turn, afterActions).
+		keys := make([]arena.ReplayPoint, 0, len(points))
+		for point := range points {
+			keys = append(keys, point)
+		}
+		sortPoints(keys)
+		for _, point := range keys {
+			positions = append(positions, corpusPosition{state: points[point], winner: int(replay.Winner)})
+		}
+	}
+	return positions, nil
+}
+
+func sortPoints(points []arena.ReplayPoint) {
+	for i := 1; i < len(points); i++ {
+		for j := i; j > 0; j-- {
+			a, b := points[j-1], points[j]
+			if a.Turn < b.Turn || (a.Turn == b.Turn && a.AfterActions <= b.AfterActions) {
+				break
+			}
+			points[j-1], points[j] = points[j], points[j-1]
+		}
+	}
+}
+
+// selfPlay plays one 2-player game between agentA (seat 1) and agentB (seat 2),
+// recording every intermediate position and backfilling the game outcome.
+func selfPlay(board arena.Board, budget uint64, agentA, agentB arena.Agent) []Record {
+	state, err := game.New(board.Rows, board.Cols, 2)
+	if err != nil {
+		return nil
+	}
+	var records []Record
+	maxPlies := board.Rows * board.Cols * 4
+	for plies := 0; !state.GameOver() && plies < maxPlies; plies++ {
+		record, err := Label(state, budget, "selfplay")
+		if err == nil {
+			records = append(records, record)
+		}
+		agent := agentA
+		if state.CurrentPlayer() == 2 {
+			agent = agentB
+		}
+		action, ok := agent(state)
+		if !ok {
+			break
+		}
+		next, err := state.Apply(action)
+		if err != nil {
+			break
+		}
+		state = next
+	}
+	winner := int(state.Winner())
+	for i := range records {
+		records[i].Outcome = Outcome{Winner: winner, Placement: placement(records[i].CurrentPlayer, winner)}
+	}
+	return records
+}
+
+// generateWorker samples up to target positions into worker's shard.
+func generateWorker(cfg Config, worker, target int, corpus []corpusPosition) (int, error) {
+	var seen map[string]bool
+	existing := 0 // records already in this worker's shard (resume counts them toward target)
+	if cfg.Resume {
+		loaded, err := loadFingerprints(cfg.Out)
+		if err != nil {
+			return 0, err
+		}
+		seen = loaded
+		existing, err = countLines(filepath.Join(cfg.Out, fmt.Sprintf("shard-%03d.jsonl", worker)))
+		if err != nil {
+			return 0, err
+		}
+	}
+	writer, err := NewShardWriter(cfg.Out, worker, seen)
+	if err != nil {
+		return 0, err
+	}
+	defer writer.Close()
+
+	agents := roster()
+	rng := (cfg.Seed + uint64(worker)*0x9e3779b97f4a7c15) | 1
+	written := 0
+	emit := func(record Record) error {
+		if existing+written >= target {
+			return nil
+		}
+		ok, err := writer.Write(record)
+		if err != nil {
+			return err
+		}
+		if ok {
+			written++
+		}
+		return nil
+	}
+
+	for attempt := 0; existing+written < target && attempt < target*40; attempt++ {
+		board := cfg.Boards[int(next(&rng)%uint64(len(cfg.Boards)))]
+		switch next(&rng) % 3 {
+		case 0: // self-play
+			agentA := plain(agents[int(next(&rng)%uint64(len(agents)))])
+			agentB := plain(agents[int(next(&rng)%uint64(len(agents)))])
+			for _, record := range selfPlay(board, cfg.Budget, agentA, agentB) {
+				if err := emit(record); err != nil {
+					return written, err
+				}
+			}
+		case 1: // ladder opening
+			snapshot, err := arena.RandomLegalOpening(board.Rows, board.Cols, next(&rng))
+			if err != nil {
+				continue
+			}
+			state, err := game.FromSnapshot(snapshot)
+			if err != nil {
+				continue
+			}
+			record, err := Label(state, cfg.Budget, "ladder")
+			if err != nil {
+				return written, err
+			}
+			if err := emit(record); err != nil {
+				return written, err
+			}
+		case 2: // owner-corpus replay position
+			if len(corpus) == 0 {
+				continue
+			}
+			position := corpus[int(next(&rng)%uint64(len(corpus)))]
+			record, err := Label(position.state, cfg.Budget, "corpus")
+			if err != nil {
+				return written, err
+			}
+			record.Outcome = Outcome{Winner: position.winner, Placement: placement(record.CurrentPlayer, position.winner)}
+			if err := emit(record); err != nil {
+				return written, err
+			}
+		}
+	}
+	return written, nil
+}
+
+// Generate runs cfg across cfg.Workers shards and returns the total positions
+// written. Each worker is deterministic in (seed, worker index), so two runs
+// with the same config produce byte-identical shards.
+func Generate(cfg Config) (int, error) {
+	if len(cfg.Boards) == 0 {
+		cfg.Boards = []arena.Board{{Rows: 8, Cols: 8}}
+	}
+	if cfg.Workers < 1 {
+		cfg.Workers = 1
+	}
+	corpus, err := loadCorpus(cfg.CorpusPath)
+	if err != nil {
+		return 0, err
+	}
+	var wg sync.WaitGroup
+	totals := make([]int, cfg.Workers)
+	errs := make([]error, cfg.Workers)
+	for worker := 0; worker < cfg.Workers; worker++ {
+		target := cfg.Positions / cfg.Workers
+		if worker < cfg.Positions%cfg.Workers {
+			target++
+		}
+		wg.Add(1)
+		go func(worker, target int) {
+			defer wg.Done()
+			totals[worker], errs[worker] = generateWorker(cfg, worker, target, corpus)
+		}(worker, target)
+	}
+	wg.Wait()
+	total := 0
+	for worker := 0; worker < cfg.Workers; worker++ {
+		if errs[worker] != nil {
+			return total, errs[worker]
+		}
+		total += totals[worker]
+	}
+	return total, nil
+}
+
+// parseBoards parses "8x8,12x12" into arena.Board specs.
+func parseBoards(spec string) ([]arena.Board, error) {
+	var boards []arena.Board
+	for _, part := range strings.Split(spec, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		dims := strings.SplitN(part, "x", 2)
+		if len(dims) != 2 {
+			return nil, fmt.Errorf("bad board %q (want RxC)", part)
+		}
+		rows, err := strconv.Atoi(dims[0])
+		if err != nil {
+			return nil, fmt.Errorf("bad board %q: %w", part, err)
+		}
+		cols, err := strconv.Atoi(dims[1])
+		if err != nil {
+			return nil, fmt.Errorf("bad board %q: %w", part, err)
+		}
+		boards = append(boards, arena.Board{Rows: rows, Cols: cols})
+	}
+	if len(boards) == 0 {
+		return nil, fmt.Errorf("no boards parsed from %q", spec)
+	}
+	return boards, nil
+}
+
 func main() {
 	out := flag.String("out", "", "output shard directory (required)")
-	worker := flag.Int("worker", 0, "worker id (shard file suffix)")
-	budget := flag.Uint64("budget", 20000, "node budget for deep-score labels")
-	positions := flag.Int("positions", 300, "target positions to sample")
+	workers := flag.Int("workers", 1, "number of parallel shard writers")
+	positions := flag.Int("positions", 5000, "target total positions to sample")
+	budget := flag.Uint64("budget", 2000, "node budget for deep-score labels")
 	seed := flag.Uint64("seed", 1, "base seed for deterministic sampling")
-	rows := flag.Int("rows", 8, "board rows")
-	cols := flag.Int("cols", 8, "board cols")
+	boards := flag.String("boards", "8x8", "comma-separated board sizes, e.g. 8x8,12x12")
+	corpus := flag.String("corpus", "", "owner-corpus manifest path (enables the corpus source)")
+	resume := flag.Bool("resume", false, "scan existing shards and skip fingerprints already present")
 	flag.Parse()
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "-out is required")
 		os.Exit(2)
 	}
-
-	writer, err := NewShardWriter(*out, *worker)
+	parsedBoards, err := parseBoards(*boards)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	total, err := Generate(Config{
+		Out:        *out,
+		Workers:    *workers,
+		Positions:  *positions,
+		Budget:     *budget,
+		Seed:       *seed,
+		Boards:     parsedBoards,
+		CorpusPath: *corpus,
+		Resume:     *resume,
+	})
 	if err != nil {
 		panic(err)
 	}
-	defer writer.Close()
-
-	// ponytail: Task 2 ships a single ladder-opening source so the core pipeline
-	// is exercised end to end; self-play + owner-corpus sources, workers, and
-	// -resume land in Task 3. Deterministic seed = base seed + worker index.
-	rng := *seed + uint64(*worker)
-	written := 0
-	for attempt := 0; written < *positions && attempt < *positions*4; attempt++ {
-		rng ^= rng << 13
-		rng ^= rng >> 7
-		rng ^= rng << 17
-		snapshot, err := arena.RandomLegalOpening(*rows, *cols, rng)
-		if err != nil {
-			continue
-		}
-		state, err := game.FromSnapshot(snapshot)
-		if err != nil {
-			continue
-		}
-		record, err := Label(state, *budget, "ladder")
-		if err != nil {
-			panic(err)
-		}
-		ok, err := writer.Write(record)
-		if err != nil {
-			panic(err)
-		}
-		if ok {
-			written++
-		}
-	}
-	fmt.Printf("wrote %d positions to shard-%03d.jsonl\n", written, *worker)
+	fmt.Printf("wrote %d positions across %d shard(s) in %s\n", total, *workers, *out)
 }

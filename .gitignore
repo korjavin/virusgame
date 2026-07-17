@@ -1,5 +1,6 @@
 # Compiled binaries
 backend/virusgame
+backend/nnuegen
 backend/bot-hoster
 *.exe
 *.out
