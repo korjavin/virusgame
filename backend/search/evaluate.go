@@ -291,6 +291,46 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		}
 	}
 
+	// vs-ai2.44 lever 2: base-proximity aggression. Reward own connected cells
+	// that hug the leading opponent's base corner (Chebyshev distance within
+	// baseProxRadius), pressuring the leader's escape structure. Gated behind
+	// active > 2 && baseProxGain != 0, so 1v1 and the default path are untouched.
+	if leversLive && baseProxGain != 0 {
+		cols := state.Cols()
+		for player := game.Player(1); player <= 4; player++ {
+			if !state.Active(player) {
+				continue
+			}
+			leadOpp, best := game.Player(0), -1
+			for opponent := game.Player(1); opponent <= 4; opponent++ {
+				if opponent == player || !state.Active(opponent) {
+					continue
+				}
+				if stand[opponent-1] > best {
+					best, leadOpp = stand[opponent-1], opponent
+				}
+			}
+			b := basePos(state, leadOpp)
+			prox := 0
+			for index, on := range metrics[player-1].connectedCells {
+				if !on {
+					continue
+				}
+				dr, dc := index/cols-b.Row, index%cols-b.Col
+				if dr < 0 {
+					dr = -dr
+				}
+				if dc < 0 {
+					dc = -dc
+				}
+				if d := max(dr, dc); d <= baseProxRadius {
+					prox += baseProxRadius + 1 - d
+				}
+			}
+			raw[player-1] += normalized(prox, size, baseProxGain)
+		}
+	}
+
 	for player := game.Player(1); player <= 4; player++ {
 		if !state.Active(player) {
 			utility[player-1] = raw[player-1]

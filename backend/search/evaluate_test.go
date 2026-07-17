@@ -569,6 +569,114 @@ func TestLeaderGainDoesNotAffectTwoPlayer(t *testing.T) {
 	}
 }
 
+// proxTerms recomputes, for every active player, the vs-ai2.44 lever-2
+// base-proximity contribution to raw under the CURRENT baseProxGain/radius:
+// normalized(prox, size, baseProxGain) where prox sums (radius+1-d) over own
+// connected cells within Chebyshev distance d<=radius of the leading opponent's
+// base. It mirrors production cell-for-cell so the two agree.
+func proxTerms(t *testing.T, state game.State) [4]int {
+	t.Helper()
+	size := state.Rows() * state.Cols()
+	cols := state.Cols()
+	w := &evalWorkspace{}
+	w.ensure(size)
+	cells := snapshotCellsInto(state, w.cells)
+	connected := allConnectedInto(state, cells, w)
+	space := spaceRace(state, cells, connected, w)
+	var m [4]playerMetrics
+	var stand [4]int
+	for p := game.Player(1); p <= 4; p++ {
+		if !state.Active(p) {
+			continue
+		}
+		idx := p - 1
+		m[idx] = analyzeWithConnectivity(state, p, cells, connected, &w.scratch, w.articulation[idx], w.cutLoss[idx])
+		stand[idx] = space[idx] + m[idx].normal + m[idx].fortified
+	}
+	var terms [4]int
+	for p := game.Player(1); p <= 4; p++ {
+		if !state.Active(p) {
+			continue
+		}
+		leadOpp, best := game.Player(0), -1
+		for opp := game.Player(1); opp <= 4; opp++ {
+			if opp == p || !state.Active(opp) {
+				continue
+			}
+			if stand[opp-1] > best {
+				best, leadOpp = stand[opp-1], opp
+			}
+		}
+		b := basePos(state, leadOpp)
+		prox := 0
+		for i, on := range m[p-1].connectedCells {
+			if !on {
+				continue
+			}
+			dr, dc := i/cols-b.Row, i%cols-b.Col
+			if d := max(absInt(dr), absInt(dc)); d <= baseProxRadius {
+				prox += baseProxRadius + 1 - d
+			}
+		}
+		terms[p-1] = normalized(prox, size, baseProxGain)
+	}
+	return terms
+}
+
+// TestBaseProxGainRaisesUtilityWhenHuggingLeaderBase pins lever 2's direction:
+// when player 1's own connected cells hug the leading opponent's base (its prox
+// term dominates), enabling baseProxGain raises utility[0]; when no active
+// player's cells sit near a leader base (all prox terms zero), the eval is
+// unchanged.
+func TestBaseProxGainRaisesUtilityWhenHuggingLeaderBase(t *testing.T) {
+	restore := baseProxGain
+	defer func() { baseProxGain = restore }()
+	var sawNear, sawFar bool
+	for seed := int64(0); seed < 800 && !(sawNear && sawFar); seed++ {
+		state := randomReachableState(t, 9, 9, 3, seed)
+		if activeCount(state) != 3 {
+			continue
+		}
+		baseProxGain = 0
+		base := evaluateAll(state)
+		baseProxGain = 60
+		terms := proxTerms(t, state)
+		got := evaluateAll(state)
+		baseProxGain = restore
+		switch {
+		case terms[0] == 0 && terms[1] == 0 && terms[2] == 0:
+			if got != base {
+				t.Fatalf("seed %d: eval changed with all prox terms zero %v -> %v", seed, base, got)
+			}
+			sawFar = true
+		case terms[0]-(terms[1]+terms[2])/2 >= 2:
+			if got[0] <= base[0] {
+				t.Fatalf("seed %d: hugging leader base did not raise utility %d -> %d", seed, base[0], got[0])
+			}
+			sawNear = true
+		}
+	}
+	if !sawNear || !sawFar {
+		t.Fatalf("no fixtures found: near=%v far=%v", sawNear, sawFar)
+	}
+}
+
+// TestBaseProxGainDoesNotAffectTwoPlayer pins the active<=2 gate: any
+// baseProxGain leaves a 2-player eval byte-identical to the default.
+func TestBaseProxGainDoesNotAffectTwoPlayer(t *testing.T) {
+	restore := baseProxGain
+	defer func() { baseProxGain = restore }()
+	for _, seed := range []int64{1, 4, 6} {
+		state := randomReachableState(t, 12, 20, 2, seed)
+		baseProxGain = 0
+		want := evaluateAll(state)
+		baseProxGain = 100000
+		if got := evaluateAll(state); got != want {
+			t.Fatalf("seed %d: 2p eval changed with baseProxGain %v -> %v", seed, want, got)
+		}
+	}
+}
+
 func absInt(value int) int {
 	if value < 0 {
 		return -value
