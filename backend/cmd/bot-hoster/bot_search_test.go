@@ -119,6 +119,7 @@ func testBot(t *testing.T, player int) *Bot {
 		t.Fatal(err)
 	}
 	bot := NewBot("", nil)
+	bot.ponder = false
 	bot.State = BotInGame
 	bot.CurrentGame = "g"
 	bot.YourPlayer = player

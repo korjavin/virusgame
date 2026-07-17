@@ -70,6 +70,14 @@ type Bot struct {
 	searchVersion   uint64
 	searchCancel    context.CancelFunc
 	choose          func(context.Context, game.State) (gamesearch.Result, bool)
+
+	// Pondering: a persistent-TT session warms the real search from work done on
+	// the opponent's turn. searchMu serializes every search invocation (ponder or
+	// real) so only one goroutine ever writes the shared session table.
+	session  *gamesearch.Session
+	searchMu sync.Mutex
+	ponder   bool
+	ponderFn func(context.Context, game.State) (gamesearch.Result, bool)
 }
 
 type outboundMessage struct {
@@ -156,7 +164,8 @@ func NewBot(backendURL string, manager *BotManager) *Bot {
 		State:      BotDisconnected,
 		send:       make(chan outboundMessage, 256),
 		done:       make(chan bool),
-		choose:     gamesearch.Choose,
+		session:    gamesearch.NewSession(),
+		ponder:     true,
 	}
 }
 
@@ -456,6 +465,7 @@ func (b *Bot) startGame(gameID string, player int, position game.State, players 
 	b.GamePlayers = append([]GamePlayerInfo(nil), players...)
 	b.positionVersion++
 	b.searchVersion = 0
+	b.session = gamesearch.NewSession() // fresh table per game (memory: clear per game)
 	b.mu.Unlock()
 	b.startSearch()
 }
@@ -544,20 +554,45 @@ func (b *Bot) updatePosition(msg *Message) error {
 
 func (b *Bot) startSearch() {
 	b.mu.Lock()
-	if b.State != BotInGame || int(b.Position.CurrentPlayer()) != b.YourPlayer || b.Position.MovesLeft() == 0 || b.Position.GameOver() || b.searchVersion == b.positionVersion {
+	if b.State != BotInGame || b.Position.GameOver() || b.Position.MovesLeft() == 0 {
+		b.mu.Unlock()
+		return
+	}
+	ponderMode := int(b.Position.CurrentPlayer()) != b.YourPlayer
+	if ponderMode && !b.ponder {
+		b.mu.Unlock()
+		return
+	}
+	if b.searchVersion == b.positionVersion {
 		b.mu.Unlock()
 		return
 	}
 	b.cancelSearchLocked()
-	ctx, cancel := context.WithTimeout(context.Background(), gamesearch.ProductionBudget)
+	var ctx context.Context
+	var cancel context.CancelFunc
+	if ponderMode {
+		// Open ctx: the ponder runs until the next authoritative snapshot cancels it.
+		ctx, cancel = context.WithCancel(context.Background())
+	} else {
+		ctx, cancel = context.WithTimeout(context.Background(), gamesearch.ProductionBudget)
+	}
 	b.searchCancel = cancel
 	b.searchVersion = b.positionVersion
 	version := b.positionVersion
 	gameID := b.CurrentGame
 	position := b.Position
-	choose := b.choose
+	var fn func(context.Context, game.State) (gamesearch.Result, bool)
+	if ponderMode {
+		if fn = b.ponderFn; fn == nil {
+			fn = b.session.Ponder
+		}
+	} else {
+		if fn = b.choose; fn == nil {
+			fn = b.session.Choose
+		}
+	}
 	b.mu.Unlock()
-	go b.calculateAndQueueAction(ctx, choose, position, gameID, version)
+	go b.calculateAndQueueAction(ctx, fn, position, gameID, version, ponderMode)
 }
 
 func (b *Bot) cancelSearchLocked() {
@@ -567,9 +602,21 @@ func (b *Bot) cancelSearchLocked() {
 	}
 }
 
-func (b *Bot) calculateAndQueueAction(ctx context.Context, choose func(context.Context, game.State) (gamesearch.Result, bool), position game.State, gameID string, version uint64) {
-	result, ok := choose(ctx, position)
+func (b *Bot) calculateAndQueueAction(ctx context.Context, fn func(context.Context, game.State) (gamesearch.Result, bool), position game.State, gameID string, version uint64, ponder bool) {
+	// searchMu makes ponder and real searches strictly sequential, so only one
+	// goroutine ever writes the shared session table (single-writer TT).
+	b.searchMu.Lock()
+	defer b.searchMu.Unlock()
+	if ctx.Err() != nil {
+		// Superseded by a newer snapshot before we owned the table.
+		return
+	}
+	result, ok := fn(ctx, position)
 	if !ok {
+		return
+	}
+	if ponder {
+		// Ponder only warms the table; it never sends a move.
 		return
 	}
 	message := actionMessage(gameID, result.Action)
