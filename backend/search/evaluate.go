@@ -1,8 +1,31 @@
 package search
 
-import "virusgame/game"
+import (
+	"os"
+	"strconv"
+
+	"virusgame/game"
+)
 
 const mateScore = 1_000_000_000
+
+// vs-ai2.44 sweep levers: env-seeded, default-off eval knobs the offline
+// multiplayer-ladder sweep tunes. All are gated behind active > 2, so 1v1 and
+// any 2-survivor position is byte-identical regardless of value. Replaced by
+// baked constants (and these hooks deleted) in a follow-up commit.
+var (
+	leaderGain     = envInt("VS_LEADER_GAIN", 0)
+	baseProxGain   = envInt("VS_BASEPROX_GAIN", 0)
+	baseProxRadius = envInt("VS_BASEPROX_RADIUS", 3)
+	survivalGain   = envInt("VS_SURVIVAL_GAIN", 0)
+)
+
+func envInt(name string, def int) int {
+	if v, err := strconv.Atoi(os.Getenv(name)); err == nil {
+		return v
+	}
+	return def
+}
 
 // spaceRaceWeight scales the Voronoi space-race term. Chosen by the vs-ai2.34
 // sweep: peak of the 2..48 curve, 69.5% vs the MobilityAttacker strangler at
@@ -218,6 +241,25 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			raw[player-1] += state.MovesLeft() * 12
 		}
 	}
+
+	// vs-ai2.44: shared standing metric for the leader-aware levers. Computed
+	// once, only when a lever is live and active > 2, so the default path adds
+	// nothing. stand[p] is a coarse "how well p is doing" score; share is its
+	// per-mille slice of the active total, fairShare the equal split.
+	leversLive := active > 2 && (leaderGain != 0 || baseProxGain != 0 || survivalGain != 0)
+	var stand [4]int
+	total, fairShare := 0, 0
+	if leversLive {
+		for player := game.Player(1); player <= 4; player++ {
+			if state.Active(player) {
+				stand[player-1] = space[player-1] + metrics[player-1].normal + metrics[player-1].fortified
+				total += stand[player-1]
+			}
+		}
+		fairShare = 1000 / active
+	}
+	share := func(p game.Player) int { return stand[p-1] * 1000 / max(1, total) }
+	_, _ = fairShare, share // consumed by the levers in tasks below
 
 	for player := game.Player(1); player <= 4; player++ {
 		if !state.Active(player) {

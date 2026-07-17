@@ -451,6 +451,21 @@ func TestSpaceRacePartition(t *testing.T) {
 	}
 }
 
+// TestLeversDefaultOffAreNoOp pins that with every vs-ai2.44 knob at its
+// default (0/off) the eval of a fixed 3p and 4p position is byte-identical to
+// the pre-lever baseline captured when the levers were added.
+func TestLeversDefaultOffAreNoOp(t *testing.T) {
+	if leaderGain != 0 || baseProxGain != 0 || survivalGain != 0 {
+		t.Fatalf("levers not at default: %d/%d/%d", leaderGain, baseProxGain, survivalGain)
+	}
+	if got, want := evaluateAll(randomReachableState(t, 5, 9, 3, 2)), [4]int{7228, -1136, -6091, -500000000}; got != want {
+		t.Fatalf("3p default eval = %v, want %v", got, want)
+	}
+	if got, want := evaluateAll(randomReachableState(t, 12, 20, 4, 3)), [4]int{-22, 984, 228, -1188}; got != want {
+		t.Fatalf("4p default eval = %v, want %v", got, want)
+	}
+}
+
 func absInt(value int) int {
 	if value < 0 {
 		return -value
