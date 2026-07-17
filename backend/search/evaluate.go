@@ -1,8 +1,29 @@
 package search
 
-import "virusgame/game"
+import (
+	"os"
+	"strconv"
+
+	"virusgame/game"
+)
 
 const mateScore = 1_000_000_000
+
+// retalWeightDefault prices each own connected Normal that is capturable next
+// turn (the threatened/threatenedLoss signal) at material scale, so a 1-for-2
+// capture exchange nets negative instead of positive. Applied 2-player only.
+// The baked value is chosen by the vs-ai2.47 Task-4 sweep; VS_RETAL_WEIGHT
+// overrides it during the sweep (delete the env hook once the value is baked).
+const retalWeightDefault = 40
+
+var retalWeight = envIntDefault("VS_RETAL_WEIGHT", retalWeightDefault)
+
+func envIntDefault(key string, fallback int) int {
+	if v, err := strconv.Atoi(os.Getenv(key)); err == nil {
+		return v
+	}
+	return fallback
+}
 
 // spaceRaceWeight scales the Voronoi space-race term. Chosen by the vs-ai2.34
 // sweep: peak of the 2..48 curve, 69.5% vs the MobilityAttacker strangler at
@@ -234,6 +255,22 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 					raw[player-1] += 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
 				}
 			}
+		}
+	}
+
+	// vs-ai2.47: price own connected Normals that are capturable next turn at
+	// material scale so a 1-for-2 capture exchange nets negative. Side-to-move-
+	// symmetric (both players priced from the SAME position, no threatTempo, so
+	// the phase shift cancels in same-ply sibling comparisons). 2-player only:
+	// no-op with >2 active players so the multiplayer ladder is untouched.
+	if active == 2 {
+		area := state.Rows() * state.Cols()
+		for player := game.Player(1); player <= 4; player++ {
+			if !state.Active(player) {
+				continue
+			}
+			m := &metrics[player-1]
+			raw[player-1] -= normalized(m.threatened+m.threatenedLoss, area, retalWeight)
 		}
 	}
 
