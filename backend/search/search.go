@@ -300,6 +300,11 @@ func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 	}
 
 	player := state.CurrentPlayer()
+	// maxBound is the best any child at ply+1 can return for the mover: an
+	// immediate terminal win. Heuristic and deeper-win scores are strictly
+	// smaller, so once a child meets it no sibling can beat it (immediate
+	// pruning — exact, no constant-sum assumption).
+	maxBound := mateScore - (ply + 1)
 	var best [4]int
 	best[player-1] = -infScore
 	var bestAction game.Action
@@ -310,6 +315,9 @@ func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 		}
 		if values[player-1] > best[player-1] {
 			best, bestAction = values, child.action
+			if best[player-1] >= maxBound {
+				break
+			}
 		}
 	}
 	s.table[key] = tableEntry{depth: depth, ply: ply, flag: flagExact, bestAction: bestAction, values: best}
