@@ -3,12 +3,14 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"virusgame/arena"
+	"virusgame/game"
 )
 
 // TestRecordRoundTrip asserts a Record survives JSON marshal/unmarshal
@@ -40,6 +42,36 @@ func TestRecordRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(want, got) {
 		t.Fatalf("round-trip mismatch:\n want %+v\n got  %+v", want, got)
+	}
+}
+
+// TestLabelSkipsNoDeepScore asserts Label surfaces errNoDeepScore (rather than
+// silently recording DeepScore 0) when ChooseNodeBudget cannot score the
+// position. Guards against mislabeling decided/terminal corpus positions.
+func TestLabelSkipsNoDeepScore(t *testing.T) {
+	state, err := game.New(8, 8, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Drive a greedy game to a terminal state — the mover then has no legal
+	// move, so ChooseNodeBudget returns ok=false (the corpus-terminal case).
+	agent := plain(arena.Instrument(arena.Greedy))
+	for i := 0; !state.GameOver() && i < 8*8*4; i++ {
+		action, ok := agent(state)
+		if !ok {
+			break
+		}
+		next, err := state.Apply(action)
+		if err != nil {
+			t.Fatal(err)
+		}
+		state = next
+	}
+	if !state.GameOver() {
+		t.Fatal("greedy game did not reach a terminal state")
+	}
+	if _, err := Label(state, 2000, "corpus"); !errors.Is(err, errNoDeepScore) {
+		t.Fatalf("want errNoDeepScore for terminal position, got %v", err)
 	}
 }
 

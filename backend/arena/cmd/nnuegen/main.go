@@ -35,6 +35,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -47,6 +48,12 @@ import (
 	"virusgame/game"
 	"virusgame/search"
 )
+
+// errNoDeepScore signals that ChooseNodeBudget could not produce a deep score
+// for a position (terminal / no legal move). Such positions must be skipped, not
+// recorded as DeepScore 0 — a decided corpus terminal would otherwise get a
+// contradictory label (score 0 alongside a real win/loss outcome).
+var errNoDeepScore = errors.New("no deep score for terminal position")
 
 // Outcome is the eventual game result attached to a sampled position. Zero
 // values (Winner 0, Placement 0) are the sentinel for "no completed game".
@@ -77,7 +84,10 @@ func Label(state game.State, budget uint64, source string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	result, _ := search.ChooseNodeBudget(state, budget)
+	result, ok := search.ChooseNodeBudget(state, budget)
+	if !ok {
+		return Record{}, errNoDeepScore
+	}
 	feats := arena.NNUEFeatures(state)
 	var features [4][]float64
 	for seat := 0; seat < 4; seat++ {
@@ -415,6 +425,9 @@ func generateWorker(cfg Config, worker, target int, corpus []corpusPosition, see
 				continue
 			}
 			record, err := Label(state, cfg.Budget, "ladder")
+			if errors.Is(err, errNoDeepScore) {
+				continue
+			}
 			if err != nil {
 				return written, err
 			}
@@ -427,6 +440,9 @@ func generateWorker(cfg Config, worker, target int, corpus []corpusPosition, see
 			}
 			position := corpus[int(next(&rng)%uint64(len(corpus)))]
 			record, err := Label(position.state, cfg.Budget, "corpus")
+			if errors.Is(err, errNoDeepScore) {
+				continue // decided terminal position — no meaningful deep score
+			}
 			if err != nil {
 				return written, err
 			}
