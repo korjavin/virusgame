@@ -308,16 +308,17 @@ func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 	player := state.CurrentPlayer()
 	var best [4]int
 	best[player-1] = -infScore
+	var bestAction game.Action
 	for _, child := range children {
 		values, ok := s.maxN(child.state, depth-1, ply+1)
 		if !ok {
 			return [4]int{}, false
 		}
 		if values[player-1] > best[player-1] {
-			best = values
+			best, bestAction = values, child.action
 		}
 	}
-	s.table[key] = tableEntry{depth: depth, ply: ply, values: best}
+	s.table[key] = tableEntry{depth: depth, ply: ply, flag: flagExact, bestAction: bestAction, values: best}
 	return best, true
 }
 
