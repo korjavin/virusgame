@@ -55,7 +55,7 @@ func TestLabelSkipsNoDeepScore(t *testing.T) {
 	}
 	// Drive a greedy game to a terminal state — the mover then has no legal
 	// move, so ChooseNodeBudget returns ok=false (the corpus-terminal case).
-	agent := plain(arena.Instrument(arena.Greedy))
+	agent := arena.Greedy
 	for i := 0; !state.GameOver() && i < 8*8*4; i++ {
 		action, ok := agent(state)
 		if !ok {

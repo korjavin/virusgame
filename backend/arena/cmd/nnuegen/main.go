@@ -40,6 +40,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -256,23 +257,22 @@ func next(rng *uint64) uint64 {
 	return *rng
 }
 
-// roster is the fixed set of deterministic self-play agents. Every entry is a
-// TelemetryAgent (per the plan); we only need the chosen action.
-func roster() []arena.TelemetryAgent {
-	return []arena.TelemetryAgent{
-		arena.TelemetryNodeBudget(2000, false),
-		arena.TelemetryNodeBudget(8000, false),
-		arena.TelemetryTournament(2),
-		arena.Instrument(arena.Greedy),
-		arena.Instrument(arena.BaseAttacker),
-		arena.Instrument(arena.MobilityAttacker),
+// roster is the fixed set of deterministic self-play agents. Self-play only
+// needs the chosen action, so these are plain Agents (no telemetry).
+func roster() []arena.Agent {
+	budget := func(nodes uint64) arena.Agent {
+		return func(state game.State) (game.Action, bool) {
+			result, ok := search.ChooseNodeBudget(state, nodes)
+			return result.Action, ok
+		}
 	}
-}
-
-func plain(agent arena.TelemetryAgent) arena.Agent {
-	return func(state game.State) (game.Action, bool) {
-		action, _, ok := agent(state)
-		return action, ok
+	return []arena.Agent{
+		budget(2000),
+		budget(8000),
+		arena.Tournament(2),
+		arena.Greedy,
+		arena.BaseAttacker,
+		arena.MobilityAttacker,
 	}
 }
 
@@ -310,24 +310,16 @@ func loadCorpus(manifest string) ([]corpusPosition, error) {
 		for point := range points {
 			keys = append(keys, point)
 		}
-		sortPoints(keys)
+		// Unique map keys → a total order; stability is irrelevant.
+		sort.Slice(keys, func(i, j int) bool {
+			a, b := keys[i], keys[j]
+			return a.Turn < b.Turn || (a.Turn == b.Turn && a.AfterActions < b.AfterActions)
+		})
 		for _, point := range keys {
 			positions = append(positions, corpusPosition{state: points[point], winner: int(replay.Winner)})
 		}
 	}
 	return positions, nil
-}
-
-func sortPoints(points []arena.ReplayPoint) {
-	for i := 1; i < len(points); i++ {
-		for j := i; j > 0; j-- {
-			a, b := points[j-1], points[j]
-			if a.Turn < b.Turn || (a.Turn == b.Turn && a.AfterActions <= b.AfterActions) {
-				break
-			}
-			points[j-1], points[j] = points[j], points[j-1]
-		}
-	}
 }
 
 // selfPlay plays one 2-player game between agentA (seat 1) and agentB (seat 2),
@@ -408,8 +400,8 @@ func generateWorker(cfg Config, worker, target int, corpus []corpusPosition, see
 		board := cfg.Boards[int(next(&rng)%uint64(len(cfg.Boards)))]
 		switch next(&rng) % 3 {
 		case 0: // self-play
-			agentA := plain(agents[int(next(&rng)%uint64(len(agents)))])
-			agentB := plain(agents[int(next(&rng)%uint64(len(agents)))])
+			agentA := agents[int(next(&rng)%uint64(len(agents)))]
+			agentB := agents[int(next(&rng)%uint64(len(agents)))]
 			for _, record := range selfPlay(board, cfg.Budget, agentA, agentB) {
 				if err := emit(record); err != nil {
 					return written, err

@@ -293,13 +293,8 @@ func trainEpoch(m *MLP, a *adam, samples []Sample, st Stats, auxWeight float64) 
 		lossSum += loss
 		// dLoss/dOut
 		gOut := 2*dScore + 2*dAux
-		// output layer grads
-		m.B2 -= upd(gOut, &a.mB2, &a.vB2)
-		for h := 0; h < m.Hidden; h++ {
-			gW2 := gOut * hid[h]
-			m.W2[h] -= upd(gW2, &a.mW2[h], &a.vW2[h])
-		}
-		// hidden layer grads (through original W2 is fine at this LR)
+		// hidden layer grads first, using the output weights as of the forward
+		// pass (before the output-layer step below mutates W2).
 		for h := 0; h < m.Hidden; h++ {
 			// dLoss/dhid = gOut * W2[h]; tanh' = 1 - hid^2
 			gHid := gOut * m.W2[h] * (1 - hid[h]*hid[h])
@@ -310,6 +305,12 @@ func trainEpoch(m *MLP, a *adam, samples []Sample, st Stats, auxWeight float64) 
 				gW1 := gHid * s.Input[i]
 				w[i] -= upd(gW1, &mw[i], &vw[i])
 			}
+		}
+		// output layer grads
+		m.B2 -= upd(gOut, &a.mB2, &a.vB2)
+		for h := 0; h < m.Hidden; h++ {
+			gW2 := gOut * hid[h]
+			m.W2[h] -= upd(gW2, &a.mW2[h], &a.vW2[h])
 		}
 	}
 	return lossSum / float64(len(samples))
