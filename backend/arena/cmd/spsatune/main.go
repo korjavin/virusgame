@@ -169,7 +169,11 @@ func (o *optimizer) fitness(p search.EvalParams) (score float64, floorsOK bool, 
 		serial     bool
 	}
 	floors := []floor{
-		{"legacy", 8, 8, 85, arena.Instrument(arena.Legacy(1)), true},
+		// 70, not 85: the hand-tuned baseline measures ~75% vs Legacy at
+		// nodes=1000 (smoke run 2026-07-17), so an 85% floor rejects the very
+		// params it guards and starves the SPSA gradient. Greedy + incumbent
+		// floors carry the strength guarantee.
+		{"legacy", 8, 8, 70, arena.Instrument(arena.Legacy(1)), true},
 		{"greedy", 8, 8, 75, arena.Instrument(arena.Greedy), false},
 		{"incumbent", 12, 12, 50, arena.TelemetryNodeBudget(o.nodes, true), false},
 	}
