@@ -164,13 +164,19 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 	children = preservingChildren(children, s.root)
 	best := Result{Action: children[0].action, Score: -infScore}
 	alpha, beta := -infScore, infScore
-	for _, child := range children {
+	for i, child := range children {
 		var values [4]int
 		var complete bool
 		if s.multi {
 			values, complete = s.maxN(child.state, depth-1, 1)
-		} else {
+		} else if i == 0 {
 			values[0], complete = s.minimax(child.state, depth-1, alpha, beta, 1)
+		} else {
+			// Null-window scout; re-search full window on a fail that lands inside.
+			values[0], complete = s.minimax(child.state, depth-1, alpha, alpha+1, 1)
+			if complete && values[0] > alpha && values[0] < beta {
+				values[0], complete = s.minimax(child.state, depth-1, alpha, beta, 1)
+			}
 		}
 		if !complete {
 			return Result{}, false
