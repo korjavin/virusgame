@@ -59,6 +59,16 @@ func strangleCount(state game.State, root game.Player, target game.Pos) int {
 	return strangled
 }
 
+// squeeze scores how much an action squeezes root's cells. Only Move actions have
+// a meaningful Target; PlaceNeutrals carries a zero-value Target, so it counts as
+// no squeeze (mirrors the Lever 1 Move guard).
+func squeeze(state game.State, root game.Player, a game.Action) int {
+	if a.Kind != game.Move {
+		return 0
+	}
+	return strangleCount(state, root, a.Target)
+}
+
 type Result struct {
 	Action          game.Action
 	Score           int
@@ -476,8 +486,8 @@ func (s *searcher) rootSafetyFloor(childState game.State) int {
 	}
 	// Rank replies by how much they squeeze our cells; inspect only the top K.
 	sort.SliceStable(replies, func(i, j int) bool {
-		return strangleCount(childState, s.root, replies[i].Target) >
-			strangleCount(childState, s.root, replies[j].Target)
+		return squeeze(childState, s.root, replies[i]) >
+			squeeze(childState, s.root, replies[j])
 	})
 	floor := -1
 	for i := 0; i < len(replies) && i < topK; i++ {
@@ -513,9 +523,9 @@ func (s *searcher) playOutOpponentTurn(state game.State, opponent game.Player) g
 			break
 		}
 		best := actions[0]
-		bestSqueeze := strangleCount(state, s.root, best.Target)
+		bestSqueeze := squeeze(state, s.root, best)
 		for _, a := range actions[1:] {
-			if sq := strangleCount(state, s.root, a.Target); sq > bestSqueeze {
+			if sq := squeeze(state, s.root, a); sq > bestSqueeze {
 				best, bestSqueeze = a, sq
 			}
 		}

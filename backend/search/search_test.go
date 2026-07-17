@@ -566,6 +566,18 @@ func TestStrangleCount(t *testing.T) {
 	if got := strangleCount(state, 1, game.Pos{Row: 0, Col: 0}); got != 1 {
 		t.Fatalf("corner strangleCount = %d, want 1 (only (1,1) base)", got)
 	}
+
+	// squeeze scores a Move by its Target's strangleCount, but PlaceNeutrals
+	// carries a zero-value Target and must score 0 (not the strangleCount of the
+	// top-left corner) so Lever 3 never ranks neutral placements by garbage.
+	move := game.Action{Kind: game.Move, Target: game.Pos{Row: 2, Col: 2}}
+	if got := squeeze(state, 1, move); got != 6 {
+		t.Fatalf("squeeze(Move) = %d, want 6", got)
+	}
+	neutrals := game.Action{Kind: game.PlaceNeutrals, Neutrals: [2]game.Pos{{Row: 0, Col: 1}, {Row: 1, Col: 0}}}
+	if got := squeeze(state, 1, neutrals); got != 0 {
+		t.Fatalf("squeeze(PlaceNeutrals) = %d, want 0 (no meaningful Target)", got)
+	}
 }
 
 // strangleFixture builds a 5x5 1v1 board where player 2 is the given `current`
