@@ -67,21 +67,18 @@ func chooseNodeBudget(state game.State, limit uint64) (Result, bool) {
 		return Result{}, false
 	}
 	best := Result{Action: fallback}
-	var nodes, evaluations uint64
-	for depth := 1; depth <= maxDepth && nodes < limit; depth++ {
-		s := newSearcher(context.Background(), state)
-		s.nodeLimit = limit - nodes
+	s := newSearcher(context.Background(), state)
+	s.nodeLimit = limit
+	for depth := 1; depth <= maxDepth && s.nodes < limit; depth++ {
 		result, complete := s.atDepth(state, depth)
-		nodes += s.nodes
-		evaluations += s.evaluations
 		if !complete {
 			break
 		}
 		best = result
 		best.Depth = depth
 	}
-	best.Nodes, best.Evaluations = nodes, evaluations
-	best.BudgetExhausted = nodes >= limit
+	best.Nodes, best.Evaluations = s.nodes, s.evaluations
+	best.BudgetExhausted = s.nodes >= limit
 	best.SearchComplete = best.Depth == maxDepth
 	return best, true
 }
@@ -130,19 +127,16 @@ func Choose(ctx context.Context, state game.State) (Result, bool) {
 	}
 
 	best := Result{Action: fallback}
-	totalNodes, totalEvaluations := uint64(0), uint64(0)
+	s := newSearcher(ctx, state)
 	for depth := 1; depth <= maxDepth; depth++ {
-		s := newSearcher(ctx, state)
 		result, complete := s.atDepth(state, depth)
-		totalNodes += s.nodes
-		totalEvaluations += s.evaluations
 		if !complete {
 			break
 		}
 		best = result
 		best.Depth = depth
-		best.Nodes = totalNodes
-		best.Evaluations = totalEvaluations
+		best.Nodes = s.nodes
+		best.Evaluations = s.evaluations
 	}
 	return best, true
 }
