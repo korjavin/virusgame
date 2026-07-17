@@ -263,9 +263,8 @@ func zerosLike(w [][]float64) [][]float64 {
 // trainEpoch runs one pass over samples, returning the mean training loss.
 // auxWeight scales the game-outcome auxiliary term.
 func trainEpoch(m *MLP, a *adam, samples []Sample, st Stats, auxWeight float64) float64 {
-	a.t++
-	bc1 := 1 - math.Pow(a.b1, float64(a.t))
-	bc2 := 1 - math.Pow(a.b2, float64(a.t))
+	// bias-correction terms; recomputed each optimization step (per sample).
+	var bc1, bc2 float64
 	upd := func(g float64, mm, vv *float64) float64 {
 		*mm = a.b1*(*mm) + (1-a.b1)*g
 		*vv = a.b2*(*vv) + (1-a.b2)*g*g
@@ -275,6 +274,11 @@ func trainEpoch(m *MLP, a *adam, samples []Sample, st Stats, auxWeight float64) 
 	}
 	var lossSum float64
 	for _, s := range samples {
+		// Adam timestep advances once per update step, so bias correction
+		// tracks the number of moment updates (not the epoch count).
+		a.t++
+		bc1 = 1 - math.Pow(a.b1, float64(a.t))
+		bc2 = 1 - math.Pow(a.b2, float64(a.t))
 		target := st.norm(s.Score)
 		out, hid := m.forward(s.Input)
 		// primary MSE on normalized score

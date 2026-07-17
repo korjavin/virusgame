@@ -157,22 +157,23 @@ go run . -data <dir> -epochs 60 -seed 1 -export <dir>/weights_out.go
 Observed loss curve (300 samples, 90/10 split, hidden 48, Adam lr 0.001):
 
 ```
-epoch   1  train_loss 1.105792  val_loss 1.942668  spearman 0.3547
-epoch   2  train_loss 0.949589  val_loss 1.630472  spearman 0.3002
-epoch   4  train_loss 0.877095  val_loss 1.694102  spearman 0.3055
-epoch   9  train_loss 0.803403  val_loss 1.716866  spearman 0.2821
-epoch  19  train_loss 0.737710  val_loss 1.671066  spearman 0.3523
-epoch  29  train_loss 0.679604  val_loss 1.594415  spearman 0.4423
-epoch  39  train_loss 0.601426  val_loss 1.411393  spearman 0.5759
-epoch  49  train_loss 0.555520  val_loss 1.324264  spearman 0.6009
-epoch  59  train_loss 0.511115  val_loss 1.267956  spearman 0.6082
-epoch  60  train_loss 0.506540  val_loss 1.263035  spearman 0.6073
+epoch   1  train_loss 1.161625  val_loss 1.849832  spearman 0.4564
+epoch   2  train_loss 1.039524  val_loss 2.001158  spearman 0.3927
+epoch   4  train_loss 0.907643  val_loss 1.979640  spearman 0.4096
+epoch   9  train_loss 0.826724  val_loss 1.515048  spearman 0.4064
+epoch  19  train_loss 0.723178  val_loss 1.139981  spearman 0.4306
+epoch  29  train_loss 0.631518  val_loss 1.081828  spearman 0.3943
+epoch  39  train_loss 0.539628  val_loss 1.062203  spearman 0.4286
+epoch  49  train_loss 0.483540  val_loss 0.935942  spearman 0.5650
+epoch  59  train_loss 0.435135  val_loss 0.929888  spearman 0.5121
+epoch  60  train_loss 0.449799  val_loss 0.906306  spearman 0.4770
 ```
 
-Train and val loss both fall monotonically after warm-up and val Spearman rank
-correlation rises from ~0.35 to ~0.61 — the net is learning to rank positions
-by deep score on held-out data. Absolute val loss stays above train loss (only
-300 samples); the production run's 1-5M positions is what closes that gap.
+Train loss falls monotonically after warm-up and val loss roughly halves
+(1.85 → 0.91). Val Spearman rank correlation is noisy on only 300 samples
+(~0.4–0.57, no clean trend), so the smoke set is too small to read a rank
+signal from — the production run's 1-5M positions is what turns this into a
+usable held-out ranking metric.
 
 ## Exported weights format + loader-stub contract
 

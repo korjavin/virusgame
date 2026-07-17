@@ -38,7 +38,7 @@ func TestTrainLossDecreases(t *testing.T) {
 	st := normStats(train)
 	var rng uint64 = 7
 	m := newMLP(inputDim, 32, &rng)
-	a := newAdam(m, 0.01)
+	a := newAdam(m, 0.001) // production default; lr 0.01 oscillates on this tiny set
 
 	epochs := 15
 	losses := make([]float64, epochs)

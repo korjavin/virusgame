@@ -195,6 +195,19 @@ func loadFingerprints(dir string) (map[string]bool, error) {
 	return seen, nil
 }
 
+// cloneSet returns a shallow copy of s (nil for nil), so each worker mutates its
+// own dedupe set without racing siblings.
+func cloneSet(s map[string]bool) map[string]bool {
+	if s == nil {
+		return nil
+	}
+	out := make(map[string]bool, len(s))
+	for k := range s {
+		out[k] = true
+	}
+	return out
+}
+
 // countLines returns the number of JSONL records in path, or 0 if it is absent.
 func countLines(path string) (int, error) {
 	file, err := os.Open(path)
@@ -342,16 +355,12 @@ func selfPlay(board arena.Board, budget uint64, agentA, agentB arena.Agent) []Re
 	return records
 }
 
-// generateWorker samples up to target positions into worker's shard.
-func generateWorker(cfg Config, worker, target int, corpus []corpusPosition) (int, error) {
-	var seen map[string]bool
+// generateWorker samples up to target positions into worker's shard. seen is the
+// worker's private dedupe set (a clone of the resume scan, or nil for a fresh run).
+func generateWorker(cfg Config, worker, target int, corpus []corpusPosition, seen map[string]bool) (written int, retErr error) {
 	existing := 0 // records already in this worker's shard (resume counts them toward target)
 	if cfg.Resume {
-		loaded, err := loadFingerprints(cfg.Out)
-		if err != nil {
-			return 0, err
-		}
-		seen = loaded
+		var err error
 		existing, err = countLines(filepath.Join(cfg.Out, fmt.Sprintf("shard-%03d.jsonl", worker)))
 		if err != nil {
 			return 0, err
@@ -361,11 +370,16 @@ func generateWorker(cfg Config, worker, target int, corpus []corpusPosition) (in
 	if err != nil {
 		return 0, err
 	}
-	defer writer.Close()
+	// Close flushes the final buffered records; surface a flush error rather
+	// than silently dropping the tail of the shard.
+	defer func() {
+		if cerr := writer.Close(); cerr != nil && retErr == nil {
+			retErr = cerr
+		}
+	}()
 
 	agents := roster()
 	rng := (cfg.Seed + uint64(worker)*0x9e3779b97f4a7c15) | 1
-	written := 0
 	emit := func(record Record) error {
 		if existing+written >= target {
 			return nil
@@ -439,6 +453,17 @@ func Generate(cfg Config) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	// Scan existing shards ONCE, up front — before any worker opens its shard
+	// for append. Scanning inside each worker goroutine would race sibling
+	// workers' concurrent writes (torn final line -> abort). Each worker gets a
+	// private clone so per-shard dedupe writes don't race across workers.
+	var resumeSeen map[string]bool
+	if cfg.Resume {
+		resumeSeen, err = loadFingerprints(cfg.Out)
+		if err != nil {
+			return 0, err
+		}
+	}
 	var wg sync.WaitGroup
 	totals := make([]int, cfg.Workers)
 	errs := make([]error, cfg.Workers)
@@ -450,7 +475,7 @@ func Generate(cfg Config) (int, error) {
 		wg.Add(1)
 		go func(worker, target int) {
 			defer wg.Done()
-			totals[worker], errs[worker] = generateWorker(cfg, worker, target, corpus)
+			totals[worker], errs[worker] = generateWorker(cfg, worker, target, corpus, cloneSet(resumeSeen))
 		}(worker, target)
 	}
 	wg.Wait()
