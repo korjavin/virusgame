@@ -9,6 +9,14 @@ const mateScore = 1_000_000_000
 // n=200 (w95 [63,75]); 48 was already past the peak at 61.2%.
 const spaceRaceWeight = 32
 
+// vs-ai2.38 tried an ungated own-max-cutLoss fragility penalty here to stop the
+// width-1 opening tendril. The Task-3 sweep killed it: the opening only flips to
+// width-2 at weight >= 380, but the strength gate is already broken at weight 12
+// (legacy 62.5% < 85%) and the constructed width-2 invariant fails at every
+// weight > 0, and any nonzero penalty diverges from the frozen origin-main eval
+// oracle. No weight fixes the opening without wrecking strength — ship nothing.
+// See docs/plans/20260717-vs-ai2.38-ungated-fragility.md Task 3 for the curve.
+
 type playerMetrics struct {
 	connected, disconnected    int
 	normal, fortified          int
