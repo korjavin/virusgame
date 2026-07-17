@@ -1,3 +1,60 @@
+# spsatune determinism, OwnerBot objective, warm start — 2026-07-17 (vs-ai2.52b)
+
+## Determinism — investigated, already order-independent (no fix needed)
+
+The tuner was flagged as nondeterministic (two overnight logs diverging at k=02,
+same flags/seed). **Investigation could not reproduce it on current `main`.** The
+harness was already order-independent and the divergence was a mid-development
+binary artifact (the two original logs were produced 11 min apart while the tuner
+code — including the Legacy-floor 85→70 recalibration — was still being changed
+and recompiled).
+
+Evidence:
+
+- `go build -race ./arena/cmd/spsatune` + a full run: **0 data races**.
+- Each ladder game is single-threaded and pure: `search.chooseNodeBudget` has no
+  goroutines/wall-clock; `game.LegalActions` and the heuristic/OwnerBot agents
+  scan slices with map *lookups* (no tie-affecting map iteration). No per-process
+  nondeterminism source in the fitness path.
+- `arena.PlaySequentialOpenings` dispatches games across a worker pool but folds
+  results and applies the SPRT/Wilson early stop **strictly in permutation order**
+  (windowed; results past the stop index are discarded). Worker count cannot
+  change which games are counted — verified: `-workers 1` and `-workers 4` produce
+  identical output.
+- **Cross-process proof** at the exact overnight regime (`nodes=2000 openings=12
+  floor-openings=10 seed=7`): two separate invocations are **byte-identical**
+  (stdout trace + output JSON).
+
+Proof command (run from `backend/`; the only stdout difference is the `wrote
+<path>` line):
+
+```
+go build -o /tmp/spsatune ./arena/cmd/spsatune
+for i in 1 2; do /tmp/spsatune -iters 3 -openings 12 -floor-openings 10 \
+  -nodes 2000 -seed 7 -workers 4 -out /tmp/det-$i.json > /tmp/det-$i.log; done
+diff <(grep -v '^wrote ' /tmp/det-1.log) <(grep -v '^wrote ' /tmp/det-2.log) \
+  && diff /tmp/det-1.json /tmp/det-2.json && echo BYTE-IDENTICAL
+```
+
+CI enforces the cheap in-process form: `TestSPSAReproducible` (`-iters 3`,
+`workers=4`) asserts two loop runs marshal identically.
+
+## OwnerBot objective rung
+
+`arena.OwnerBot` (the owner proxy distilled from the loss corpus) is now a
+fitness rung, **weight 3** (the other stranglers are weight 2, Greedy/Legacy/
+incumbent weight 1) — the tuner optimizes primarily against the opponent we
+actually want to beat. CutSeeker stays a held-out validation opponent, never a
+rung.
+
+## Warm start
+
+`-init <path>` seeds theta from a saved vector — either a results JSON (uses
+`summary.bestTheta`) or a bare `EvalParams` map. The default vector maps back to
+the all-1.0 scaled-space cold start exactly.
+
+---
+
 # spsatune smoke run — 2026-07-17
 
 Bounded SPSA smoke run of the eval-constant tuner against the gate-ladder
