@@ -53,6 +53,35 @@ confidence claims, and must be read alongside board, family, seat, and phase
 buckets. A release decision cannot turn adjacent checkpoints into additional
 independent evidence by increasing a repetition counter.
 
+## Strangler gates
+
+All 12 recent real 12×12 production losses ended in `no_moves` strangulation,
+so vs-ai2.34 tunes and gates the evaluator against a strangler — an agent that
+races to wall off territory (`MobilityAttacker`) — rather than against the
+incumbent, which shares the incumbent's blind spots. Both gates are opt-in via
+env vars, use a deterministic 1000-node budget with balanced seats and shared
+seeded openings, and report Wilson 95% intervals.
+
+Primary gate — candidate and frozen incumbent each vs `MobilityAttacker` and
+`BaseAttacker`; fails if the candidate's Mobility win rate drops to or below
+the incumbent's:
+
+```sh
+cd backend
+VS_STRANGLER=1 go test ./arena -run TestVsStrangler -v -timeout 120m
+```
+
+Secondary gate — candidate vs frozen incumbent differential (frozen-vs-frozen
+reads 50%):
+
+```sh
+cd backend
+VS_STRANGLER_DIFF=1 go test ./arena -run TestStrangulationEvalNodeBudget -v -timeout 60m
+```
+
+`VS_STRANGLER_OPENINGS` (default 40) and `VS_STRANGLER_NODES` (default 1000,
+secondary gate only) override the sample size and node budget.
+
 ## Production regressions
 
 Immutable production fixtures were imported from `GET /last_games?limit=20`

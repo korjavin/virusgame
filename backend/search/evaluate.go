@@ -4,6 +4,11 @@ import "virusgame/game"
 
 const mateScore = 1_000_000_000
 
+// spaceRaceWeight scales the Voronoi space-race term. Chosen by the vs-ai2.34
+// sweep: peak of the 2..48 curve, 69.5% vs the MobilityAttacker strangler at
+// n=200 (w95 [63,75]); 48 was already past the peak at 61.2%.
+const spaceRaceWeight = 32
+
 type playerMetrics struct {
 	connected, disconnected    int
 	normal, fortified          int
@@ -33,6 +38,8 @@ type evalWorkspace struct {
 	articulation [4][]bool
 	cutLoss      [4][]uint16
 	scratch      analysisScratch
+	spaceDist    []int16
+	spaceOwner   []int8
 }
 
 func (w *evalWorkspace) ensure(size int) {
@@ -48,6 +55,78 @@ func (w *evalWorkspace) ensure(size int) {
 	w.scratch.low = resize(w.scratch.low, size)
 	w.scratch.parent = resize(w.scratch.parent, size)
 	w.scratch.subtree = resize(w.scratch.subtree, size)
+	w.spaceDist = resize(w.spaceDist, size)
+	w.spaceOwner = resize(w.spaceOwner, size)
+}
+
+// spaceRace runs one shared multi-source BFS over empty cells seeded from every
+// active player's connected territory, and counts how many open cells each
+// player reaches strictly first (nearest-owns Voronoi partition; equidistant
+// cells are contested and awarded to nobody). This is the Tron space-partition
+// counter to strangulation: it sees, many plies ahead, which open region the
+// opponent is walling off — something immediate mobility cannot.
+//
+// Tempo bias (vs-ai2.34 loss post-mortem): the raw own-minus-opp differential
+// swings ~±40-50 cells with turn phase — pro-self right after our own 3
+// actions, anti-self right after the opponent's reply. This term is therefore
+// kept side-to-move-independent: both players' first-reach counts come from
+// the SAME shared BFS on the SAME position, so at any leaf the phase shift
+// moves both sides' terms together and cancels in same-ply sibling
+// comparisons; no per-side tempo baseline is needed.
+// ponytail: plain cell-distance partition, not ceil(dist/3) turn-distance; the
+// nearest-owner is identical under that monotone rescale, only same-turn ties
+// differ, so it captures the space-race signal at lower cost.
+func spaceRace(state game.State, cells []game.Cell, connected [4][]bool, w *evalWorkspace) [4]int {
+	size := len(cells)
+	// w.queue is borrowed: the connectivity BFS (allConnectedInto) has already
+	// finished with it by the time spaceRace runs, and it retains nothing.
+	dist, owner, queue := w.spaceDist[:size], w.spaceOwner[:size], w.queue[:size]
+	for i := range dist {
+		dist[i] = -1
+		owner[i] = -1
+	}
+	tail := 0
+	for p := 0; p < 4; p++ {
+		if connected[p] == nil {
+			continue
+		}
+		for i := 0; i < size; i++ {
+			if connected[p][i] {
+				dist[i] = 0
+				owner[i] = int8(p)
+				queue[tail] = i
+				tail++
+			}
+		}
+	}
+	for head := 0; head < tail; head++ {
+		idx := queue[head]
+		d, o := dist[idx], owner[idx]
+		pos := game.Pos{Row: idx / state.Cols(), Col: idx % state.Cols()}
+		var nearby [8]game.Pos
+		count := neighbors(state, pos, &nearby)
+		for i := 0; i < count; i++ {
+			ni := nearby[i].Row*state.Cols() + nearby[i].Col
+			if cells[ni].Kind != game.Empty {
+				continue
+			}
+			if dist[ni] == -1 {
+				dist[ni] = d + 1
+				owner[ni] = o
+				queue[tail] = ni
+				tail++
+			} else if dist[ni] == d+1 && owner[ni] != o && owner[ni] != -2 {
+				owner[ni] = -2 // contested: reached at equal distance by another source
+			}
+		}
+	}
+	var counts [4]int
+	for i := 0; i < size; i++ {
+		if cells[i].Kind == game.Empty && owner[i] >= 0 {
+			counts[owner[i]]++
+		}
+	}
+	return counts
 }
 
 func resize[S ~[]E, E any](buffer S, size int) S {
@@ -87,6 +166,7 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 	workspace.ensure(size)
 	cells := snapshotCellsInto(state, workspace.cells)
 	connected := allConnectedInto(state, cells, workspace)
+	space := spaceRace(state, cells, connected, workspace)
 	var raw [4]int
 	active := 0
 	for player := game.Player(1); player <= 4; player++ {
@@ -108,7 +188,8 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			180*m.baseExits + 80*m.baseOpenings + 240*m.baseAnchors -
 			650*m.baseThreat*m.threatTempo -
 			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
-			m.threatTempo*ratio(m.threatened, max(1, m.connected))
+			m.threatTempo*ratio(m.threatened, max(1, m.connected)) +
+			normalized(space[player-1], area, spaceRaceWeight)
 		if m.baseExits+m.baseOpenings == 0 {
 			raw[player-1] -= 5000
 		}

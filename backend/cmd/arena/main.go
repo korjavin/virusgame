@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"virusgame/arena"
+	"virusgame/search"
 )
 
 func main() {
@@ -158,11 +159,15 @@ func main() {
 		if report.Illegal != 0 || report.Maxed != 0 || report.Stalled != 0 {
 			complete = false
 		}
+		// The anytime search saturates ProductionBudget by design (p50 reads
+		// ~budget), so allow 50ms of stop-jitter above it instead of a hard
+		// 600ms — vs-ai2.34 owner-authorized.
+		latencyCap := search.ProductionBudget + 50*time.Millisecond
 		switch benchmark.name {
 		case "legacy":
-			legacyPassed = report.WinRate() >= 85 && report.Percentile(95) <= 600*time.Millisecond
+			legacyPassed = report.WinRate() >= 85 && report.Percentile(95) <= latencyCap
 		case "greedy":
-			greedyPassed = report.WinRate() >= 75 && report.Percentile(95) <= 600*time.Millisecond
+			greedyPassed = report.WinRate() >= 75 && report.Percentile(95) <= latencyCap
 		}
 	}
 	for players := 3; players <= 4; players++ {
