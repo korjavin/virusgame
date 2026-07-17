@@ -407,6 +407,16 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 // this tiny fixture; the payoff is at deeper searches). Action/Score/Depth
 // unchanged. The budget-1000 minimax result and both maxn fixtures are
 // unchanged (maxn immediate pruning only fires when a winning child exists).
+// vs-ai2.49 re-pin: bounded capture-only quiescence at 1v1 minimax leaves adds
+// capture-extension nodes/evals at contact leaves. Depth-2 minimax Nodes
+// 220->998, Evaluations 202->778 (Score/Action/Depth unchanged — eval sees
+// quiet positions but this fixture's leaves were already quiet enough to keep
+// the same choice). Budget-1000 minimax: quiescence spends nodes resolving
+// captures, so fewer full plies complete inside 1000 nodes — Depth 2->1,
+// Evaluations 916->802, and the chosen Action moved (3,4)->(2,3) (a real,
+// reported behavior change: the shallower-but-quiescence-resolved search
+// prefers a different equal-Score move). Both maxn fixtures UNCHANGED
+// (quiescence is 1v1-only; maxN leaves still call the static eval directly).
 func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
@@ -425,8 +435,8 @@ func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	}{
 		{
 			name: "minimax", state: two,
-			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 220, Evaluations: 202},
-			wantNodes: Result{Action: move(3, 4), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
+			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 998, Evaluations: 778},
+			wantNodes: Result{Action: move(2, 3), Score: 26644, Depth: 1, Nodes: 1000, Evaluations: 802, BudgetExhausted: true},
 		},
 		{
 			name: "maxn", state: three,
