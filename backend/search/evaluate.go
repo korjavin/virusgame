@@ -9,16 +9,13 @@ const mateScore = 1_000_000_000
 // n=200 (w95 [63,75]); 48 was already past the peak at 61.2%.
 const spaceRaceWeight = 32
 
-// vs-ai2.38 ROBUST SPACE: an earlier attempt added an ungated own-max-cutLoss
-// fragility PENALTY term here; it was a null result (no weight flips the opening
-// without wrecking strength — see completed/20260717-vs-ai2.38-ungated-fragility.md,
-// DO NOT retry it). Instead the space-race seed itself now discounts fragility:
-// spaceRace is seeded not from each player's full connected territory but from
-// the component that SURVIVES their own worst single-cell cut (robustSpaceSeed).
-// A width-1 tendril is all articulation points, so it collapses to ~the base and
-// simply stops paying for deep space; a width-2 front has no single cut point and
-// keeps its full body and full credit. Same units (cells), spaceRaceWeight stays
-// 32 — no weight to tune. See docs/plans/20260717-vs-ai2.38-robust-space.md.
+// vs-ai2.38 tried an ungated own-max-cutLoss fragility penalty here to stop the
+// width-1 opening tendril. The Task-3 sweep killed it: the opening only flips to
+// width-2 at weight >= 380, but the strength gate is already broken at weight 12
+// (legacy 62.5% < 85%) and the constructed width-2 invariant fails at every
+// weight > 0, and any nonzero penalty diverges from the frozen origin-main eval
+// oracle. No weight fixes the opening without wrecking strength — ship nothing.
+// See docs/plans/20260717-vs-ai2.38-ungated-fragility.md Task 3 for the curve.
 
 type playerMetrics struct {
 	connected, disconnected    int
@@ -48,7 +45,6 @@ type evalWorkspace struct {
 	connected    [4][]bool
 	articulation [4][]bool
 	cutLoss      [4][]uint16
-	spaceSeed    [4][]bool
 	scratch      analysisScratch
 	spaceDist    []int16
 	spaceOwner   []int8
@@ -61,7 +57,6 @@ func (w *evalWorkspace) ensure(size int) {
 		w.connected[i] = resize(w.connected[i], size)
 		w.articulation[i] = resize(w.articulation[i], size)
 		w.cutLoss[i] = resize(w.cutLoss[i], size)
-		w.spaceSeed[i] = resize(w.spaceSeed[i], size)
 	}
 	w.scratch.targets = resize(w.scratch.targets, size)
 	w.scratch.discovery = resize(w.scratch.discovery, size)
@@ -142,47 +137,6 @@ func spaceRace(state game.State, cells []game.Cell, connected [4][]bool, w *eval
 	return counts
 }
 
-// robustSpaceSeed fills seed with the player's base-connected component that
-// survives removing its single worst cut cell — the max-cutLoss articulation
-// point. A width-1 tendril is all articulation, so its worst cut severs almost
-// everything and the seed shrinks to ~the base; a width-2 front has no single
-// cut point (cutLoss stays 0) so the seed keeps the full connected body. Feeding
-// this to spaceRace makes fragile filaments claim ~no deep space without any new
-// weight. BFS mirrors connectedCellsInto but over `connected` and skipping `cut`.
-func robustSpaceSeed(state game.State, cells []game.Cell, player game.Player, connected []bool,
-	articulation []bool, cutLoss []uint16, queue []int, seed []bool) {
-	clear(seed)
-	cut, best := -1, uint16(0)
-	for i, art := range articulation {
-		if art && cutLoss[i] > best {
-			cut, best = i, cutLoss[i]
-		}
-	}
-	base := basePos(state, player)
-	baseIndex := indexFor(state, base)
-	if baseIndex < 0 || baseIndex >= len(connected) || !connected[baseIndex] || baseIndex == cut {
-		return
-	}
-	seed[baseIndex] = true
-	queue[0] = baseIndex
-	head, tail := 0, 1
-	for head < tail {
-		index := queue[head]
-		head++
-		pos := game.Pos{Row: index / state.Cols(), Col: index % state.Cols()}
-		var nearby [8]game.Pos
-		count := neighbors(state, pos, &nearby)
-		for i := 0; i < count; i++ {
-			ni := nearby[i].Row*state.Cols() + nearby[i].Col
-			if !seed[ni] && connected[ni] && ni != cut {
-				seed[ni] = true
-				queue[tail] = ni
-				tail++
-			}
-		}
-	}
-}
-
 func resize[S ~[]E, E any](buffer S, size int) S {
 	if cap(buffer) < size {
 		return make(S, size)
@@ -220,11 +174,9 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 	workspace.ensure(size)
 	cells := snapshotCellsInto(state, workspace.cells)
 	connected := allConnectedInto(state, cells, workspace)
-
+	space := spaceRace(state, cells, connected, workspace)
 	var raw [4]int
 	active := 0
-	// First pass: connectivity metrics fill each active player's cutLoss/
-	// articulation, which the robust space seed below needs.
 	for player := game.Player(1); player <= 4; player++ {
 		if !state.Active(player) {
 			raw[player-1] = -mateScore / 2
@@ -234,27 +186,6 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		index := player - 1
 		metrics[index] = analyzeWithConnectivity(state, player, cells, connected, &workspace.scratch,
 			workspace.articulation[index], workspace.cutLoss[index])
-	}
-
-	// Seed the space-race BFS from each player's post-worst-cut surviving
-	// component (robustSpaceSeed) so fragile filaments claim ~no deep space.
-	for player := game.Player(1); player <= 4; player++ {
-		index := player - 1
-		if !state.Active(player) {
-			clear(workspace.spaceSeed[index])
-			continue
-		}
-		robustSpaceSeed(state, cells, player, connected[index],
-			workspace.articulation[index], workspace.cutLoss[index],
-			workspace.queue, workspace.spaceSeed[index])
-	}
-	space := spaceRace(state, cells, workspace.spaceSeed, workspace)
-
-	// Second pass: score each active player, reading its robust space count.
-	for player := game.Player(1); player <= 4; player++ {
-		if !state.Active(player) {
-			continue
-		}
 		m := metrics[player-1]
 		area := state.Rows() * state.Cols()
 		owned := m.normal + m.fortified + 1 // include the base
