@@ -1,8 +1,6 @@
 package search
 
-import (
-	"virusgame/game"
-)
+import "virusgame/game"
 
 const mateScore = 1_000_000_000
 

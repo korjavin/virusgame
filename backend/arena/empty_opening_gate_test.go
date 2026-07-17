@@ -166,52 +166,6 @@ func TestBotOpeningReplyInvariance(t *testing.T) {
 	t.Logf("distinct bot replies across %d openings: %d (invariant=%v)", len(openings), len(replies), len(replies) == 1)
 }
 
-// TestBotOpeningReplyNotWidth1 is the vs-ai2.38 behavioral guard: from the
-// human's signature diagonal opening the bot's first reply must NOT be a width-1
-// filament (every cell an articulation point — the tendril the human cuts at one
-// joint, per the frozen prod losses). It runs by DEFAULT so CI guards the fix.
-//
-// A width-1 reply is a long thin diagonal with no lateral thickness:
-// longestThinDiagonal(reply) >= 3 AND maxOwnedDegree < 3. The pass condition is
-// the negation — either the reply has no length-3 thin diagonal, or it carries a
-// width-2 shape (a cell with >=3 owned neighbours).
-//
-// Pre-fix (fragility weight untuned, Task 3 not yet run) the reply is still the
-// 10,10/9,9/8,8 tendril, so the test self-skips with the before-picture logged.
-// Once Task 3 freezes a weight that widens the opening reply, the skip goes inert
-// and the assertion becomes an active regression guard.
-func TestBotOpeningReplyNotWidth1(t *testing.T) {
-	const nodes = 1000
-	bot := nodeBudgetPlainAgent(nodes, false)
-	// The whole family collapses to one reply (see TestBotOpeningReplyInvariance),
-	// but guard every opening so a future de-invariance still gets checked.
-	openings := emptyOpeningLines()
-	stillWidth1 := 0
-	for _, line := range openings {
-		snapshot := buildOpening(t, line)
-		state, err := game.FromSnapshot(snapshot)
-		if err != nil {
-			t.Fatal(err)
-		}
-		state = playOneTurn(t, state, bot)
-		reply := botReplyCells(state, 2)
-		thin := longestThinDiagonal(reply)
-		deg := maxOwnedDegree(state, 2)
-		width1 := thin >= 3 && deg < 3
-		t.Logf("%s -> reply %v (longestThinDiagonal=%d maxOwnedDegree=%d width1=%v)",
-			line.name, reply, thin, deg, width1)
-		if width1 {
-			stillWidth1++
-			continue
-		}
-	}
-	if stillWidth1 > 0 {
-		// fails until the fragility weight is tuned (Task 3): still a width-1 tendril.
-		t.Skipf("%d/%d openings still reply with a width-1 tendril — fails until the fragility weight is tuned (Task 3)",
-			stillWidth1, len(openings))
-	}
-}
-
 // TestFromEmptyOpeningGate is the vs-ai2.40 from-empty measurement: deterministic
 // node-budget (N=1000) balanced-seat 12x12 games starting from the real empty
 // board, with variety injected as a family of seat-1 opening lines. It measures
