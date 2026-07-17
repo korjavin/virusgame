@@ -58,7 +58,13 @@ type GameResult struct {
 	LegalRootActions, SearchedRootActions   [4]int
 	LegalRootNeutrals, SearchedRootNeutrals [4]int
 	CompletedTurnDepth                      [4]int
-	Elapsed                                 time.Duration
+	// Placement is the 1-based finishing place per seat (index seat-1): 1 for
+	// the winner, then survivors, then eliminated players ranked by reverse
+	// elimination order (last out places higher). 0 for unseated players. Ties
+	// (multiple survivors on a maxed game, same-ply eliminations) break by
+	// ascending player number so the result stays deterministic.
+	Placement [4]int
+	Elapsed   time.Duration
 }
 
 type Report struct {
@@ -142,6 +148,7 @@ func Play(match Match) (GameResult, error) {
 		return GameResult{}, err
 	}
 	result := GameResult{}
+	var elimOrder []game.Player
 	started := time.Now()
 	for !state.GameOver() && result.Actions < match.MaxActions {
 		player := state.CurrentPlayer()
@@ -184,12 +191,39 @@ func Play(match Match) (GameResult, error) {
 		}
 		result.Actions++
 		result.Eliminations += before - activeCount(next)
+		for p := game.Player(1); int(p) <= agentCount; p++ {
+			if state.Active(p) && !next.Active(p) {
+				elimOrder = append(elimOrder, p)
+			}
+		}
 		state = next
 	}
 	result.Elapsed = time.Since(started)
 	result.Winner = state.Winner()
 	result.Maxed = !state.GameOver() && result.Actions >= match.MaxActions
+	result.Placement = placements(agentCount, elimOrder, state)
 	return result, nil
+}
+
+// placements assigns 1-based finishing places from elimination order and the
+// terminal state. Survivors rank first (ascending player number), then the
+// eliminated in reverse elimination order (last eliminated places higher).
+func placements(agentCount int, elimOrder []game.Player, state game.State) [4]int {
+	var place [4]int
+	next := 1
+	for p := game.Player(1); int(p) <= agentCount; p++ {
+		if state.Active(p) {
+			place[p-1] = next
+			next++
+		}
+	}
+	for i := len(elimOrder) - 1; i >= 0; i-- {
+		if p := elimOrder[i]; place[p-1] == 0 {
+			place[p-1] = next
+			next++
+		}
+	}
+	return place
 }
 
 // Interval is a binomial confidence interval expressed as percentages.
