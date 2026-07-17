@@ -18,7 +18,8 @@ import (
 // win-rate ranks eval quality faithfully: a better evaluator wins more from the
 // SAME nodes. It plays balanced-seat 12x12 games from N seeded openings,
 // candidate (live eval) vs the byte-frozen incumbent, and reports the candidate
-// win-rate with a Wilson 95% CI.
+// win-rate with a Wilson 95% CI. The run stops early (SPRT-style, threshold
+// 50%) once the CI clears 50%, else at the opening cap.
 //
 // Parity property: because both seats are played from every shared opening,
 // frozen-vs-frozen reads 50% — any deviation of the candidate from 50% is
@@ -39,36 +40,35 @@ func TestStrangulationEvalNodeBudget(t *testing.T) {
 		t.Skip("set VS_STRANGLER_DIFF=1 to run the node-budget incumbent-differential gate")
 	}
 	openings := stranglerOpenings(t)
-	nodes := uint64(1000)
-	if v := os.Getenv("VS_STRANGLER_NODES"); v != "" {
-		parsed, err := strconv.ParseUint(v, 10, 64)
-		if err != nil || parsed < 1 {
-			t.Fatalf("VS_STRANGLER_NODES=%q must be a positive integer", v)
-		}
-		nodes = parsed
-	}
+	nodes := uint64(envInt(t, "VS_STRANGLER_NODES", 1000))
 	contender := TelemetryNodeBudget(nodes, false)
 	incumbent := TelemetryNodeBudget(nodes, true)
 
-	report := playBalancedOpenings(t, "candidate vs incumbent", openings, contender, incumbent)
-	interval := Wilson95(report.Wins, report.Games)
-	t.Logf("12x12 node-budget(%d) head-to-head candidate vs frozen incumbent: %s wilson95=[%.1f%%, %.1f%%]",
-		nodes, report, interval.Low, interval.High)
+	result := playSequentialOpenings(t, "candidate vs incumbent", openings, 50, sequentialMinGames, contender, incumbent)
+	interval := Wilson95(result.Wins, result.Games)
+	t.Logf("12x12 node-budget(%d) head-to-head candidate vs frozen incumbent: %s wilson95=[%.1f%%, %.1f%%] games-played=%d/%d",
+		nodes, result.Report, interval.Low, interval.High, result.Games, 2*openings)
 }
 
 // stranglerOpenings returns the shared opening count for the strangler gates,
 // overridable via VS_STRANGLER_OPENINGS.
 func stranglerOpenings(t *testing.T) int {
+	return envInt(t, "VS_STRANGLER_OPENINGS", 40)
+}
+
+// envInt returns def, or the value of the named env var, which must parse as
+// a positive integer.
+func envInt(t *testing.T, name string, def int) int {
 	t.Helper()
-	openings := 40
-	if v := os.Getenv("VS_STRANGLER_OPENINGS"); v != "" {
-		parsed, err := strconv.Atoi(v)
-		if err != nil || parsed < 1 {
-			t.Fatalf("VS_STRANGLER_OPENINGS=%q must be a positive integer", v)
-		}
-		openings = parsed
+	v := os.Getenv(name)
+	if v == "" {
+		return def
 	}
-	return openings
+	parsed, err := strconv.Atoi(v)
+	if err != nil || parsed < 1 {
+		t.Fatalf("%s=%q must be a positive integer", name, v)
+	}
+	return parsed
 }
 
 // playBalancedOpenings plays both seats of every seeded 12x12 opening between
