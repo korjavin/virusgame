@@ -607,7 +607,7 @@ func findChild(children []child, action game.Action) (child, bool) {
 }
 
 func TestLeverOpponentStrangleOrdersSqueezeFirst(t *testing.T) {
-	defer SetSearchLevers(true, true, true)
+	defer SetSearchLevers(true, false, false)
 	// Root is player 1 (searcher built from a player-1-to-move state), but the
 	// node being ordered has player 2 to move — an opponent node in 1v1.
 	root := strangleFixture(t, 1)
@@ -642,7 +642,7 @@ func TestLeverOpponentStrangleOrdersSqueezeFirst(t *testing.T) {
 }
 
 func TestLeverOpponentStrangleOffMatchesBaseline(t *testing.T) {
-	defer SetSearchLevers(true, true, true)
+	defer SetSearchLevers(true, false, false)
 	root := strangleFixture(t, 1)
 	opp := strangleFixture(t, 2)
 	s := newSearcher(context.Background(), root)
@@ -692,7 +692,7 @@ func threatFixture(t *testing.T) game.State {
 }
 
 func TestLeverThreatExtendFiresAndIsBounded(t *testing.T) {
-	defer SetSearchLevers(true, true, true)
+	defer SetSearchLevers(true, false, false)
 	state := threatFixture(t)
 
 	// Sanity: player 2 really does have a capture of our (2,2) Normal.
@@ -742,7 +742,7 @@ func TestLeverThreatExtendFiresAndIsBounded(t *testing.T) {
 }
 
 func TestLeverThreatExtendOffMatchesNonExtended(t *testing.T) {
-	defer SetSearchLevers(true, true, true)
+	defer SetSearchLevers(true, false, false)
 	state := threatFixture(t)
 
 	// Hold ordering+rootSafety fixed; only the extend lever moves. Turning it off
@@ -795,7 +795,7 @@ func catastropheChild(t *testing.T) game.State {
 }
 
 func TestLeverRootSafetyDropsCatastrophe(t *testing.T) {
-	defer SetSearchLevers(true, true, true)
+	defer SetSearchLevers(true, false, false)
 	bad := catastropheChild(t)
 	// Sanity: player 2's capture of (1,1) really strangles player 1 dead.
 	if dead := play(t, bad, move(1, 1)); dead.Active(1) {
@@ -839,7 +839,7 @@ func TestLeverRootSafetyDropsCatastrophe(t *testing.T) {
 }
 
 func TestLeverRootSafetyOffKeepsCatastrophe(t *testing.T) {
-	defer SetSearchLevers(true, true, true)
+	defer SetSearchLevers(true, false, false)
 	children := []child{
 		{action: move(9, 9), state: catastropheChild(t)},
 		{action: move(8, 8), state: strangleFixture(t, 2)},

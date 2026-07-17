@@ -18,7 +18,8 @@ import (
 // It is a measurement, not a gate: env-gated and slow, it makes no pass/fail
 // assertion beyond the illegal/stalled/maxed guard inside playBalancedOpenings.
 // It mutates the package-global search levers via SetSearchLevers, so it
-// restores the all-on default in a deferred cleanup.
+// restores the shipped default (lever 1 on, levers 2 & 3 off) in a deferred
+// cleanup.
 //
 // Reproduce (full sweep, ~40 openings = 80 games per config):
 //
@@ -31,7 +32,7 @@ func TestStranglerLeverSweep(t *testing.T) {
 	if os.Getenv("VS_LEVER_SWEEP") != "1" {
 		t.Skip("set VS_LEVER_SWEEP=1 to run the slow strangler lever sweep")
 	}
-	defer search.SetSearchLevers(true, true, true) // restore shipped default
+	defer search.SetSearchLevers(true, false, false) // restore shipped default (levers 2 & 3 off)
 
 	openings := stranglerOpenings(t)
 	const nodes = 1000
