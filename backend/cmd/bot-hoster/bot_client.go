@@ -77,7 +77,6 @@ type Bot struct {
 	session  *gamesearch.Session
 	searchMu sync.Mutex
 	ponder   bool
-	ponderFn func(context.Context, game.State) (gamesearch.Result, bool)
 }
 
 type outboundMessage struct {
@@ -583,9 +582,7 @@ func (b *Bot) startSearch() {
 	position := b.Position
 	var fn func(context.Context, game.State) (gamesearch.Result, bool)
 	if ponderMode {
-		if fn = b.ponderFn; fn == nil {
-			fn = b.session.Ponder
-		}
+		fn = b.session.Ponder
 	} else {
 		if fn = b.choose; fn == nil {
 			fn = b.session.Choose
