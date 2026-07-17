@@ -11,10 +11,13 @@ type Position struct {
 }
 
 func NewPosition(state State) Position {
-	p := Position{state: state, moves: state.moveTargets(state.current), analyzed: true}
+	// connected(current) is the same pre-move floodfill needed by both the move
+	// frontier and strategicNeutralPairs; compute it once and share it.
+	connected := state.connected(state.current)
+	p := Position{state: state, moves: state.moveTargetsFrom(state.current, connected), analyzed: true}
 	if p.canPlaceNeutrals() {
 		p.owned = p.scanOwnedNormals()
-		p.searchPairs = p.strategicNeutralPairs(p.owned)
+		p.searchPairs = p.strategicNeutralPairs(p.owned, connected)
 	}
 	return p
 }
@@ -81,7 +84,7 @@ func (p Position) ForEachSearchAction(yield func(Action) bool) {
 	}
 	pairs := p.searchPairs
 	if !p.analyzed {
-		pairs = p.strategicNeutralPairs(owned)
+		pairs = p.strategicNeutralPairs(owned, p.state.connected(p.state.current))
 	}
 	for _, pair := range pairs {
 		if !yield(Action{Kind: PlaceNeutrals, Neutrals: pair}) {
@@ -148,12 +151,11 @@ func (p Position) scanOwnedNormals() []Pos {
 // (including non-adjacent) two-vertex separators involving those cells. Pair
 // classes receive reserved representation before remaining capacity is filled,
 // so a large defensive class cannot starve fillers or separators.
-func (p Position) strategicNeutralPairs(owned []Pos) [][2]Pos {
+func (p Position) strategicNeutralPairs(owned []Pos, connected []bool) [][2]Pos {
 	s, player := p.state, p.state.current
 	if !p.canPlaceNeutrals() {
 		return nil
 	}
-	connected := s.connected(player)
 	scratch := newArticulationScratch(len(s.cells))
 	cuts := append([]bool(nil), articulationCells(s, connected, -1, scratch)...)
 	threatened := make([]bool, len(s.cells))

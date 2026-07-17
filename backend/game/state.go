@@ -365,7 +365,13 @@ func (s *State) hasMove(player Player) bool {
 // legal frontier in stable board order. This is equivalent to legalMove over
 // every cell without repeating a full connectivity traversal for each cell.
 func (s *State) moveTargets(player Player) []Pos {
-	connected := s.connected(player)
+	return s.moveTargetsFrom(player, s.connected(player))
+}
+
+// moveTargetsFrom derives a player's legal frontier from a precomputed
+// connectivity mask, so callers holding that mask (the search Position) do not
+// repeat the floodfill.
+func (s *State) moveTargetsFrom(player Player, connected []bool) []Pos {
 	frontier := make([]bool, len(s.cells))
 	for index, isConnected := range connected {
 		if !isConnected {
