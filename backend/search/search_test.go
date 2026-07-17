@@ -413,7 +413,10 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 // minimax fixture's Evaluations 916->914 (the reshaped tree reaches the 1000-node
 // cap having evaluated two fewer leaves). Actions/Scores/Depth unchanged; both
 // maxn fixtures are unchanged (threat extensions are 1v1-only). Task 5
-// re-verifies the final all-on pins.
+// re-verifies the final all-on pins: an isolation sweep confirms Lever 1
+// (opponent ordering) and Lever 3 (root safety) leave every fixture
+// byte-identical to all-off on this corpus, so Lever 2 alone accounts for the
+// shift above and the pins below are exactly what the default all-on code emits.
 func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
