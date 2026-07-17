@@ -269,23 +269,23 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			if opponent == player || !state.Active(opponent) {
 				continue
 			}
+			// vs-ai2.44 lever 1: scale predation credit by how far the target
+			// opponent leads its fair share, so cutting the leader pays more than
+			// cutting a trailer. Clamp mult >= 100 (10%) so a trailing target
+			// never inverts into a penalty. Per-opponent, not per-cut. mult stays
+			// 1000 on the default/gated path, leaving the credit byte-identical.
+			mult := 1000
+			if active > 2 && leaderGain != 0 {
+				delta := share(opponent) - fairShare
+				if mult = 1000 + leaderGain*delta/100; mult < 100 {
+					mult = 100
+				}
+			}
 			for index, cut := range metrics[opponent-1].articulation {
 				if cut && adjacentConnected(state, index, own.connectedCells) {
 					loss := int(metrics[opponent-1].cutLoss[index])
 					b := 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
-					// vs-ai2.44 lever 1: scale predation credit by how far the
-					// target opponent leads its fair share, so cutting the
-					// leader pays more than cutting a trailer. Clamp mult >= 100
-					// (10%) so a trailing target never inverts into a penalty.
-					if active > 2 && leaderGain != 0 {
-						delta := share(opponent) - fairShare
-						mult := 1000 + leaderGain*delta/100
-						if mult < 100 {
-							mult = 100
-						}
-						b = b * mult / 1000
-					}
-					raw[player-1] += b
+					raw[player-1] += b * mult / 1000
 				}
 			}
 		}
@@ -338,10 +338,14 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 	// path are untouched. The /1_000_000 keeps magnitude comparable; scale swept.
 	if leversLive && survivalGain != 0 {
 		for player := game.Player(1); player <= 4; player++ {
-			if !state.Active(player) || share(player) >= fairShare {
+			if !state.Active(player) {
 				continue
 			}
-			behind := fairShare - share(player)
+			s := share(player)
+			if s >= fairShare {
+				continue
+			}
+			behind := fairShare - s
 			reach := normalized(metrics[player-1].mobility, size, 1) + normalized(space[player-1], size, spaceRaceWeight)
 			raw[player-1] += survivalGain * behind * reach / 1_000_000
 		}
