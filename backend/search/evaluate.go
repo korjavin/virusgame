@@ -331,6 +331,22 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		}
 	}
 
+	// vs-ai2.44 lever 3: survival-when-behind. A player trailing its fair share
+	// gets a boost proportional to how far behind it is, scaled by its mobility
+	// and Voronoi space, biasing it toward staying alive rather than trading
+	// down. Gated behind active > 2 && survivalGain != 0, so 1v1 and the default
+	// path are untouched. The /1_000_000 keeps magnitude comparable; scale swept.
+	if leversLive && survivalGain != 0 {
+		for player := game.Player(1); player <= 4; player++ {
+			if !state.Active(player) || share(player) >= fairShare {
+				continue
+			}
+			behind := fairShare - share(player)
+			reach := normalized(metrics[player-1].mobility, size, 1) + normalized(space[player-1], size, spaceRaceWeight)
+			raw[player-1] += survivalGain * behind * reach / 1_000_000
+		}
+	}
+
 	for player := game.Player(1); player <= 4; player++ {
 		if !state.Active(player) {
 			utility[player-1] = raw[player-1]

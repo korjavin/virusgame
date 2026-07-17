@@ -677,6 +677,109 @@ func TestBaseProxGainDoesNotAffectTwoPlayer(t *testing.T) {
 	}
 }
 
+// survivalTerms recomputes, for every active player, the vs-ai2.44 lever-3
+// survival-when-behind contribution to raw under the CURRENT survivalGain:
+// survivalGain * behind * reach / 1_000_000 where behind = fairShare - share(p)
+// (only when share(p) < fairShare, else 0) and reach mixes mobility and Voronoi
+// space. It mirrors production so the two agree player-for-player.
+func survivalTerms(t *testing.T, state game.State) [4]int {
+	t.Helper()
+	size := state.Rows() * state.Cols()
+	w := &evalWorkspace{}
+	w.ensure(size)
+	cells := snapshotCellsInto(state, w.cells)
+	connected := allConnectedInto(state, cells, w)
+	space := spaceRace(state, cells, connected, w)
+	var m [4]playerMetrics
+	var stand [4]int
+	total, active := 0, 0
+	for p := game.Player(1); p <= 4; p++ {
+		if !state.Active(p) {
+			continue
+		}
+		active++
+		idx := p - 1
+		m[idx] = analyzeWithConnectivity(state, p, cells, connected, &w.scratch, w.articulation[idx], w.cutLoss[idx])
+		stand[idx] = space[idx] + m[idx].normal + m[idx].fortified
+		total += stand[idx]
+	}
+	fair := 1000 / active
+	share := func(p game.Player) int { return stand[p-1] * 1000 / max(1, total) }
+	var terms [4]int
+	for p := game.Player(1); p <= 4; p++ {
+		if !state.Active(p) || share(p) >= fair {
+			continue
+		}
+		behind := fair - share(p)
+		reach := normalized(m[p-1].mobility, size, 1) + normalized(space[p-1], size, spaceRaceWeight)
+		terms[p-1] = survivalGain * behind * reach / 1_000_000
+	}
+	return terms
+}
+
+// TestSurvivalGainRaisesUtilityWhenBehind pins lever 3's direction: when player
+// 1 trails its fair share and its survival term dominates, enabling survivalGain
+// raises utility[0]; when no active player is behind (all survival terms zero),
+// the eval is unchanged (the share < fairShare guard).
+func TestSurvivalGainRaisesUtilityWhenBehind(t *testing.T) {
+	restore := survivalGain
+	defer func() { survivalGain = restore }()
+
+	// Even fixture: a fresh symmetric 4p board. All four corner regions are equal
+	// under the rectangle's reflections, so every share equals fairShare, no
+	// player is strictly behind, and survivalGain is a no-op (the guard).
+	even := mustState(t, 12, 20, 4)
+	survivalGain = 0
+	evenBase := evaluateAll(even)
+	survivalGain = 100000
+	if terms := survivalTerms(t, even); terms != [4]int{} {
+		t.Fatalf("symmetric board has nonzero survival terms %v", terms)
+	}
+	if got := evaluateAll(even); got != evenBase {
+		t.Fatalf("symmetric board eval changed with survivalGain %v -> %v", evenBase, got)
+	}
+	survivalGain = restore
+
+	var sawBehind bool
+	for seed := int64(0); seed < 800 && !sawBehind; seed++ {
+		state := randomReachableState(t, 12, 20, 4, seed)
+		if activeCount(state) != 4 {
+			continue
+		}
+		survivalGain = 0
+		base := evaluateAll(state)
+		survivalGain = 500
+		terms := survivalTerms(t, state)
+		got := evaluateAll(state)
+		survivalGain = restore
+		if terms[0]-(terms[1]+terms[2]+terms[3])/3 >= 2 {
+			if got[0] <= base[0] {
+				t.Fatalf("seed %d: survival boost when behind did not raise utility %d -> %d", seed, base[0], got[0])
+			}
+			sawBehind = true
+		}
+	}
+	if !sawBehind {
+		t.Fatal("no behind fixture found")
+	}
+}
+
+// TestSurvivalGainDoesNotAffectTwoPlayer pins the active<=2 gate: any
+// survivalGain leaves a 2-player eval byte-identical to the default.
+func TestSurvivalGainDoesNotAffectTwoPlayer(t *testing.T) {
+	restore := survivalGain
+	defer func() { survivalGain = restore }()
+	for _, seed := range []int64{1, 4, 6} {
+		state := randomReachableState(t, 12, 20, 2, seed)
+		survivalGain = 0
+		want := evaluateAll(state)
+		survivalGain = 100000
+		if got := evaluateAll(state); got != want {
+			t.Fatalf("seed %d: 2p eval changed with survivalGain %v -> %v", seed, want, got)
+		}
+	}
+}
+
 func absInt(value int) int {
 	if value < 0 {
 		return -value
