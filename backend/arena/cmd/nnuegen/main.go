@@ -250,6 +250,17 @@ func truncatePartialRecord(path string) error {
 
 // cloneSet returns a shallow copy of s (nil for nil), so each worker mutates its
 // own dedupe set without racing siblings.
+//
+// ponytail: per-worker dedupe only. Two workers can each emit the same
+// fingerprint (one line per shard), so a multi-worker fresh run holds fewer
+// unique positions than the printed total, and the trainer over-weights the
+// overlap. Accepted here because global dedupe needs a shared locked set, which
+// would forfeit the per-shard byte-determinism the acceptance criteria require
+// (write order across workers becomes non-deterministic). Committed artifacts
+// (smoke fixture, determinism test) run -workers 1, so they are unaffected; the
+// -resume path already merges every shard's fingerprints into one global set.
+// Upgrade path for the production run: assign each fingerprint to a fixed shard
+// by hash%workers so dedupe is global yet still order-independent.
 func cloneSet(s map[string]bool) map[string]bool {
 	if s == nil {
 		return nil
