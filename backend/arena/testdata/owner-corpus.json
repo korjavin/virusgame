@@ -1,0 +1,101 @@
+[
+  {
+    "source_id": "21d3eaf2-7d31-4890-a89d-2d5d37e56e93",
+    "players": [
+      "HappyTiger9",
+      "Bot 7209"
+    ],
+    "rows": 12,
+    "cols": 12,
+    "termination": "no_moves",
+    "terminal_fingerprint": "9d3a905ab22eb0ae"
+  },
+  {
+    "source_id": "27b1d893-8de3-4986-a09a-519a1f17ec0e",
+    "players": [
+      "LuckyViper12",
+      "Bot 1583"
+    ],
+    "rows": 12,
+    "cols": 12,
+    "termination": "no_moves",
+    "terminal_fingerprint": "ecc58b6ca6c4db3b"
+  },
+  {
+    "source_id": "37239b2d-9880-435b-963b-3520623bcdf6",
+    "players": [
+      "TinyRhino75",
+      "Bot 5075"
+    ],
+    "rows": 12,
+    "cols": 12,
+    "termination": "no_moves",
+    "terminal_fingerprint": "fad8fb3ced5c277d"
+  },
+  {
+    "source_id": "54f1a209-0094-4985-b3f3-acd4a218a2d2",
+    "players": [
+      "DarkFox10",
+      "Bot 5650"
+    ],
+    "rows": 12,
+    "cols": 12,
+    "termination": "no_moves",
+    "terminal_fingerprint": "7855bf9df3eeb706"
+  },
+  {
+    "source_id": "745bfb2d-6c59-4152-899c-ffebdb5c537a",
+    "players": [
+      "CoolViper24",
+      "Bot 1583"
+    ],
+    "rows": 12,
+    "cols": 12,
+    "termination": "no_moves",
+    "terminal_fingerprint": "e14833f33890dc35"
+  },
+  {
+    "source_id": "81a72972-9d87-4b9c-b027-a01433b5fb8a",
+    "players": [
+      "HappyCheetah22",
+      "Bot 7622"
+    ],
+    "rows": 12,
+    "cols": 12,
+    "termination": "no_moves",
+    "terminal_fingerprint": "df828109d2260bb8"
+  },
+  {
+    "source_id": "b06f1613-1813-4eab-bdfc-14dde92238fb",
+    "players": [
+      "SneakyViper7",
+      "Bot 7209"
+    ],
+    "rows": 12,
+    "cols": 12,
+    "termination": "no_moves",
+    "terminal_fingerprint": "4350c24f8c7748ea"
+  },
+  {
+    "source_id": "b6c2e45c-6d17-47b1-9939-9cf557ece52e",
+    "players": [
+      "BoldFalcon13",
+      "Bot 8189"
+    ],
+    "rows": 12,
+    "cols": 12,
+    "termination": "no_moves",
+    "terminal_fingerprint": "16dc6fc9f8d5a6ca"
+  },
+  {
+    "source_id": "d8a32c15-efe4-4be3-bb7e-f366e5fd0ff6",
+    "players": [
+      "SilverLion5",
+      "Bot 8189"
+    ],
+    "rows": 12,
+    "cols": 12,
+    "termination": "no_moves",
+    "terminal_fingerprint": "d6e4b9828784b2f7"
+  }
+]

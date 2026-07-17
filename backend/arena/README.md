@@ -138,6 +138,33 @@ VS_LADDER=1 go test ./arena -run TestLadderReport -v -timeout 240m
 `VS_LADDER_NODES` (default 1000) and `VS_LADDER_OPENINGS` (default 40, cap =
 2x openings) override the node budget and sample size.
 
+## Owner-loss corpus
+
+Every 1v1 game a human wins against the bot is a proven hole. `replayimport
+-fetch` harvests them all in one command: it pulls the live feed, keeps only
+human wins (`result==1`, no third player), dedupes against what is already
+committed, replays each through the authoritative rules, writes it as a frozen
+testdata anchor, and pins its terminal-position fingerprint in
+`testdata/owner-corpus.json` (the data-form allowlist).
+
+```sh
+cd backend
+go run ./cmd/replayimport -fetch 20   # limit must be 5, 10, or 20
+```
+
+The feed is a rolling window, so run it periodically to accumulate new losses;
+output is deterministic (only new games are written, manifest sorted by id).
+`TestOwnerLossCorpusAnchors` pins every entry (terminal fingerprint, bot
+eliminated in seat 2). The standing passivity dashboard prints per-game bot
+attack-move counts:
+
+```sh
+VS_OWNER_CORPUS=1 go test ./arena -run TestOwnerLossCorpusDiagnostic -v
+```
+
+The archived-bytes path (`-input saved.json`) is unchanged for reviewing exact
+fetched bytes before import.
+
 ## Production regressions
 
 Immutable production fixtures were imported from `GET /last_games?limit=20`
