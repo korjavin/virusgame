@@ -259,7 +259,6 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		fairShare = 1000 / active
 	}
 	share := func(p game.Player) int { return stand[p-1] * 1000 / max(1, total) }
-	_, _ = fairShare, share // consumed by the levers in tasks below
 
 	for player := game.Player(1); player <= 4; player++ {
 		if !state.Active(player) {
@@ -273,7 +272,20 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			for index, cut := range metrics[opponent-1].articulation {
 				if cut && adjacentConnected(state, index, own.connectedCells) {
 					loss := int(metrics[opponent-1].cutLoss[index])
-					raw[player-1] += 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
+					b := 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
+					// vs-ai2.44 lever 1: scale predation credit by how far the
+					// target opponent leads its fair share, so cutting the
+					// leader pays more than cutting a trailer. Clamp mult >= 100
+					// (10%) so a trailing target never inverts into a penalty.
+					if active > 2 && leaderGain != 0 {
+						delta := share(opponent) - fairShare
+						mult := 1000 + leaderGain*delta/100
+						if mult < 100 {
+							mult = 100
+						}
+						b = b * mult / 1000
+					}
+					raw[player-1] += b
 				}
 			}
 		}

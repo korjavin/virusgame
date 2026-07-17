@@ -466,6 +466,109 @@ func TestLeversDefaultOffAreNoOp(t *testing.T) {
 	}
 }
 
+// predationWeight recomputes, for player 1 in a 3-player position, the
+// credit-weighted lead of every opponent it can cut: sum over each articulation
+// cut of opponent o adjacent to player 1's territory of
+// credit(o,cut) * (share(o) - fairShare). vs-ai2.44 lever 1 scales predation
+// credit by exactly this quantity, so the sign of the weight is the sign of the
+// utility[0] change when leaderGain turns on (no clamp fires at leaderGain=80
+// because share-fairShare is bounded well above -1125). It mirrors production's
+// per-index metric buffers so the two agree cut-for-cut.
+func predationWeight(t *testing.T, state game.State) (weight int, hasCut bool) {
+	t.Helper()
+	size := state.Rows() * state.Cols()
+	w := &evalWorkspace{}
+	w.ensure(size)
+	cells := snapshotCellsInto(state, w.cells)
+	connected := allConnectedInto(state, cells, w)
+	space := spaceRace(state, cells, connected, w)
+	var m [4]playerMetrics
+	var stand [4]int
+	total, active := 0, 0
+	for p := game.Player(1); p <= 4; p++ {
+		if !state.Active(p) {
+			continue
+		}
+		active++
+		idx := p - 1
+		m[idx] = analyzeWithConnectivity(state, p, cells, connected, &w.scratch, w.articulation[idx], w.cutLoss[idx])
+		stand[idx] = space[idx] + m[idx].normal + m[idx].fortified
+		total += stand[idx]
+	}
+	fair := 1000 / active
+	share := func(p game.Player) int { return stand[p-1] * 1000 / max(1, total) }
+	own := m[0]
+	for opp := game.Player(2); opp <= 4; opp++ {
+		if !state.Active(opp) {
+			continue
+		}
+		for index, cut := range m[opp-1].articulation {
+			if cut && adjacentConnected(state, index, own.connectedCells) {
+				loss := int(m[opp-1].cutLoss[index])
+				credit := 150 + ratio(loss, max(1, m[opp-1].connected))/2
+				weight += credit * (share(opp) - fair)
+				hasCut = true
+			}
+		}
+	}
+	return weight, hasCut
+}
+
+// TestLeaderGainMovesPredationTowardLeader pins that enabling leaderGain raises
+// player 1's utility when it predates a leading opponent and lowers it when it
+// predates a trailing one — the leader-aware direction of lever 1.
+func TestLeaderGainMovesPredationTowardLeader(t *testing.T) {
+	restore := leaderGain
+	defer func() { leaderGain = restore }()
+	var sawLeader, sawTrailer bool
+	for seed := int64(0); seed < 400 && !(sawLeader && sawTrailer); seed++ {
+		state := randomReachableState(t, 7, 7, 3, seed)
+		if activeCount(state) != 3 {
+			continue
+		}
+		weight, has := predationWeight(t, state)
+		if !has || weight == 0 {
+			continue
+		}
+		leaderGain = 0
+		base := evaluateAll(state)[0]
+		leaderGain = 80
+		got := evaluateAll(state)[0]
+		leaderGain = restore
+		switch {
+		case weight > 0:
+			if got <= base {
+				t.Fatalf("seed %d: predating leader did not raise utility %d -> %d", seed, base, got)
+			}
+			sawLeader = true
+		default:
+			if got >= base {
+				t.Fatalf("seed %d: predating trailer did not lower utility %d -> %d", seed, base, got)
+			}
+			sawTrailer = true
+		}
+	}
+	if !sawLeader || !sawTrailer {
+		t.Fatalf("no fixtures found: leader=%v trailer=%v", sawLeader, sawTrailer)
+	}
+}
+
+// TestLeaderGainDoesNotAffectTwoPlayer pins the active<=2 gate: any leaderGain
+// leaves a 2-player eval byte-identical to the default.
+func TestLeaderGainDoesNotAffectTwoPlayer(t *testing.T) {
+	restore := leaderGain
+	defer func() { leaderGain = restore }()
+	for _, seed := range []int64{1, 4, 6} {
+		state := randomReachableState(t, 12, 20, 2, seed)
+		leaderGain = 0
+		want := evaluateAll(state)
+		leaderGain = 100000
+		if got := evaluateAll(state); got != want {
+			t.Fatalf("seed %d: 2p eval changed with leaderGain %v -> %v", seed, want, got)
+		}
+	}
+}
+
 func absInt(value int) int {
 	if value < 0 {
 		return -value
