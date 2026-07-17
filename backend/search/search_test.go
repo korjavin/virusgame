@@ -83,7 +83,7 @@ func TestNeutralActionsAreSearchedAsWholeTurns(t *testing.T) {
 		move(4, 4), move(4, 5), move(5, 4),
 	)
 	s := newSearcher(context.Background(), state)
-	children, ok := s.orderedChildren(state)
+	children, ok := s.orderedChildren(state, game.Action{}, false)
 	if !ok {
 		t.Fatal("ordering canceled")
 	}
@@ -397,6 +397,10 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 // Pins exact search Results under the vs-ai2.34 space-race evaluator
 // (spaceRaceWeight = 32); no longer tracks origin/main, whose evaluator
 // lacked the space term. Scores changed with the re-pin; actions did not.
+// vs-ai2.41 re-pin: TT best-move ordering + one searcher hoisted across the
+// ID loop + fail-soft bound fix. Only the budget-1000 minimax Action moved
+// (equal-Score tie now broken by the persisted TT move); Nodes/Evals/Score
+// unchanged.
 func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
@@ -416,7 +420,7 @@ func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 		{
 			name: "minimax", state: two,
 			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 216, Evaluations: 199},
-			wantNodes: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
+			wantNodes: Result{Action: move(3, 4), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
 		},
 		{
 			name: "maxn", state: three,

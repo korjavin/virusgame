@@ -17,6 +17,13 @@ const (
 	infScore         = 1 << 60
 )
 
+// TT bound flags for fail-soft alpha-beta stores.
+const (
+	flagExact uint8 = iota
+	flagLower
+	flagUpper
+)
+
 type Result struct {
 	Action          game.Action
 	Score           int
@@ -28,9 +35,11 @@ type Result struct {
 }
 
 type tableEntry struct {
-	depth  int
-	ply    int
-	values [4]int
+	depth      int
+	ply        int
+	flag       uint8
+	bestAction game.Action
+	values     [4]int
 }
 
 type searcher struct {
@@ -58,21 +67,18 @@ func chooseNodeBudget(state game.State, limit uint64) (Result, bool) {
 		return Result{}, false
 	}
 	best := Result{Action: fallback}
-	var nodes, evaluations uint64
-	for depth := 1; depth <= maxDepth && nodes < limit; depth++ {
-		s := newSearcher(context.Background(), state)
-		s.nodeLimit = limit - nodes
+	s := newSearcher(context.Background(), state)
+	s.nodeLimit = limit
+	for depth := 1; depth <= maxDepth && s.nodes < limit; depth++ {
 		result, complete := s.atDepth(state, depth)
-		nodes += s.nodes
-		evaluations += s.evaluations
 		if !complete {
 			break
 		}
 		best = result
 		best.Depth = depth
 	}
-	best.Nodes, best.Evaluations = nodes, evaluations
-	best.BudgetExhausted = nodes >= limit
+	best.Nodes, best.Evaluations = s.nodes, s.evaluations
+	best.BudgetExhausted = s.nodes >= limit
 	best.SearchComplete = best.Depth == maxDepth
 	return best, true
 }
@@ -121,19 +127,16 @@ func Choose(ctx context.Context, state game.State) (Result, bool) {
 	}
 
 	best := Result{Action: fallback}
-	totalNodes, totalEvaluations := uint64(0), uint64(0)
+	s := newSearcher(ctx, state)
 	for depth := 1; depth <= maxDepth; depth++ {
-		s := newSearcher(ctx, state)
 		result, complete := s.atDepth(state, depth)
-		totalNodes += s.nodes
-		totalEvaluations += s.evaluations
 		if !complete {
 			break
 		}
 		best = result
 		best.Depth = depth
-		best.Nodes = totalNodes
-		best.Evaluations = totalEvaluations
+		best.Nodes = s.nodes
+		best.Evaluations = s.evaluations
 	}
 	return best, true
 }
@@ -152,7 +155,9 @@ func newSearcher(ctx context.Context, state game.State) *searcher {
 }
 
 func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
-	children, ok := s.orderedChildren(state)
+	key := stateHash(state)
+	rootEntry, hasRoot := s.table[key]
+	children, ok := s.orderedChildren(state, rootEntry.bestAction, hasRoot)
 	if !ok || len(children) == 0 {
 		return Result{}, ok
 	}
@@ -181,6 +186,7 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 			alpha = score
 		}
 	}
+	s.table[key] = tableEntry{depth: depth, ply: 0, flag: flagExact, bestAction: best.Action, values: [4]int{best.Score}}
 	return best, true
 }
 
@@ -197,10 +203,27 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		return evaluateWithWorkspace(state, s.root, &s.eval), true
 	}
 	key := stateHash(state)
-	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
-		return entry.values[0], true
+	entry, hit := s.table[key]
+	if hit && entry.depth >= depth && entry.ply == ply {
+		switch entry.flag {
+		case flagExact:
+			return entry.values[0], true
+		case flagLower:
+			if entry.values[0] >= beta {
+				return entry.values[0], true
+			}
+			alpha = max(alpha, entry.values[0])
+		case flagUpper:
+			if entry.values[0] <= alpha {
+				return entry.values[0], true
+			}
+			beta = min(beta, entry.values[0])
+		}
+		if alpha >= beta {
+			return entry.values[0], true
+		}
 	}
-	children, complete := s.orderedChildren(state)
+	children, complete := s.orderedChildren(state, entry.bestAction, hit)
 	if !complete {
 		return 0, false
 	}
@@ -209,12 +232,13 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		return evaluateWithWorkspace(state, s.root, &s.eval), true
 	}
 
+	alphaOrig, betaOrig := alpha, beta
 	maximizing := state.CurrentPlayer() == s.root
 	best := infScore
 	if maximizing {
 		best = -infScore
 	}
-	cut := false
+	var bestAction game.Action
 	for _, child := range children {
 		score, ok := s.minimax(child.state, depth-1, alpha, beta, ply+1)
 		if !ok {
@@ -222,29 +246,30 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		}
 		if maximizing {
 			if score > best {
-				best = score
+				best, bestAction = score, child.action
 			}
 			if best > alpha {
 				alpha = best
 			}
 		} else {
 			if score < best {
-				best = score
+				best, bestAction = score, child.action
 			}
 			if best < beta {
 				beta = best
 			}
 		}
 		if alpha >= beta {
-			cut = true
 			break
 		}
 	}
-	if !cut {
-		var values [4]int
-		values[0] = best
-		s.table[key] = tableEntry{depth: depth, ply: ply, values: values}
+	flag := flagExact
+	if best <= alphaOrig {
+		flag = flagUpper
+	} else if best >= betaOrig {
+		flag = flagLower
 	}
+	s.table[key] = tableEntry{depth: depth, ply: ply, flag: flag, bestAction: bestAction, values: [4]int{best}}
 	return best, true
 }
 
@@ -261,10 +286,11 @@ func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 		return evaluateAllWithWorkspace(state, &s.eval), true
 	}
 	key := stateHash(state)
-	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
+	entry, hit := s.table[key]
+	if hit && entry.depth >= depth && entry.ply == ply {
 		return entry.values, true
 	}
-	children, complete := s.orderedChildren(state)
+	children, complete := s.orderedChildren(state, entry.bestAction, hit)
 	if !complete {
 		return [4]int{}, false
 	}
@@ -276,16 +302,17 @@ func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 	player := state.CurrentPlayer()
 	var best [4]int
 	best[player-1] = -infScore
+	var bestAction game.Action
 	for _, child := range children {
 		values, ok := s.maxN(child.state, depth-1, ply+1)
 		if !ok {
 			return [4]int{}, false
 		}
 		if values[player-1] > best[player-1] {
-			best = values
+			best, bestAction = values, child.action
 		}
 	}
-	s.table[key] = tableEntry{depth: depth, ply: ply, values: best}
+	s.table[key] = tableEntry{depth: depth, ply: ply, flag: flagExact, bestAction: bestAction, values: best}
 	return best, true
 }
 
@@ -343,7 +370,7 @@ type child struct {
 	order  int
 }
 
-func (s *searcher) orderedChildren(state game.State) ([]child, bool) {
+func (s *searcher) orderedChildren(state game.State, ttMove game.Action, hasTT bool) ([]child, bool) {
 	pos := game.NewPosition(state)
 	actor := state.CurrentPlayer()
 	beforeActive := activeCount(state)
@@ -357,6 +384,9 @@ func (s *searcher) orderedChildren(state game.State) ([]child, bool) {
 		target, _ := state.At(action.Target)
 		next := pos.ApplySearch(action).State()
 		order := 0
+		if hasTT && action == ttMove {
+			order += 10_000_000
+		}
 		if next.GameOver() && next.Winner() == actor {
 			order += 1_000_000
 		}
