@@ -52,6 +52,40 @@ func quantVec(v []float64) QuantVec {
 
 func (qv QuantVec) at(i int) float64 { return float64(qv.Q[i]) * qv.Scale }
 
+// checkFinite fails if training diverged, leaving Inf/NaN in the model. Without
+// this, ExportGo emits e.g. `var B2 float64 = +Inf` or `const Mean = NaN` — valid
+// %v output but undefined Go identifiers, so the weights file silently fails to
+// compile later (and NaN weights would quantize to a silent 0). Catch it here.
+func checkFinite(t *Trained) error {
+	bad := func(name string, x float64) error {
+		if math.IsInf(x, 0) || math.IsNaN(x) {
+			return fmt.Errorf("training diverged: non-finite %s (%v); try a lower -lr", name, x)
+		}
+		return nil
+	}
+	m := t.Model
+	for h := 0; h < m.Hidden; h++ {
+		for _, w := range m.W1[h] {
+			if err := bad("W1 weight", w); err != nil {
+				return err
+			}
+		}
+		if err := bad("B1 bias", m.B1[h]); err != nil {
+			return err
+		}
+		if err := bad("W2 weight", m.W2[h]); err != nil {
+			return err
+		}
+	}
+	if err := bad("B2 bias", m.B2); err != nil {
+		return err
+	}
+	if err := bad("Mean", t.Stats.Mean); err != nil {
+		return err
+	}
+	return bad("Std", t.Stats.Std)
+}
+
 // Quantize converts a trained model to its int8 form.
 func Quantize(t *Trained) QuantModel {
 	m := t.Model

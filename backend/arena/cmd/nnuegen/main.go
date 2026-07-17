@@ -50,11 +50,15 @@ import (
 	"virusgame/search"
 )
 
-// errNoDeepScore signals that ChooseNodeBudget could not produce a deep score
-// for a position (terminal / no legal move). Such positions must be skipped, not
+// errNoDeepScore signals that ChooseNodeBudget could not produce a real deep
+// score for a position: a terminal / no-legal-move state (ok=false), an
+// opening-book hit, or a search that could not complete even depth 1 (both leave
+// Depth 0 with a placeholder Score 0). Such positions must be skipped, not
 // recorded as DeepScore 0 — a decided corpus terminal would otherwise get a
-// contradictory label (score 0 alongside a real win/loss outcome).
-var errNoDeepScore = errors.New("no deep score for terminal position")
+// contradictory label (score 0 alongside a real win/loss outcome), and opening
+// positions (which the book short-circuits, so NNUE never evaluates them) would
+// pin a false 0 target.
+var errNoDeepScore = errors.New("no deep score for position")
 
 // Outcome is the eventual game result attached to a sampled position. Zero
 // values (Winner 0, Placement 0) are the sentinel for "no completed game".
@@ -86,7 +90,10 @@ func Label(state game.State, budget uint64, source string) (Record, error) {
 		return Record{}, err
 	}
 	result, ok := search.ChooseNodeBudget(state, budget)
-	if !ok {
+	// Depth 0 means no search-derived score: an opening-book hit (Depth/Nodes 0,
+	// Score 0) or a budget too small to finish depth 1. Both leave Score at the
+	// placeholder 0; recording that as a label would poison the target.
+	if !ok || result.Depth == 0 {
 		return Record{}, errNoDeepScore
 	}
 	feats := arena.NNUEFeatures(state)

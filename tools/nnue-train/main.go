@@ -474,6 +474,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if err := checkFinite(trained); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	src := ExportGo(trained, *pkg)
 	if *export == "-" {
 		fmt.Print(src)

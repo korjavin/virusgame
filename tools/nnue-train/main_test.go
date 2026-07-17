@@ -119,3 +119,17 @@ func TestExportGoCompiles(t *testing.T) {
 	}
 	typeCheck(t, ExportGo(zero, "nnueweights"))
 }
+
+// TestCheckFiniteCatchesDivergence guards the export-time finiteness gate: a
+// diverged model (Inf/NaN weight) must fail loudly, and a healthy one must pass.
+func TestCheckFinite(t *testing.T) {
+	var rng uint64 = 1
+	good := &Trained{Model: newMLP(inputDim, 4, &rng), Stats: Stats{Mean: 0, Std: 1}}
+	if err := checkFinite(good); err != nil {
+		t.Fatalf("healthy model rejected: %v", err)
+	}
+	good.Model.W2[0] = math.Inf(1)
+	if err := checkFinite(good); err == nil {
+		t.Fatal("non-finite weight not caught")
+	}
+}
