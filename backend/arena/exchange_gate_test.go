@@ -9,11 +9,14 @@ import (
 )
 
 // vs-ai2.47 constructed exchange gate. Two 12x12 positions with the bot (P2) to
-// move at a deterministic node budget. It documents the current-eval BEFORE
-// picture that Task 3/4 must change: (a) the bot takes a negative capture that
-// leaves >=2 of its own normals capturable next turn (the 1-for-N), while (b) it
-// correctly takes a favorable capture that severs >=2 enemy cells for at most one
-// exposed cell. Task 4 flips (a) to "declined" once the retaliation term lands.
+// move at a deterministic node budget. It documents the STANDING exchange-ratio
+// blindness: (a) the bot takes a negative capture that leaves >=2 of its own
+// normals capturable next turn (the 1-for-N), while (b) it correctly takes a
+// favorable capture that severs >=2 enemy cells for at most one exposed cell.
+// The vs-ai2.47 static-eval sweep could NOT flip (a) without breaking (b) — see
+// the negative-result comment in search/evaluate.go and the Task-4 sweep data in
+// docs/plans/20260717-vs-ai2.47-exchange-ratio.md. A future fix (likely
+// quiescence in search) flips the (a) assertion to "declined".
 //
 // The negative scenario uses the anchor's real mechanism (see
 // exchange_evidence_test.go): the bot advances INTO contact — here by capturing a
@@ -160,10 +163,10 @@ func scenarioFavorableExchange() game.Snapshot {
 	return exchangeSnapshot(b)
 }
 
-// TestExchangeGate is the vs-ai2.47 before/after gate. As written it asserts the
-// CURRENT (before-fix) eval: (a) the bot TAKES the negative capture (>=2 own cells
-// left exposed), (b) the bot TAKES the favorable 2-for-1. Task 4 flips (a) to the
-// declined behavior (exposedAfter <= 1) once VS_RETAL_WEIGHT is baked in.
+// TestExchangeGate asserts the CURRENT eval's behavior: (a) the bot TAKES the
+// negative capture (>=2 own cells left exposed), (b) the bot TAKES the favorable
+// 2-for-1. A future exchange-aware fix flips (a) to the declined behavior
+// (exposedAfter <= 1) and must keep (b) taken.
 //
 //	VS_EXCHANGE=1 go test ./arena -run TestExchangeGate -v
 func TestExchangeGate(t *testing.T) {

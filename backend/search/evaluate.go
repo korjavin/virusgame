@@ -1,29 +1,8 @@
 package search
 
-import (
-	"os"
-	"strconv"
-
-	"virusgame/game"
-)
+import "virusgame/game"
 
 const mateScore = 1_000_000_000
-
-// retalWeightDefault prices each own connected Normal that is capturable next
-// turn (the threatened/threatenedLoss signal) at material scale, so a 1-for-2
-// capture exchange nets negative instead of positive. Applied 2-player only.
-// The baked value is chosen by the vs-ai2.47 Task-4 sweep; VS_RETAL_WEIGHT
-// overrides it during the sweep (delete the env hook once the value is baked).
-const retalWeightDefault = 40
-
-var retalWeight = envIntDefault("VS_RETAL_WEIGHT", retalWeightDefault)
-
-func envIntDefault(key string, fallback int) int {
-	if v, err := strconv.Atoi(os.Getenv(key)); err == nil {
-		return v
-	}
-	return fallback
-}
 
 // spaceRaceWeight scales the Voronoi space-race term. Chosen by the vs-ai2.34
 // sweep: peak of the 2..48 curve, 69.5% vs the MobilityAttacker strangler at
@@ -47,6 +26,21 @@ const spaceRaceWeight = 32
 // bot abandon reconnecting its own cuts. Reverted. Abandon the "discount fragile
 // space" family; a structural opening constraint is the next avenue.
 // See docs/plans/completed/20260717-vs-ai2.38-robust-space.md.
+//
+// vs-ai2.47 (exchange-ratio blindness) also null for the static-term family: a
+// retaliation penalty on own capturable-next-turn Normals (the threatened/
+// threatenedLoss signal) cannot flip a constructed 1-for-2 without breaking a
+// favorable 2-for-1. Symmetric form is directionally WRONG (capturing into
+// contact exposes the opponent more, so the penalty rewards the capture: the
+// bad-trade score RISES with weight, -2730 at w=0 -> +14647 at w=2000).
+// Mover-only form is budget-fragile: it only fires at contact leaves, deeper
+// search resolves the exchange (threatened=0) and reverts to the capture at
+// >=100k nodes even at w=3000, while production reaches depth 6-8. The
+// fully-resolved 1-for-2 already nets ~-388 in the material terms, so the
+// mispricing lives strictly at intermediate contact leaves — the standard cure
+// is quiescence in search, not an eval constant. Gates for the pattern live in
+// arena/exchange_evidence_test.go + arena/exchange_gate_test.go.
+// See docs/plans/20260717-vs-ai2.47-exchange-ratio.md Task 4 for the sweep data.
 
 type playerMetrics struct {
 	connected, disconnected    int
@@ -255,22 +249,6 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 					raw[player-1] += 150 + ratio(loss, max(1, metrics[opponent-1].connected))/2
 				}
 			}
-		}
-	}
-
-	// vs-ai2.47: price own connected Normals that are capturable next turn at
-	// material scale so a 1-for-2 capture exchange nets negative. Side-to-move-
-	// symmetric (both players priced from the SAME position, no threatTempo, so
-	// the phase shift cancels in same-ply sibling comparisons). 2-player only:
-	// no-op with >2 active players so the multiplayer ladder is untouched.
-	if active == 2 {
-		area := state.Rows() * state.Cols()
-		for player := game.Player(1); player <= 4; player++ {
-			if !state.Active(player) {
-				continue
-			}
-			m := &metrics[player-1]
-			raw[player-1] -= normalized(m.threatened+m.threatenedLoss, area, retalWeight)
 		}
 	}
 
