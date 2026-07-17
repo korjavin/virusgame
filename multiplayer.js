@@ -80,6 +80,14 @@ class MultiplayerClient {
             console.log('Connected to multiplayer server');
             this.connected = true;
             this.updateConnectionStatus(true);
+            // Reconnect resync (vs-ai2.48): if we still think we're mid-game, ask
+            // the server for the authoritative snapshot. A game_end/resignation
+            // that landed during the disconnect window is then rendered (via the
+            // game_state/game_end handlers) instead of a phantom live turn, and
+            // the optimistically-decremented movesLeft is reconciled.
+            if (this.gameId && typeof gameOver !== 'undefined' && !gameOver) {
+                this.send({ type: 'resync', gameId: this.gameId });
+            }
         };
 
         this.ws.onmessage = (event) => {
@@ -700,6 +708,12 @@ class MultiplayerClient {
     }
 
     handlePlayerEliminated(msg) {
+        // Reconcile the board: player_eliminated is broadcast via broadcastToGame,
+        // which attaches the authoritative snapshot (eliminated player's pieces
+        // already removed). Without this the board kept the dead player's cells.
+        if (msg.snapshot) {
+            this.applyAuthoritativeSnapshot(msg.snapshot);
+        }
         // Update player status when eliminated
         const player = this.gamePlayers.find(p => p.playerIndex === msg.eliminatedPlayer);
         if (player) {
