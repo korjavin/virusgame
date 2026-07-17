@@ -186,6 +186,49 @@ docker logs -f virusgame-bot-hoster
 # ...
 # Bot-hoster started with 10 bots connected to ws://backend:8080/ws
 
+## Canary Bots
+
+Ship a candidate build into the **live** lobby as a second pool of clearly-named
+bots ("Canary Bot NNNN") alongside the stable pool, with zero risk to the stable
+bot. Promotion is the normal main merge; rollback is stopping one container.
+
+### How it works
+
+- Push a branch named `canary/<something>`. CI runs tests, then builds and pushes
+  two image tags: a moving `canary` tag and an immutable `canary-<sha>`. It does
+  **not** touch the deploy branch or the production Portainer hooks.
+- The `bot-hoster-canary` service (in `bot-hoster-compose.yml`, `canary` profile)
+  runs that image. `BOT_NAME_PREFIX=Canary` makes the server name its bots
+  "Canary Bot NNNN", so their games are identifiable by name in `/last_games`.
+- The stable `bot-hoster` is untouched — different container, different image tag.
+
+### Deploy (one command, on the host)
+
+```bash
+# Pulls the latest canary image and starts the canary pool
+docker compose -f bot-hoster-compose.yml --env-file .env.bot-hoster \
+  --profile canary up -d --pull always bot-hoster-canary
+```
+
+Pin a specific build instead of the moving tag:
+`CANARY_IMAGE_TAG=canary-<sha>` in `.env.bot-hoster` (or inline).
+
+### Stop / rollback (one command)
+
+```bash
+docker compose -f bot-hoster-compose.yml stop bot-hoster-canary
+```
+
+### Promote
+
+Merge the `canary/*` branch to `main`. The normal deploy flow rebuilds the stable
+image and redeploys the stable bot-hoster. Then stop the canary container.
+
+### Play against a specific bot
+
+Both stable and canary bots sit in the same lobby; pick by name — "Bot NNNN" is
+stable, "Canary Bot NNNN" is the candidate.
+
 ## WebSocket Configuration
 
 ### Traefik Labels Explained

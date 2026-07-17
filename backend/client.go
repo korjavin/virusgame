@@ -31,6 +31,10 @@ type Client struct {
 	send  chan []byte
 	user  *User
 	IsBot bool
+	// NamePrefix, when set by a bot client via the ?namePrefix= query param,
+	// prefixes the server-assigned bot name (e.g. "Canary Bot 1234"). Ignored
+	// for non-bot clients.
+	NamePrefix string
 }
 
 // readPump pumps messages from the websocket connection to the hub
@@ -100,7 +104,8 @@ func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 
 	isBot := r.URL.Query().Get("bot") == "true"
-	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), IsBot: isBot}
+	namePrefix := r.URL.Query().Get("namePrefix")
+	client := &Client{hub: hub, conn: conn, send: make(chan []byte, 256), IsBot: isBot, NamePrefix: namePrefix}
 	client.hub.register <- client
 
 	go client.writePump()

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	neturl "net/url"
 	"reflect"
 	"strings"
 	"sync"
@@ -166,6 +167,9 @@ func (b *Bot) Connect() error {
 		url += "&bot=true"
 	} else {
 		url += "?bot=true"
+	}
+	if b.Manager != nil && b.Manager.config.NamePrefix != "" {
+		url += "&namePrefix=" + neturl.QueryEscape(b.Manager.config.NamePrefix)
 	}
 
 	ws, _, err := websocket.DefaultDialer.Dial(url, nil)

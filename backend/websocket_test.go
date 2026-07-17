@@ -108,3 +108,34 @@ func TestWebSocketBotConnection(t *testing.T) {
 		t.Errorf("Expected Bot name, got %s", msg.Username)
 	}
 }
+
+// End-to-end proof of the canary-bot naming path: a bot connecting with
+// ?namePrefix=Canary receives a welcome username of "Canary Bot NNNN".
+func TestWebSocketCanaryBotName(t *testing.T) {
+	h := newHub()
+	go h.run()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws/bot", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(h, w, r)
+	})
+
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/ws/bot?bot=true&namePrefix=Canary"
+
+	ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("Failed to connect canary bot: %v", err)
+	}
+	defer ws.Close()
+
+	var msg Message
+	if err := ws.ReadJSON(&msg); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(msg.Username, "Canary Bot ") {
+		t.Errorf("Expected 'Canary Bot ...', got %s", msg.Username)
+	}
+}
