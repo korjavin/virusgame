@@ -54,8 +54,9 @@ func TestNodeBudgetExactCeilingAndTelemetry(t *testing.T) {
 	// The candidate's opening book (search package) short-circuits a genuine first
 	// turn to zero nodes; that behaviour is covered by the book unit tests and the
 	// VS_EMPTY gate, whereas this test verifies budget accounting, which needs a
-	// searching position. Owning a stray cell (2,2) makes the book defer.
-	for _, target := range []game.Pos{{Row: 1, Col: 1}, {Row: 2, Col: 2}} {
+	// searching position. Owning a stray cell (1,2) — outside the wedge line
+	// {(1,1),(2,1),(2,2)} — makes the book defer while keeping player 1 to move.
+	for _, target := range []game.Pos{{Row: 1, Col: 1}, {Row: 1, Col: 2}} {
 		next, err := state.Apply(game.Action{Kind: game.Move, Target: target})
 		if err != nil {
 			t.Fatalf("setup move %+v: %v", target, err)
