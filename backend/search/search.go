@@ -12,7 +12,7 @@ import (
 const (
 	// ProductionBudget is the single move-search budget used by both the
 	// deployed bot and production-path strength benchmarks.
-	ProductionBudget = 600 * time.Millisecond
+	ProductionBudget = 1000 * time.Millisecond
 	maxDepth         = 64
 	infScore         = 1 << 60
 )
