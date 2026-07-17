@@ -50,6 +50,18 @@ func TestFrozenIncumbentGoldenTacticalOutputs(t *testing.T) {
 
 func TestNodeBudgetExactCeilingAndTelemetry(t *testing.T) {
 	state, _ := game.New(8, 8, 2)
+	// Step off the opening so both engines actually search to the node ceiling.
+	// The candidate's opening book (search package) short-circuits a genuine first
+	// turn to zero nodes; that behaviour is covered by the book unit tests and the
+	// VS_EMPTY gate, whereas this test verifies budget accounting, which needs a
+	// searching position. Owning a stray cell (2,2) makes the book defer.
+	for _, target := range []game.Pos{{Row: 1, Col: 1}, {Row: 2, Col: 2}} {
+		next, err := state.Apply(game.Action{Kind: game.Move, Target: target})
+		if err != nil {
+			t.Fatalf("setup move %+v: %v", target, err)
+		}
+		state = next
+	}
 	for _, frozen := range []bool{false, true} {
 		action, telemetry, ok := TelemetryNodeBudget(500, frozen)(state)
 		if !ok || telemetry.Nodes != 500 || telemetry.BudgetShortfall || telemetry.SearchedRootActions != telemetry.LegalRootActions || telemetry.SearchedRootNeutrals != telemetry.LegalRootNeutrals {
