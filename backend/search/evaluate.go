@@ -1,9 +1,6 @@
 package search
 
 import (
-	"os"
-	"strconv"
-
 	"virusgame/game"
 )
 
@@ -14,15 +11,13 @@ const mateScore = 1_000_000_000
 // n=200 (w95 [63,75]); 48 was already past the peak at 61.2%.
 const spaceRaceWeight = 32
 
-// ponytail: sweep hook, replace with const before final commit (Task 3).
-var ownFragilityWeight = envWeight("VS_FRAGILITY_WEIGHT", 12)
-
-func envWeight(name string, def int) int {
-	if v, err := strconv.Atoi(os.Getenv(name)); err == nil {
-		return v
-	}
-	return def
-}
+// vs-ai2.38 tried an ungated own-max-cutLoss fragility penalty here to stop the
+// width-1 opening tendril. The Task-3 sweep killed it: the opening only flips to
+// width-2 at weight >= 380, but the strength gate is already broken at weight 12
+// (legacy 62.5% < 85%) and the constructed width-2 invariant fails at every
+// weight > 0, and any nonzero penalty diverges from the frozen origin-main eval
+// oracle. No weight fixes the opening without wrecking strength — ship nothing.
+// See docs/plans/20260717-vs-ai2.38-ungated-fragility.md Task 3 for the curve.
 
 type playerMetrics struct {
 	connected, disconnected    int
@@ -205,17 +200,6 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
 			m.threatTempo*ratio(m.threatened, max(1, m.connected)) +
 			normalized(space[player-1], area, spaceRaceWeight)
-		// Ungated own-fragility penalty: price the single largest cut-forfeit
-		// (max over cutLoss) BEFORE contact, so a width-1 filament (every cell an
-		// articulation point) is no longer built for free. Base is already
-		// excluded (cutLoss[baseIndex]==0).
-		maxCut := 0
-		for _, loss := range m.cutLoss {
-			if int(loss) > maxCut {
-				maxCut = int(loss)
-			}
-		}
-		raw[player-1] -= normalized(maxCut, area, ownFragilityWeight)
 		if m.baseExits+m.baseOpenings == 0 {
 			raw[player-1] -= 5000
 		}
