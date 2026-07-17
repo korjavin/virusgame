@@ -161,7 +161,9 @@ func newSearcher(ctx context.Context, state game.State) *searcher {
 }
 
 func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
-	children, ok := s.orderedChildren(state)
+	key := stateHash(state)
+	rootEntry, hasRoot := s.table[key]
+	children, ok := s.orderedChildren(state, rootEntry.bestAction, hasRoot)
 	if !ok || len(children) == 0 {
 		return Result{}, ok
 	}
@@ -190,6 +192,7 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 			alpha = score
 		}
 	}
+	s.table[key] = tableEntry{depth: depth, ply: 0, flag: flagExact, bestAction: best.Action, values: [4]int{best.Score}}
 	return best, true
 }
 
@@ -206,10 +209,11 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 		return evaluateWithWorkspace(state, s.root, &s.eval), true
 	}
 	key := stateHash(state)
-	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
+	entry, hit := s.table[key]
+	if hit && entry.depth >= depth && entry.ply == ply {
 		return entry.values[0], true
 	}
-	children, complete := s.orderedChildren(state)
+	children, complete := s.orderedChildren(state, entry.bestAction, hit)
 	if !complete {
 		return 0, false
 	}
@@ -270,10 +274,11 @@ func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 		return evaluateAllWithWorkspace(state, &s.eval), true
 	}
 	key := stateHash(state)
-	if entry, ok := s.table[key]; ok && entry.depth >= depth && entry.ply == ply {
+	entry, hit := s.table[key]
+	if hit && entry.depth >= depth && entry.ply == ply {
 		return entry.values, true
 	}
-	children, complete := s.orderedChildren(state)
+	children, complete := s.orderedChildren(state, entry.bestAction, hit)
 	if !complete {
 		return [4]int{}, false
 	}
@@ -352,7 +357,7 @@ type child struct {
 	order  int
 }
 
-func (s *searcher) orderedChildren(state game.State) ([]child, bool) {
+func (s *searcher) orderedChildren(state game.State, ttMove game.Action, hasTT bool) ([]child, bool) {
 	pos := game.NewPosition(state)
 	actor := state.CurrentPlayer()
 	beforeActive := activeCount(state)
@@ -366,6 +371,9 @@ func (s *searcher) orderedChildren(state game.State) ([]child, bool) {
 		target, _ := state.At(action.Target)
 		next := pos.ApplySearch(action).State()
 		order := 0
+		if hasTT && action == ttMove {
+			order += 10_000_000
+		}
 		if next.GameOver() && next.Winner() == actor {
 			order += 1_000_000
 		}
