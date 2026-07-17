@@ -853,6 +853,73 @@ func TestLeverRootSafetyOffKeepsCatastrophe(t *testing.T) {
 	}
 }
 
+// multiPlyCatastropheChild is a real turn-ending root candidate: player 2 to move
+// with a FULL 3-action turn (MovesLeft: 3, as advance() always hands over). Player
+// 1's base at (0,0) has three liberties (0,1)/(1,0)/(1,1); no single opponent move
+// strangles it, but the opponent can fill all three over its turn. This is the
+// case the old single-ply floor missed (it counted the opponent's mid-turn moves,
+// not root's post-turn mobility).
+func multiPlyCatastropheChild(t *testing.T) game.State {
+	t.Helper()
+	board := make([][]game.Cell, 3)
+	for r := range board {
+		board[r] = make([]game.Cell, 3)
+	}
+	board[0][0] = game.Cell{Owner: 1, Kind: game.Base}
+	board[0][2] = game.Cell{Owner: 2, Kind: game.Base}
+	board[1][2] = game.Cell{Owner: 2, Kind: game.Fortified}
+	board[2][0] = game.Cell{Owner: 2, Kind: game.Fortified}
+	board[2][1] = game.Cell{Owner: 2, Kind: game.Fortified}
+	board[2][2] = game.Cell{Owner: 2, Kind: game.Fortified}
+	state, err := game.FromSnapshot(game.Snapshot{
+		Rows: 3, Cols: 3, Board: board,
+		Bases:       []game.Pos{{Row: 0, Col: 0}, {Row: 0, Col: 2}},
+		Active:      []bool{true, true},
+		NeutralUsed: []bool{false, false},
+		Current:     2, MovesLeft: 3,
+	})
+	if err != nil {
+		t.Fatalf("FromSnapshot: %v", err)
+	}
+	return state
+}
+
+func TestLeverRootSafetyPlaysOutOpponentTurn(t *testing.T) {
+	defer SetSearchLevers(true, false, false)
+	SetSearchLevers(true, true, true)
+	bad := multiPlyCatastropheChild(t)
+	s := newSearcher(context.Background(), strangleFixture(t, 1))
+	if s.root != 1 || s.multi {
+		t.Fatalf("bad searcher: root=%d multi=%v", s.root, s.multi)
+	}
+
+	// Guard: no SINGLE opponent reply strangles root — root survives one ply, so
+	// only playing the turn out to the end exposes the catastrophe.
+	for _, reply := range bad.LegalActions() {
+		next, err := bad.Apply(reply)
+		if err == nil && !next.Active(1) {
+			t.Fatalf("fixture strangles in one ply (reply %+v); not a multi-ply case", reply)
+		}
+	}
+
+	// The played-out turn leaves root with zero mobility => floor 0 => catastrophe.
+	if floor := s.rootSafetyFloor(bad); floor != 0 {
+		t.Fatalf("multi-ply catastrophe not detected: floor = %d, want 0", floor)
+	}
+
+	safe := []child{
+		{action: move(9, 9), state: bad},
+		{action: move(8, 8), state: strangleFixture(t, 2)},
+	}
+	kept := s.rootSafetyFilter(safe)
+	if _, found := findChild(kept, move(9, 9)); found {
+		t.Fatal("multi-ply catastrophic candidate survived the filter")
+	}
+	if _, found := findChild(kept, move(8, 8)); !found {
+		t.Fatal("safe candidate dropped")
+	}
+}
+
 func mustState(t *testing.T, rows, cols, players int) game.State {
 	t.Helper()
 	state, err := game.New(rows, cols, players)

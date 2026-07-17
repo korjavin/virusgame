@@ -458,16 +458,18 @@ func (s *searcher) rootSafetyFilter(children []child) []child {
 	return kept
 }
 
-// rootSafetyFloor returns our worst-case one-ply own-mobility after a turn-ending
-// candidate: the minimum, over the K most-strangling opponent replies, of the
-// post-reply preserving-action count (legal actions that keep s.root active). A
-// floor of 0 means some inspected reply strangles us dead. No opponent reply
+// rootSafetyFloor returns our worst-case own-mobility after a turn-ending
+// candidate: the minimum, over the K most-strangling opponent opening replies
+// (each played out to the end of the opponent's turn), of root's preserving-action
+// count once control returns to us (legal actions that keep s.root active). A
+// floor of 0 means some inspected line strangles us dead. No opponent reply
 // means no threat, reported as a large non-catastrophic floor.
 func (s *searcher) rootSafetyFloor(childState game.State) int {
 	const (
 		topK    = 3
 		noReply = 1 << 30
 	)
+	opponent := childState.CurrentPlayer()
 	replies := childState.LegalActions()
 	if len(replies) == 0 {
 		return noReply
@@ -483,6 +485,11 @@ func (s *searcher) rootSafetyFloor(childState game.State) int {
 		if err != nil {
 			continue
 		}
+		// A single Move only decrements the opponent's 3 actions, so their turn is
+		// not over: play out the rest of it (most-strangling move each ply) so we
+		// measure root's mobility once control actually returns to root, not the
+		// opponent's mid-turn action count.
+		next = s.playOutOpponentTurn(next, opponent)
 		mobility := countPreservingActions(next, s.root)
 		if floor < 0 || mobility < floor {
 			floor = mobility
@@ -492,6 +499,33 @@ func (s *searcher) rootSafetyFloor(childState game.State) int {
 		return noReply
 	}
 	return floor
+}
+
+// playOutOpponentTurn advances state through the opponent's remaining actions,
+// greedily taking the move that squeezes root's cells most each ply, until the
+// turn hands back to root (or the game ends). Deterministic: ties resolve to the
+// first such move in LegalActions order. Terminates: every Apply either drops
+// the opponent's movesLeft or ends their turn, so at most actionsPerTurn plies.
+func (s *searcher) playOutOpponentTurn(state game.State, opponent game.Player) game.State {
+	for !state.GameOver() && state.CurrentPlayer() == opponent {
+		actions := state.LegalActions()
+		if len(actions) == 0 {
+			break
+		}
+		best := actions[0]
+		bestSqueeze := strangleCount(state, s.root, best.Target)
+		for _, a := range actions[1:] {
+			if sq := strangleCount(state, s.root, a.Target); sq > bestSqueeze {
+				best, bestSqueeze = a, sq
+			}
+		}
+		next, err := state.Apply(best)
+		if err != nil {
+			break
+		}
+		state = next
+	}
+	return state
 }
 
 // countPreservingActions counts legal actions on state that keep actor active —
