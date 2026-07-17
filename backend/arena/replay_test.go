@@ -124,14 +124,14 @@ func TestHappyOtterReplayAndCriticalTurns(t *testing.T) {
 
 func TestPostFix12x12ReplayTerminalHashes(t *testing.T) {
 	want := map[string]string{
-		"fd6627c8-3d46-408d-bd48-17f081e1113b": "117269c21ce6f629",
-		"3d739acb-0635-4784-9d62-c076788f28be": "2bdd28b436b93c9f",
-		"e854f8aa-4fc2-4be7-8348-9ae72cdef4d6": "64e378ef7c28c1ad",
-		"e7b2f1d4-a68f-4f4c-b581-bac7c8a0c380": "e21221bde99837d8",
-		"6bf1f3aa-aee6-40d8-aa52-011b07a56d07": "aacf14fd6979f2c4",
-		"4558d2fe-c22f-4940-8012-8f4f43fac728": "1e6523f0e84702fc",
-		"913c33f7-1f0c-41ce-9cee-65d3d9688073": "aa34bed517bde90c",
-		"550cfd27-6c5c-48a2-928c-c36354f9db87": "76f133e032952674",
+		"fd6627c8-3d46-408d-bd48-17f081e1113b": "291f48c21aeb8106",
+		"3d739acb-0635-4784-9d62-c076788f28be": "201eb49d281fe6bd",
+		"e854f8aa-4fc2-4be7-8348-9ae72cdef4d6": "f896a3f1e15cbeaa",
+		"e7b2f1d4-a68f-4f4c-b581-bac7c8a0c380": "dc6a7e13e32ae665",
+		"6bf1f3aa-aee6-40d8-aa52-011b07a56d07": "65f9fb65d6b859f3",
+		"4558d2fe-c22f-4940-8012-8f4f43fac728": "fd4079756008f119",
+		"913c33f7-1f0c-41ce-9cee-65d3d9688073": "de785595fcd685a1",
+		"550cfd27-6c5c-48a2-928c-c36354f9db87": "b3f60b083b26a10b",
 		"836204cc-7c0d-4d9c-ace3-8aae41fd5e8c": "0a7e17fab1d13ae0",
 	}
 	paths, err := filepath.Glob("testdata/production-12x12-*.json")

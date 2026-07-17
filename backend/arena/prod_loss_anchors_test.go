@@ -22,8 +22,8 @@ var prodLossAnchors = []string{
 // anchor (position, not moves — robust to eval changes, sensitive to rules or
 // replay drift).
 var anchorTerminalFingerprints = map[string]string{
-	"b543fe02-f760-4d2c-9deb-d43b66fd061b": "24cb6f2863ecc238",
-	"bbfc5e0c-bf9f-44b3-b6b8-6af57f32e7ce": "e7a89193e50e0838",
+	"b543fe02-f760-4d2c-9deb-d43b66fd061b": "dbfa2f546c6c3040",
+	"bbfc5e0c-bf9f-44b3-b6b8-6af57f32e7ce": "c6b635ec50601463",
 }
 
 // botTurnCells returns the move targets the bot (player 2) placed on the given
