@@ -223,7 +223,10 @@ func defaultParallelism(cpus int) int {
 
 func searchBudget(production bool) time.Duration {
 	if production {
-		return 850 * time.Millisecond
+		// The anytime search saturates ProductionBudget by design, so the
+		// stress cap must track it (with headroom for stop-jitter on the
+		// largest boards) rather than a stale absolute.
+		return search.ProductionBudget + 250*time.Millisecond
 	}
 	return 10 * time.Second
 }

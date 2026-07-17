@@ -12,7 +12,7 @@ import (
 const (
 	// ProductionBudget is the single move-search budget used by both the
 	// deployed bot and production-path strength benchmarks.
-	ProductionBudget = 600 * time.Millisecond
+	ProductionBudget = 1000 * time.Millisecond
 	maxDepth         = 64
 	infScore         = 1 << 60
 )
@@ -338,19 +338,18 @@ type child struct {
 }
 
 func (s *searcher) orderedChildren(state game.State) ([]child, bool) {
-	actions := state.LegalActions()
-	children := make([]child, 0, len(actions))
+	pos := game.NewPosition(state)
 	actor := state.CurrentPlayer()
 	beforeActive := activeCount(state)
-	for _, action := range actions {
+	var children []child
+	stopped := false
+	pos.ForEachSearchAction(func(action game.Action) bool {
 		if !s.running() {
-			return nil, false
+			stopped = true
+			return false
 		}
 		target, _ := state.At(action.Target)
-		next, err := state.Apply(action)
-		if err != nil {
-			continue
-		}
+		next := pos.ApplySearch(action).State()
 		order := 0
 		if next.GameOver() && next.Winner() == actor {
 			order += 1_000_000
@@ -363,6 +362,10 @@ func (s *searcher) orderedChildren(state game.State) ([]child, bool) {
 			order += 100
 		}
 		children = append(children, child{action: action, state: next, order: order})
+		return true
+	})
+	if stopped {
+		return nil, false
 	}
 	sort.SliceStable(children, func(i, j int) bool { return children[i].order > children[j].order })
 	return children, true

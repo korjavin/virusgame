@@ -10,11 +10,29 @@ type Position struct {
 	analyzed    bool
 }
 
+// exactBranchLimit is the branch-count ceiling at or below which
+// ForEachSearchAction enumerates every neutral pair exactly. Above it the
+// strategicNeutralPairs (Tarjan) analysis is used instead. Both the
+// compute-cache site (NewPosition) and the consume site (ForEachSearchAction)
+// must agree, so the decision lives in one predicate.
+const exactBranchLimit = 32
+
+func usesStrategicPairs(moves, owned int) bool {
+	return moves+owned*(owned-1)/2 > exactBranchLimit
+}
+
 func NewPosition(state State) Position {
-	p := Position{state: state, moves: state.moveTargets(state.current), analyzed: true}
+	// connected(current) is the same pre-move floodfill needed by both the move
+	// frontier and strategicNeutralPairs; compute it once and share it.
+	connected := state.connected(state.current)
+	p := Position{state: state, moves: state.moveTargetsFrom(state.current, connected), analyzed: true}
 	if p.canPlaceNeutrals() {
 		p.owned = p.scanOwnedNormals()
-		p.searchPairs = p.strategicNeutralPairs(p.owned)
+		// ForEachSearchAction only consults searchPairs above the exact-branch
+		// threshold; below it the pairs are discarded, so skip the Tarjan work.
+		if usesStrategicPairs(len(p.moves), len(p.owned)) {
+			p.searchPairs = p.strategicNeutralPairs(p.owned, connected)
+		}
 	}
 	return p
 }
@@ -75,13 +93,13 @@ func (p Position) ForEachSearchAction(yield func(Action) bool) {
 	}
 	// Keep small positions exact. Besides avoiding needless analysis, this
 	// preserves authoritative action order for deterministic tie breaking.
-	if len(p.moveList())+len(owned)*(len(owned)-1)/2 <= 32 {
+	if !usesStrategicPairs(len(p.moveList()), len(owned)) {
 		p.forEachNeutralPair(owned, yield)
 		return
 	}
 	pairs := p.searchPairs
 	if !p.analyzed {
-		pairs = p.strategicNeutralPairs(owned)
+		pairs = p.strategicNeutralPairs(owned, p.state.connected(p.state.current))
 	}
 	for _, pair := range pairs {
 		if !yield(Action{Kind: PlaceNeutrals, Neutrals: pair}) {
@@ -148,12 +166,11 @@ func (p Position) scanOwnedNormals() []Pos {
 // (including non-adjacent) two-vertex separators involving those cells. Pair
 // classes receive reserved representation before remaining capacity is filled,
 // so a large defensive class cannot starve fillers or separators.
-func (p Position) strategicNeutralPairs(owned []Pos) [][2]Pos {
+func (p Position) strategicNeutralPairs(owned []Pos, connected []bool) [][2]Pos {
 	s, player := p.state, p.state.current
 	if !p.canPlaceNeutrals() {
 		return nil
 	}
-	connected := s.connected(player)
 	scratch := newArticulationScratch(len(s.cells))
 	cuts := append([]bool(nil), articulationCells(s, connected, -1, scratch)...)
 	threatened := make([]bool, len(s.cells))

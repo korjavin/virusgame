@@ -106,9 +106,10 @@ func TelemetryProduction() TelemetryAgent {
 
 func TelemetryFrozenProduction() TelemetryAgent {
 	return func(state game.State) (game.Action, DecisionTelemetry, bool) {
-		ctx, cancel := context.WithTimeout(context.Background(), search.ProductionBudget)
-		defer cancel()
-		result, ok := incumbent.Choose(ctx, state)
+		// Pass a deadline-free ctx so incumbent.Choose applies its own frozen
+		// budget (600ms). Binding to search.ProductionBudget here would silently
+		// run the "frozen" baseline at the contender's raised budget.
+		result, ok := incumbent.Choose(context.Background(), state)
 		legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
 		return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: searched, LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals}, ok
 	}
