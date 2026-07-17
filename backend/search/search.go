@@ -47,9 +47,25 @@ type searcher struct {
 	root               game.Player
 	multi              bool
 	table              map[uint64]tableEntry
+	tableCap           int
 	nodes, evaluations uint64
 	nodeLimit          uint64
 	eval               evalWorkspace
+}
+
+// maxSessionEntries caps a persistent (ponder) table before a mid-turn clear.
+// ponytail: flat cap + full clear() on overflow; upgrade to LRU/aging eviction
+// only if a measured mid-turn clear costs completed depth.
+const maxSessionEntries = 1 << 21
+
+// store writes a table entry, clearing the whole table first when a capped
+// (persistent) table would overflow. tableCap == 0 (every non-Session searcher,
+// including the frozen goldens) is a plain write — byte-identical to before.
+func (s *searcher) store(key uint64, entry tableEntry) {
+	if s.tableCap > 0 && len(s.table) >= s.tableCap {
+		clear(s.table)
+	}
+	s.table[key] = entry
 }
 
 // ChooseNodeBudget performs deterministic iterative deepening without an
@@ -141,6 +157,60 @@ func Choose(ctx context.Context, state game.State) (Result, bool) {
 	return best, true
 }
 
+// Session owns a persistent transposition table shared across successive
+// searches on the same game, so a ponder (opponent-to-move) search warms move
+// ordering for the next real (our-to-move) search. It is single-writer by
+// construction: the caller serializes Choose/Ponder so at most one search ever
+// touches the table.
+type Session struct {
+	table map[uint64]tableEntry
+}
+
+func NewSession() *Session {
+	return &Session{table: make(map[uint64]tableEntry)}
+}
+
+// Choose runs the real move search, warm from any prior ponder, and returns the
+// best action from the last completed iteration. The caller owns ctx (production
+// supplies ProductionBudget); run applies no implicit deadline.
+func (sess *Session) Choose(ctx context.Context, state game.State) (Result, bool) {
+	return sess.run(ctx, state)
+}
+
+// Ponder searches the opponent-to-move position with an open, caller-cancelled
+// ctx to fill the shared table. Its Result is discarded; only the table matters.
+func (sess *Session) Ponder(ctx context.Context, state game.State) (Result, bool) {
+	return sess.run(ctx, state)
+}
+
+func (sess *Session) run(ctx context.Context, state game.State) (Result, bool) {
+	if result, ok := openingBookResult(state); ok {
+		return result, true
+	}
+	fallback, ok := preservingFallback(state)
+	if !ok {
+		return Result{}, false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	best := Result{Action: fallback}
+	s := newSearcher(ctx, state)
+	s.table = sess.table
+	s.tableCap = maxSessionEntries
+	for depth := 1; depth <= maxDepth; depth++ {
+		result, complete := s.atDepth(state, depth)
+		if !complete {
+			break
+		}
+		best = result
+		best.Depth = depth
+		best.Nodes = s.nodes
+		best.Evaluations = s.evaluations
+	}
+	return best, true
+}
+
 func newSearcher(ctx context.Context, state game.State) *searcher {
 	active := 0
 	for player := game.Player(1); player <= 4; player++ {
@@ -192,7 +262,7 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 			alpha = score
 		}
 	}
-	s.table[key] = tableEntry{depth: depth, ply: 0, flag: flagExact, bestAction: best.Action, values: [4]int{best.Score}}
+	s.store(key, tableEntry{depth: depth, ply: 0, flag: flagExact, bestAction: best.Action, values: [4]int{best.Score}})
 	return best, true
 }
 
@@ -290,7 +360,7 @@ func (s *searcher) minimax(state game.State, depth, alpha, beta, ply int) (int, 
 	} else if best >= betaOrig {
 		flag = flagLower
 	}
-	s.table[key] = tableEntry{depth: depth, ply: ply, flag: flag, bestAction: bestAction, values: [4]int{best}}
+	s.store(key, tableEntry{depth: depth, ply: ply, flag: flag, bestAction: bestAction, values: [4]int{best}})
 	return best, true
 }
 
@@ -341,7 +411,7 @@ func (s *searcher) maxN(state game.State, depth, ply int) ([4]int, bool) {
 			}
 		}
 	}
-	s.table[key] = tableEntry{depth: depth, ply: ply, flag: flagExact, bestAction: bestAction, values: best}
+	s.store(key, tableEntry{depth: depth, ply: ply, flag: flagExact, bestAction: bestAction, values: best})
 	return best, true
 }
 
