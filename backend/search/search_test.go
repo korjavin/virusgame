@@ -453,6 +453,47 @@ func BenchmarkDepthThree(b *testing.B) {
 	}
 }
 
+// denseState12x12 builds a reproducible dense 12x12 midgame with a
+// search-independent policy (always the first legal action) so the benchmark
+// fixture is bit-identical before and after the Position-path node expansion.
+func denseState12x12(tb testing.TB) game.State {
+	tb.Helper()
+	state, err := game.New(12, 12, 2)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	for ply := 0; ply < 60; ply++ {
+		actions := state.LegalActions()
+		if len(actions) == 0 {
+			break
+		}
+		next, err := state.Apply(actions[0])
+		if err != nil {
+			break
+		}
+		state = next
+	}
+	return state
+}
+
+// BenchmarkNodeBudgetDense12x12 measures move-generation throughput on a dense
+// board at a fixed node budget, reporting nodes explored and completed depth.
+func BenchmarkNodeBudgetDense12x12(b *testing.B) {
+	state := denseState12x12(b)
+	const budget = 200_000
+	var nodes uint64
+	var depth int
+	for i := 0; i < b.N; i++ {
+		result, ok := ChooseNodeBudget(state, budget)
+		if !ok {
+			b.Fatal("search failed")
+		}
+		nodes, depth = result.Nodes, result.Depth
+	}
+	b.ReportMetric(float64(nodes), "nodes")
+	b.ReportMetric(float64(depth), "completedDepth")
+}
+
 func completedDepth(t *testing.T, state game.State, depth int) Result {
 	t.Helper()
 	s := newSearcher(context.Background(), state)
