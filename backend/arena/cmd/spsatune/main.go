@@ -239,17 +239,18 @@ func (o *optimizer) run() (trace []iterRecord, summary summaryRecord, err error)
 
 	n := len(o.scale)
 	theta := make([]float64, n)
-	// Both cold and warm starts map real weights into SPSA scaled space via
-	// real/scale. Since vs-ai2.52 the defaults contain zeros (e.g. Mobility),
-	// so the old "cold start = all-1.0" shortcut no longer represents the
-	// defaults — express the start vector explicitly instead.
-	start := search.DefaultEvalParams()
 	if o.initTheta != nil {
-		start = *o.initTheta
-	}
-	vec := toVec(start)
-	for i := range theta {
-		theta[i] = vec[i] / o.scale[i]
+		// Warm start: map the saved integer weights into SPSA scaled space
+		// (real/scale). Default weights == scale, so a default vector maps back to
+		// all-1.0 exactly, and any saved bestTheta resumes from where it left off.
+		vec := toVec(*o.initTheta)
+		for i := range theta {
+			theta[i] = vec[i] / o.scale[i]
+		}
+	} else {
+		for i := range theta {
+			theta[i] = 1.0 // default weights == scale, so scaled space starts at 1
+		}
 	}
 
 	defaultParams := search.DefaultEvalParams()
