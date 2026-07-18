@@ -38,6 +38,10 @@ func TestNNUEFeaturesFreshBoard(t *testing.T) {
 	want := PlayerFeatures{
 		Connected: 1, Mobility: 3, BaseOpenings: 3,
 		SpaceRace: 9, NeutralUnused: true, MovesLeftTempo: 3, ThreatTempo: 1,
+		// vs-ai2.56: base is the lone frontier cell (3 empty neighbours), no
+		// articulation (MinCutThreatDist = rows+cols sentinel), and the enemy base
+		// at (4,4) is Chebyshev 4 away.
+		MinCutThreatDist: 10, MinEnemyBaseDist: 4, FrontOpenness: 3, FrontWidth: 1,
 	}
 	if feats[0] != want {
 		t.Errorf("p1 fresh:\n got %+v\nwant %+v", feats[0], want)
@@ -93,6 +97,14 @@ func TestNNUEFeaturesArticulationChain(t *testing.T) {
 	if !f.NeutralUnused {
 		t.Errorf("NeutralUnused = false, want true")
 	}
+	// vs-ai2.56 (d): single-cut loss normalized by own connected mass (2/3).
+	if want := 2.0 / 3.0; f.SeverableFrac < want-1e-9 || f.SeverableFrac > want+1e-9 {
+		t.Errorf("SeverableFrac = %v, want %v", f.SeverableFrac, want)
+	}
+	// vs-ai2.56 (a): no enemy stone borders the (0,1) cut, so it is not a
+	// threatened cut and the nearest enemy stone is p2's base(4,4) at Chebyshev 4.
+	check("ThreatenedCuts", f.ThreatenedCuts, 0)
+	check("MinCutThreatDist", f.MinCutThreatDist, 4)
 }
 
 func TestNNUEFeaturesCaptureAndThreat(t *testing.T) {
@@ -120,6 +132,19 @@ func TestNNUEFeaturesCaptureAndThreat(t *testing.T) {
 	}
 	if f.Threatened < 1 {
 		t.Errorf("Threatened = %d, want >= 1", f.Threatened)
+	}
+	// vs-ai2.56 (c): p2's three diagonally-linked normals (1,1)-(2,2)-(3,3) form
+	// one 8-connected cluster in capture-contact with p1's territory.
+	if f.ChainReach != 3 {
+		t.Errorf("ChainReach = %d, want 3", f.ChainReach)
+	}
+	// vs-ai2.56 (b): p1's nearest cell to p2's base(4,4) is Chebyshev 4; p1's
+	// front (base + (0,1)) borders empty cells, so openness is positive.
+	if f.MinEnemyBaseDist != 4 {
+		t.Errorf("MinEnemyBaseDist = %d, want 4", f.MinEnemyBaseDist)
+	}
+	if f.FrontOpenness < 1 {
+		t.Errorf("FrontOpenness = %d, want >= 1", f.FrontOpenness)
 	}
 }
 

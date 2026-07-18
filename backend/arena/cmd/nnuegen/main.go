@@ -13,7 +13,17 @@
 //
 // JSONL schema — one Record per line:
 //
+//	schemaVersion  int           2. v2 stores the raw position (see position)
+//	                             so features are recomputable without re-searching
+//	                             when the extractor changes. A run refuses to mix
+//	                             v2 output with a v1 shard directory.
 //	fingerprint    string        arena.StateFingerprint(state) — stable dedupe key
+//	position       Position      compact raw position (row-major cell string +
+//	                             per-player base/active/neutral + movesLeft/over/
+//	                             winner); rebuilds a game.Snapshot via toSnapshot,
+//	                             so arena.NNUEFeatures can be recomputed offline
+//	                             from the label alone. This is the durable field;
+//	                             features below is a training-time convenience.
 //	rows, cols     int           board dimensions
 //	currentPlayer  int           seat to move (1-based)
 //	features       [4][]float64  per-seat feature vectors (seat-1 indexed), each
@@ -67,6 +77,12 @@ var errNoDeepScore = errors.New("no deep score for position")
 // separates the two without a fragile exact match.
 const mateMagnitude = 500_000_000
 
+// schemaVersion is the current shard format. v2 adds the raw Position so labels
+// stay reusable when the feature extractor changes; a run refuses to append to a
+// directory whose shards carry a different version (v1 shards have the zero
+// value 0). Bump this whenever the on-disk record shape changes incompatibly.
+const schemaVersion = 2
+
 // Outcome is the eventual game result attached to a sampled position. Zero
 // values (Winner 0, Placement 0) are the sentinel for "no completed game".
 type Outcome struct {
@@ -74,9 +90,70 @@ type Outcome struct {
 	Placement int `json:"placement"`
 }
 
+// Position is the compact raw board stored with every record so features are
+// recomputable offline (game.FromSnapshot(toSnapshot(...)) → arena.NNUEFeatures)
+// without re-running search. Rows/Cols/Current live on the Record, so they are
+// not duplicated here. Cells is row-major, one byte per cell: 'A' + owner*5 +
+// kind (owner∈0..4, kind∈0..4 → codes 0..24 → 'A'..'Y'), ~20× smaller than the
+// [][]Cell JSON of game.Snapshot.
+type Position struct {
+	Cells       string `json:"cells"`
+	Bases       []int  `json:"bases"` // per-player base cell index (row*cols+col)
+	Active      []bool `json:"active"`
+	NeutralUsed []bool `json:"neutralUsed"`
+	MovesLeft   int    `json:"movesLeft"`
+	GameOver    bool   `json:"gameOver"`
+	Winner      int    `json:"winner"`
+}
+
+// newPosition packs a snapshot into the compact wire form.
+func newPosition(snap game.Snapshot) Position {
+	cells := make([]byte, 0, snap.Rows*snap.Cols)
+	for _, row := range snap.Board {
+		for _, c := range row {
+			cells = append(cells, 'A'+byte(c.Owner)*5+byte(c.Kind))
+		}
+	}
+	bases := make([]int, len(snap.Bases))
+	for i, b := range snap.Bases {
+		bases[i] = b.Row*snap.Cols + b.Col
+	}
+	return Position{
+		Cells: string(cells), Bases: bases, Active: snap.Active,
+		NeutralUsed: snap.NeutralUsed, MovesLeft: snap.MovesLeft,
+		GameOver: snap.GameOver, Winner: int(snap.Winner),
+	}
+}
+
+// toSnapshot rebuilds a game.Snapshot from the record's Position plus the
+// board/mover scalars the Record already carries, ready for game.FromSnapshot.
+func (r Record) toSnapshot() game.Snapshot {
+	p := r.Position
+	board := make([][]game.Cell, r.Rows)
+	for row := 0; row < r.Rows; row++ {
+		board[row] = make([]game.Cell, r.Cols)
+		for col := 0; col < r.Cols; col++ {
+			code := p.Cells[row*r.Cols+col] - 'A'
+			board[row][col] = game.Cell{Owner: game.Player(code / 5), Kind: game.CellKind(code % 5)}
+		}
+	}
+	bases := make([]game.Pos, len(p.Bases))
+	for i, idx := range p.Bases {
+		bases[i] = game.Pos{Row: idx / r.Cols, Col: idx % r.Cols}
+	}
+	return game.Snapshot{
+		Rows: r.Rows, Cols: r.Cols, Board: board, Bases: bases,
+		Active: p.Active, NeutralUsed: p.NeutralUsed,
+		Current: game.Player(r.CurrentPlayer), MovesLeft: p.MovesLeft,
+		GameOver: p.GameOver, Winner: game.Player(p.Winner),
+	}
+}
+
 // Record is one JSONL line. See the package doc for field semantics.
 type Record struct {
+	SchemaVersion int          `json:"schemaVersion"`
 	Fingerprint   string       `json:"fingerprint"`
+	Position      Position     `json:"position"`
 	Rows          int          `json:"rows"`
 	Cols          int          `json:"cols"`
 	CurrentPlayer int          `json:"currentPlayer"`
@@ -118,7 +195,9 @@ func Label(state game.State, budget uint64, source string) (Record, error) {
 		}
 	}
 	return Record{
+		SchemaVersion: schemaVersion,
 		Fingerprint:   fingerprint,
+		Position:      newPosition(state.Snapshot()),
 		Rows:          state.Rows(),
 		Cols:          state.Cols(),
 		CurrentPlayer: int(state.CurrentPlayer()),
@@ -191,6 +270,35 @@ func (w *ShardWriter) Close() error {
 		return err
 	}
 	return w.file.Close()
+}
+
+// checkSchemaCompat refuses to write into a directory that already holds shards
+// of a different schema version. v1 shards (no schemaVersion field) decode as
+// version 0, so a v2 run cleanly rejects them rather than silently producing a
+// mixed, unparseable-as-one corpus. Reads only the first record of each shard.
+func checkSchemaCompat(dir string) error {
+	shards, err := filepath.Glob(filepath.Join(dir, "shard-*.jsonl"))
+	if err != nil {
+		return err
+	}
+	for _, path := range shards {
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		scanner := bufio.NewScanner(file)
+		scanner.Buffer(make([]byte, 0, 1<<20), 1<<24)
+		var record Record
+		parsed := false
+		if scanner.Scan() {
+			parsed = json.Unmarshal(scanner.Bytes(), &record) == nil
+		}
+		file.Close()
+		if parsed && record.SchemaVersion != schemaVersion {
+			return fmt.Errorf("%s: schema v%d shard cannot mix with v%d output; use a fresh -out directory", path, record.SchemaVersion, schemaVersion)
+		}
+	}
+	return nil
 }
 
 // loadFingerprints scans every shard-*.jsonl in dir and returns the set of
@@ -509,6 +617,10 @@ func Generate(cfg Config) (int, error) {
 	}
 	if cfg.Workers < 1 {
 		cfg.Workers = 1
+	}
+	// Refuse to append onto shards of a different schema version (v1 ↔ v2).
+	if err := checkSchemaCompat(cfg.Out); err != nil {
+		return 0, err
 	}
 	corpus, err := loadCorpus(cfg.CorpusPath)
 	if err != nil {

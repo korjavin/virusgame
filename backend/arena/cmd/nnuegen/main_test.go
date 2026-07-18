@@ -17,7 +17,12 @@ import (
 // unchanged. Full in-process generation + determinism lands in Task 3.
 func TestRecordRoundTrip(t *testing.T) {
 	want := Record{
+		SchemaVersion: schemaVersion,
 		Fingerprint:   "deadbeefcafef00d",
+		Position: Position{
+			Cells: "ABCDE", Bases: []int{0, 63}, Active: []bool{true, true},
+			NeutralUsed: []bool{false, true}, MovesLeft: 2, Winner: 0,
+		},
 		Rows:          8,
 		Cols:          8,
 		CurrentPlayer: 1,
@@ -207,6 +212,54 @@ func TestResumeRepairsTornRecord(t *testing.T) {
 			t.Fatalf("line %d: duplicate fingerprint after resume: %s", i, record.Fingerprint)
 		}
 		seen[record.Fingerprint] = true
+	}
+}
+
+// TestPositionRecomputesFeatures is the whole point of schema v2: the stored raw
+// Position must reproduce the record's Features via the public game/arena API,
+// so labels stay reusable when the extractor changes.
+func TestPositionRecomputesFeatures(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := Generate(tinyConfig(dir)); err != nil {
+		t.Fatal(err)
+	}
+	lines := readShard(t, filepath.Join(dir, "shard-000.jsonl"))
+	for i, line := range lines {
+		var record Record
+		if err := json.Unmarshal(line, &record); err != nil {
+			t.Fatalf("line %d: %v", i, err)
+		}
+		if record.SchemaVersion != schemaVersion {
+			t.Fatalf("line %d: schemaVersion = %d, want %d", i, record.SchemaVersion, schemaVersion)
+		}
+		state, err := game.FromSnapshot(record.toSnapshot())
+		if err != nil {
+			t.Fatalf("line %d: rebuild position: %v", i, err)
+		}
+		feats := arena.NNUEFeatures(state)
+		for seat := 0; seat < 4; seat++ {
+			var recomputed []float64
+			if state.Active(game.Player(seat + 1)) {
+				recomputed = feats[seat].Features()
+			}
+			if !reflect.DeepEqual(record.Features[seat], recomputed) {
+				t.Fatalf("line %d seat %d: features not reproducible from stored position\n stored %v\n recomp %v",
+					i, seat, record.Features[seat], recomputed)
+			}
+		}
+	}
+}
+
+// TestRefusesSchemaMix asserts a v2 run refuses to append onto a directory that
+// already holds a v1 shard (no schemaVersion field).
+func TestRefusesSchemaMix(t *testing.T) {
+	dir := t.TempDir()
+	v1 := []byte(`{"fingerprint":"abc","rows":8,"cols":8,"currentPlayer":1,"source":"ladder"}` + "\n")
+	if err := os.WriteFile(filepath.Join(dir, "shard-000.jsonl"), v1, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Generate(tinyConfig(dir)); err == nil {
+		t.Fatal("expected refusal to mix v1 shard with v2 output, got nil error")
 	}
 }
 
