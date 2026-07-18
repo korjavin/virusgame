@@ -266,7 +266,38 @@ class MultiplayerClient {
         this.userId = msg.userId;
         this.username = msg.username;
         console.log(`Welcome! You are ${this.username} (${this.userId})`);
+        this.checkVersionSkew(msg.buildSha);
         this.updateWelcomeMessage();
+    }
+
+    // vs-ai2.59: detect stale open tabs across deploys. The server injects its
+    // build SHA into every welcome (msg.buildSha). A tab opened before a deploy
+    // keeps its old JS forever (no-cache on .js is useless for a tab that never
+    // reloads). On reconnect that tab sees a *different* serverBuild than the one
+    // it first saw this session. If no game is in progress we reload to pick up
+    // the new JS; mid-game we only show a banner — a reload would wipe the live
+    // game UX. sessionStorage is per-tab and survives the reload, so setting it
+    // before reloading prevents a reload loop.
+    checkVersionSkew(serverBuild) {
+        if (!serverBuild) return;
+        const prev = sessionStorage.getItem('serverBuild');
+        sessionStorage.setItem('serverBuild', serverBuild);
+        if (!prev || prev === serverBuild) return;
+        const gameActive = !!this.gameId && (typeof gameOver === 'undefined' || !gameOver);
+        if (gameActive) {
+            this.showVersionSkewBanner();
+        } else {
+            location.reload();
+        }
+    }
+
+    showVersionSkewBanner() {
+        if (document.getElementById('version-skew-banner')) return;
+        const banner = document.createElement('div');
+        banner.id = 'version-skew-banner';
+        banner.textContent = 'New version available — refresh after this game';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;padding:8px;text-align:center;background:#b8860b;color:#fff;font-weight:bold;';
+        document.body.appendChild(banner);
     }
 
     handleUsersUpdate(msg) {
