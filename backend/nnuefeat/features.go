@@ -52,10 +52,22 @@ type PlayerFeatures struct {
 	SealedBase     bool // baseExits+baseOpenings == 0
 	NeutralUnused  bool // player has not yet spent its neutral placement
 	MovesLeftTempo int  // state.MovesLeft() if this seat is to move, else 0
+
+	// vs-ai2.56 owner-profile features (schema v2). All are per-player;
+	// NNUEFeatures emits a vector for every active seat, so the opponent side of
+	// each (severable mass, cut risk, advance) is already in the 4×K matrix — no
+	// cross-player term is baked in here. See nnueStructural.
+	ThreatenedCuts   int     // (a) own articulation cells adjacent to enemy connected territory (threat-gated count)
+	MinCutThreatDist int     // (a) min Chebyshev dist from an own articulation cell to the nearest enemy stone; rows+cols = none
+	MinEnemyBaseDist int     // (b) min Chebyshev dist from an own connected cell to the nearest enemy base; rows+cols = none
+	FrontOpenness    int     // (b) distinct empty cells adjacent to own frontier cells
+	FrontWidth       int     // (c) size of the largest contiguous own-frontier group (8-connected)
+	ChainReach       int     // (c) largest enemy-Normal cluster in capture-contact with own territory
+	SeverableFrac    float64 // (d) MaxCutLoss / max(1,Connected) — single-cut loss normalized by own mass
 }
 
 // FeatureCount is the length of the Features() flat vector.
-const FeatureCount = 19
+const FeatureCount = 26
 
 // Seats is the fixed number of seats the Input() vector spans.
 const Seats = 4
@@ -82,6 +94,9 @@ func (f PlayerFeatures) Features() []float64 {
 		float64(f.ThreatTempo), float64(f.Articulation), float64(f.MaxCutLoss),
 		float64(f.SpaceRace), b(f.SealedBase), b(f.NeutralUnused),
 		float64(f.MovesLeftTempo),
+		float64(f.ThreatenedCuts), float64(f.MinCutThreatDist),
+		float64(f.MinEnemyBaseDist), float64(f.FrontOpenness),
+		float64(f.FrontWidth), float64(f.ChainReach), f.SeverableFrac,
 	}
 }
 
@@ -367,6 +382,7 @@ func nnueAnalyze(state game.State, player game.Player, cells []game.Cell, connec
 	}
 	f.ThreatTempo = nnueThreatTempo(state, player)
 	f.SealedBase = f.BaseExits+f.BaseOpenings == 0
+	nnueStructural(state, player, cells, own, articulation, connected, &f)
 	return f
 }
 
@@ -427,4 +443,164 @@ func basePosition(state game.State, player game.Player) game.Pos {
 	default:
 		return game.Pos{Row: state.Rows() - 1, Col: 0}
 	}
+}
+
+// nnueStructural computes the vs-ai2.56 owner-profile features (a)-(d) on top of
+// the analyzeWithConnectivity tallies already in f. Boards are small and this is
+// offline tooling, so distances are plain O(cells) Chebyshev scans rather than
+// BFS.
+// ponytail: O(cells²) worst case per player (articulation × enemy stones). Fine
+// for 8x8–12x12 offline generation; switch to a multi-source BFS if a much
+// larger board ever enters the corpus.
+func nnueStructural(state game.State, player game.Player, cells []game.Cell, own, articulation []bool, connected [4][]bool, f *PlayerFeatures) {
+	cols := state.Cols()
+	far := state.Rows() + state.Cols() // "unreachable" sentinel, above any Chebyshev distance
+	cheb := func(a, b game.Pos) int {
+		dr, dc := a.Row-b.Row, a.Col-b.Col
+		if dr < 0 {
+			dr = -dr
+		}
+		if dc < 0 {
+			dc = -dc
+		}
+		return max(dr, dc)
+	}
+
+	// (a) threat-gated own-cut-risk: unguarded tendrils only matter when an enemy
+	// can bite them, so count articulation cells that touch enemy territory and
+	// measure how close the nearest enemy stone is to any cut cell.
+	f.MinCutThreatDist = far
+	for i, cut := range articulation {
+		if !cut {
+			continue
+		}
+		if nnueThreatened(state, i, player, connected) {
+			f.ThreatenedCuts++
+		}
+		cutPos := game.Pos{Row: i / cols, Col: i % cols}
+		for j, c := range cells {
+			if c.Owner != 0 && c.Owner != player {
+				if d := cheb(cutPos, game.Pos{Row: j / cols, Col: j % cols}); d < f.MinCutThreatDist {
+					f.MinCutThreatDist = d
+				}
+			}
+		}
+	}
+
+	// (b) forward advance + openness. Frontier = own connected cell adjacent to an
+	// empty cell; advance = nearest own cell to an enemy base; openness = empty
+	// cells the front can expand into.
+	enemyBases := make([]game.Pos, 0, 3)
+	for opp := game.Player(1); opp <= 4; opp++ {
+		if opp != player && state.Active(opp) {
+			enemyBases = append(enemyBases, basePosition(state, opp))
+		}
+	}
+	f.MinEnemyBaseDist = far
+	frontier := make([]bool, len(cells))
+	openSeen := make([]bool, len(cells))
+	for i := range cells {
+		if !own[i] {
+			continue
+		}
+		pos := game.Pos{Row: i / cols, Col: i % cols}
+		for _, b := range enemyBases {
+			if d := cheb(pos, b); d < f.MinEnemyBaseDist {
+				f.MinEnemyBaseDist = d
+			}
+		}
+		for _, n := range neighbors8(state, pos) {
+			ni := n.Row*cols + n.Col
+			if cells[ni].Kind == game.Empty {
+				frontier[i] = true
+				if !openSeen[ni] {
+					openSeen[ni] = true
+					f.FrontOpenness++
+				}
+			}
+		}
+	}
+
+	// (c) front width + chain potential.
+	f.FrontWidth = nnueLargestGroup(state, frontier)
+	f.ChainReach = nnueChainReach(state, player, cells, own)
+
+	// (d) severable mass normalized: material misleads (the thrown-win lesson), so
+	// scale the biggest single-cut loss by own connected mass.
+	if f.Connected > 0 {
+		f.SeverableFrac = float64(f.MaxCutLoss) / float64(f.Connected)
+	}
+}
+
+// nnueLargestGroup returns the size of the largest 8-connected component of the
+// masked cells (used for the contiguous frontier span).
+func nnueLargestGroup(state game.State, mask []bool) int {
+	cols := state.Cols()
+	seen := make([]bool, len(mask))
+	best := 0
+	for start := range mask {
+		if !mask[start] || seen[start] {
+			continue
+		}
+		seen[start] = true
+		queue := []int{start}
+		count := 0
+		for head := 0; head < len(queue); head++ {
+			idx := queue[head]
+			count++
+			pos := game.Pos{Row: idx / cols, Col: idx % cols}
+			for _, n := range neighbors8(state, pos) {
+				ni := n.Row*cols + n.Col
+				if mask[ni] && !seen[ni] {
+					seen[ni] = true
+					queue = append(queue, ni)
+				}
+			}
+		}
+		if count > best {
+			best = count
+		}
+	}
+	return best
+}
+
+// nnueChainReach returns the size of the largest 8-connected cluster of enemy
+// Normal cells that is in capture-contact with the player's territory — a cheap
+// proxy for the longest capture chain reachable from the current front.
+func nnueChainReach(state game.State, player game.Player, cells []game.Cell, own []bool) int {
+	cols := state.Cols()
+	enemyNormal := func(i int) bool {
+		c := cells[i]
+		return c.Kind == game.Normal && c.Owner != 0 && c.Owner != player
+	}
+	seen := make([]bool, len(cells))
+	best := 0
+	for start := range cells {
+		if !enemyNormal(start) || seen[start] {
+			continue
+		}
+		seen[start] = true
+		queue := []int{start}
+		count := 0
+		contact := false
+		for head := 0; head < len(queue); head++ {
+			idx := queue[head]
+			count++
+			pos := game.Pos{Row: idx / cols, Col: idx % cols}
+			for _, n := range neighbors8(state, pos) {
+				ni := n.Row*cols + n.Col
+				if own[ni] {
+					contact = true
+				}
+				if enemyNormal(ni) && !seen[ni] {
+					seen[ni] = true
+					queue = append(queue, ni)
+				}
+			}
+		}
+		if contact && count > best {
+			best = count
+		}
+	}
+	return best
 }

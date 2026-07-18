@@ -78,7 +78,9 @@ copy):
 
 | field | type | meaning |
 |-------|------|---------|
+| `schemaVersion` | int | `2`. A run refuses to append to a directory whose shards carry a different version (v1 shards have no field → decode as `0`); start a fresh `-out` dir instead |
 | `fingerprint` | string | `arena.StateFingerprint(state)` — stable dedupe key |
+| `position` | `Position` | **compact raw position** — recomputes any feature set offline (`game.FromSnapshot(record.toSnapshot())` → `arena.NNUEFeatures`) without re-searching. `cells` is row-major, one byte/cell = `'A' + owner*5 + kind`; plus per-player `bases`/`active`/`neutralUsed` and `movesLeft`/`gameOver`/`winner`. `rows`/`cols`/`currentPlayer` are reused from the Record. This is the durable field; `features` is a training-time convenience |
 | `rows`, `cols` | int | board dimensions |
 | `currentPlayer` | int | seat to move (1-based) |
 | `features` | `[4][]float64` | per-seat feature vectors (seat-1 indexed); each is the fixed-order `arena.PlayerFeatures.Features()` slice; inactive seats are JSON `null` |
@@ -98,10 +100,31 @@ into the data — the trainer picks mover-vs-opponents itself.
 Normal, Fortified, Connected, Disconnected, Mobility, Captures,
 BaseExits, BaseOpenings, BaseAnchors, BaseThreat, Threatened, ThreatenedLoss,
 ThreatTempo, Articulation, MaxCutLoss, SpaceRace, SealedBase, NeutralUnused,
-MovesLeftTempo
+MovesLeftTempo,
+ThreatenedCuts, MinCutThreatDist, MinEnemyBaseDist, FrontOpenness,
+FrontWidth, ChainReach, SeverableFrac
 ```
 
-Booleans flatten to 0/1. Do not reorder without bumping the schema.
+Booleans flatten to 0/1. Do not reorder without bumping the schema. Because the
+raw `position` is stored, the vector is fully recomputable — extending features
+(as vs-ai2.56 did, 19 → 26) does **not** invalidate previously-labeled shards.
+
+### vs-ai2.56 owner-profile features (the 7 additions)
+
+From the deep owner-strategy profile (owner = wide/forward/open metronome
+attacker; the thrown-win lesson that material misleads and structural
+severability is the real signal). All per-player; the opponent side of each is
+already present as the opponent seats' own vectors in the 4×K matrix.
+
+| feature | family | meaning |
+|---------|--------|---------|
+| `ThreatenedCuts` | (a) threat-gated own-cut-risk | count of own articulation cells adjacent to enemy connected territory — an unguarded tendril only matters when someone can bite it |
+| `MinCutThreatDist` | (a) | min Chebyshev distance from an own articulation cell to the nearest enemy stone; `rows+cols` sentinel = no cut / no enemy |
+| `MinEnemyBaseDist` | (b) forward advance | min Chebyshev distance from an own connected cell to the nearest enemy base (how far the advance has reached); `rows+cols` = none |
+| `FrontOpenness` | (b) openness | distinct empty cells adjacent to own frontier cells (space the front can expand into) |
+| `FrontWidth` | (c) front width | size of the largest 8-connected group of own frontier cells (contiguous frontier span) |
+| `ChainReach` | (c) chain potential | size of the largest 8-connected enemy-Normal cluster in capture-contact with own territory (longest capture-chain reach from current contact) |
+| `SeverableFrac` | (d) severable mass | `MaxCutLoss / max(1, Connected)` — the largest single-cut severable chunk normalized by own mass, so a big material lead does not mask strangulation risk |
 
 ## Feature coverage vs evaluate.go (honest notes)
 

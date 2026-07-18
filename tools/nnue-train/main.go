@@ -33,8 +33,9 @@ import (
 
 // featuresPerSeat is the fixed width of arena.PlayerFeatures.Features().
 // Kept as a constant here so the input width is stable even if some shard has
-// only inactive seats; asserted against the data at load time.
-const featuresPerSeat = 19
+// only inactive seats; asserted against the data at load time. vs-ai2.56 grew
+// this 19 → 26 (owner-profile features); bump it in lockstep with the extractor.
+const featuresPerSeat = 26
 
 const seats = 4
 
