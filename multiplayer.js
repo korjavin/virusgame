@@ -205,9 +205,6 @@ class MultiplayerClient {
             case 'player_eliminated':
                 this.handlePlayerEliminated(msg);
                 break;
-            case 'game_end':
-                this.handleGameEnd(msg);
-                break;
             case 'bot_wanted':
                 // Human clients ignore this message
                 // Only bot clients will respond to this signal
@@ -241,7 +238,16 @@ class MultiplayerClient {
         if (neutralBtn) neutralBtn.style.display = 'none';
 
         if (this.isMultiplayerGame) {
-            // Multiplayer mode (3-4 players) - show leave game button
+            // Multiplayer mode (3-4 players) - announce the winner, then show leave button
+            if (statusDisplay) {
+                if (msg.winner === this.yourPlayer) {
+                    statusDisplay.textContent = i18n.t('youWin');
+                } else if (msg.winner > 0) {
+                    statusDisplay.textContent = i18n.t('playerWins', { player: msg.winner });
+                } else {
+                    statusDisplay.textContent = i18n.t('youLose');
+                }
+            }
             this.showLeaveGameButton();
         } else {
             // 1v1 mode - show result and auto-cleanup

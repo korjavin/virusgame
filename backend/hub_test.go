@@ -259,6 +259,9 @@ func TestHubIntegration_Neutrals(t *testing.T) {
 	game.Board[0][0] = NewCell(1, CellFlagBase)
 	game.Board[0][1] = NewCell(1, CellFlagNormal)
 	game.Board[1][0] = NewCell(1, CellFlagNormal)
+	// P2 needs a base so endTurn passes the turn instead of ending the game on a
+	// player who cannot move (vs-ai2.58: neutrals now route through endTurn).
+	game.Board[4][4] = NewCell(2, CellFlagBase)
 
 	runOnHub(h, func() {
 		h.games[gameID] = game

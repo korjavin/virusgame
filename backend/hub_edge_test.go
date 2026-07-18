@@ -37,9 +37,10 @@ func TestHubLogic_IllegalMove(t *testing.T) {
 	// Call handleIllegalMove
 	h.handleIllegalMove(game, 1, "Testing illegal move")
 
-	// Verify P1 pieces removed
-	if game.Board[0][0] != 0 || game.Board[0][1] != 0 {
-		t.Error("Illegal move should remove player pieces")
+	// vs-ai2.58: cells stay on the board even for the offender; the 1v1 game
+	// ends by winner, not by wiping pieces.
+	if game.Board[0][0] == 0 || game.Board[0][1] == 0 {
+		t.Error("Cells should remain on the board (vs-ai2.58)")
 	}
 
 	// Verify Game Over (since 1v1)
@@ -91,11 +92,13 @@ func TestHubLogic_MoveTimeout(t *testing.T) {
 	h.handleMoveTimeout(msg)
 
 	// In multiplayer, human timeout calls handleResign.
-	// handleResign checks if user is in game.
-	// We need to verify P1 resigned.
-	// Pieces should be killed (neutral).
-	if !game.Board[0][0].IsKilled() {
-		t.Error("Timeout/Resign should kill pieces in multiplayer")
+	// vs-ai2.58: a resigning player's cells STAY owned and capturable; only the
+	// eliminated flag flips.
+	if game.Board[0][0].Player() != 1 || game.Board[0][0].IsKilled() {
+		t.Error("Resigned player's cells should remain owned, not killed (vs-ai2.58)")
+	}
+	if !game.Eliminated[0] {
+		t.Error("Resigned player 1 should be marked eliminated")
 	}
 
 	// 2. Bot Timeout
@@ -108,11 +111,12 @@ func TestHubLogic_MoveTimeout(t *testing.T) {
 	msgBot := &Message{GameID: game.ID, Player: 3}
 	h.handleMoveTimeout(msgBot)
 
-	// Bot pieces should be removed (0), not killed?
-	// handleMoveTimeout for bot:
-	// "Remove all pieces for this bot... game.Board[i][j] = 0"
-	if game.Board[0][4] != 0 {
-		t.Error("Bot timeout should remove pieces")
+	// vs-ai2.58: a timed-out bot's cells STAY owned; only the eliminated flag flips.
+	if game.Board[0][4].Player() != 3 {
+		t.Error("Timed-out bot's cells should remain owned (vs-ai2.58)")
+	}
+	if !game.Eliminated[2] {
+		t.Error("Timed-out bot player 3 should be marked eliminated")
 	}
 }
 

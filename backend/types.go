@@ -185,7 +185,12 @@ type Game struct {
 	PlayerBases   [4]CellPos      // Bases for each player
 	NeutralsUsed  [4]bool         // Track neutrals usage
 	ActivePlayers int             // Number of active players
-	MoveTimer     *time.Timer     // Timer for auto-resign after 120 seconds
+	// Eliminated marks players who are out of the game (mirrors game.State.active).
+	// vs-ai2.58: an eliminated player's cells STAY on the board, owned and
+	// capturable per normal attack rules — only this flag flips. Aliveness is read
+	// from this flag, never inferred from piece counts.
+	Eliminated [4]bool
+	MoveTimer  *time.Timer // Timer for auto-resign after 120 seconds
 
 	// Game history and timing
 	MoveHistory    []MoveAction
