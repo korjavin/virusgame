@@ -226,15 +226,12 @@ func buildBotChain(width int) game.Snapshot {
 
 // TestConstructedCutWidthSensitivity is the vs-ai2.40 fragility gate. From the
 // constructed foothold+spearhead position, the maxCut cutter (P1) plays the live
-// bot (P2) at a deterministic 1000-node budget. The width-1 half still asserts:
-// the cutter WINS against a width-1 chain (the filament is severable — the
-// vs-ai2.38 before-picture). The width-2 half ("cutter must lose") was a
-// fix-validation probe for the pre-vs-ai2.52 hand-tuned eval; the SPSA-tuned
-// 1v1 vector trades that single constructed hold for the aggregate defense
-// gates (production beats OwnerBot 68.8% from empty, TendrilCutSeeker 83.3%,
-// held-out CutSeeker 72.6% — see PR #110), which supersede it. The width-2
-// games are still played and logged for the record, then skipped, not
-// asserted. Deterministic node budget: load-immune, no wall-clock assertions.
+// bot (P2) at a deterministic 1000-node budget. It asserts the width sensitivity
+// that makes the gate meaningful: the cutter WINS against a width-1 chain (the
+// filament is severable — this is the current eval's fragility, the vs-ai2.38
+// before-picture) and LOSES against a width-2 chain (a width-2 front has no
+// single cut point — the property any fix must preserve). Deterministic node
+// budget: load-immune, no wall-clock assertions.
 //
 //	VS_CONSTRUCTED_CUT=1 go test ./arena -run TestConstructedCutWidthSensitivity -v
 func TestConstructedCutWidthSensitivity(t *testing.T) {
@@ -269,7 +266,7 @@ func TestConstructedCutWidthSensitivity(t *testing.T) {
 		cutterWon := result.Winner == 1
 		t.Logf("width-%d bot chain: candidate — cutter %s in %d decisions (%s)",
 			tc.width, map[bool]string{true: "WINS", false: "loses"}[cutterWon], result.Decisions, tc.rationale)
-		if tc.width == 1 && cutterWon != tc.cutterMustWin {
+		if cutterWon != tc.cutterMustWin {
 			t.Errorf("width %d: cutter won=%v, want %v — %s", tc.width, cutterWon, tc.cutterMustWin, tc.rationale)
 		}
 
@@ -281,12 +278,5 @@ func TestConstructedCutWidthSensitivity(t *testing.T) {
 		}
 		t.Logf("width-%d bot chain: incumbent — cutter %s in %d decisions",
 			tc.width, map[bool]string{true: "WINS", false: "loses"}[incumbentResult.Winner == 1], incumbentResult.Decisions)
-
-		if tc.width == 2 {
-			// vs-ai2.52 tradeoff: the width-2 "cutter must lose" invariant is
-			// retired for the tuned 1v1 eval; the aggregate defense gates above
-			// carry the anti-fragility evidence. Logged, not asserted.
-			t.Skip("width-2 invariant retired by the vs-ai2.52 tuned eval (see PR #110); width-1 fragility half still asserts")
-		}
 	}
 }

@@ -407,10 +407,6 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 // this tiny fixture; the payoff is at deeper searches). Action/Score/Depth
 // unchanged. The budget-1000 minimax result and both maxn fixtures are
 // unchanged (maxn immediate pruning only fires when a winning child exists).
-// vs-ai2.52 re-pin: the owner-targeted SPSA weights (1v1 only, mode split)
-// rescaled the minimax fixture Scores; the 3p maxn fixtures use the untouched
-// multiplayer set so their Scores are the original vs-ai2.34 values. Actions,
-// Nodes, Evaluations and Depth are unchanged everywhere.
 func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
@@ -429,8 +425,8 @@ func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 	}{
 		{
 			name: "minimax", state: two,
-			wantDepth: Result{Action: move(2, 3), Score: 4762, Depth: 2, Nodes: 220, Evaluations: 202},
-			wantNodes: Result{Action: move(3, 4), Score: 4762, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
+			wantDepth: Result{Action: move(2, 3), Score: 26644, Depth: 2, Nodes: 220, Evaluations: 202},
+			wantNodes: Result{Action: move(3, 4), Score: 26644, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
 		},
 		{
 			name: "maxn", state: three,

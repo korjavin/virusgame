@@ -42,29 +42,24 @@ func TestOwnerBotLegalAndDeterministic(t *testing.T) {
 	}
 }
 
-// TestProductionEvalBeatsOwnerBot is the standing OwnerBot gate. History: the
-// vs-ai2.55 original (TestOwnerBotBeatsProductionEval) asserted OwnerBot won
-// >=40% — built as the strongest scripted rung against the then-current
-// hand-tuned eval, which lost 62.5% to it. The vs-ai2.52 owner-targeted SPSA
-// eval inverted that premise by success (OwnerBot fell to 31.2%), so the gate
-// now asserts the win from the production side: from the empty 12x12 board over
-// the family of opening lines, both seats, the production eval must beat
-// OwnerBot in >=55% of games. Deterministic (node budget, no wall clock), so
-// the verdict is load-immune.
+// TestOwnerBotBeatsProductionEval is the vs-ai2.55 validation gate. From the
+// empty 12x12 board over the family of opening lines, both seats, OwnerBot must
+// beat the CURRENT production eval (deterministic node budget) in >=40% of
+// games — making it the strongest scripted rung. Deterministic (node budget, no
+// wall clock), so the verdict is load-immune.
 //
-//	VS_OWNERBOT=1 go test ./arena -run TestProductionEvalBeatsOwnerBot -v -timeout 60m
-func TestProductionEvalBeatsOwnerBot(t *testing.T) {
+//	VS_OWNERBOT=1 go test ./arena -run TestOwnerBotBeatsProductionEval -v -timeout 60m
+func TestOwnerBotBeatsProductionEval(t *testing.T) {
 	if os.Getenv("VS_OWNERBOT") != "1" {
 		t.Skip("set VS_OWNERBOT=1 to run the OwnerBot validation gate")
 	}
 	nodes := uint64(envInt(t, "VS_OWNERBOT_NODES", 1000))
 	eval := nodeBudgetPlainAgent(nodes, false)
 	openings := emptyOpeningLines()
-	var evalWins, games int
+	var wins, games int
 	for _, line := range openings {
 		snapshot := buildOpening(t, line)
 		for seat := 0; seat < 2; seat++ {
-			// seat = OwnerBot's position; the production eval sits opposite.
 			agents := []Agent{OwnerBot, eval}
 			if seat == 1 {
 				agents[0], agents[1] = agents[1], agents[0]
@@ -77,14 +72,14 @@ func TestProductionEvalBeatsOwnerBot(t *testing.T) {
 				t.Fatalf("%s seat %d illegal/stalled: %+v", line.name, seat, result)
 			}
 			games++
-			if result.Winner == game.Player(2-seat) {
-				evalWins++
+			if result.Winner == game.Player(seat+1) {
+				wins++
 			}
 		}
 	}
-	rate := 100 * float64(evalWins) / float64(games)
-	t.Logf("production eval vs OwnerBot (nodes=%d): %d/%d = %.1f%%", nodes, evalWins, games, rate)
-	if rate < 55 {
-		t.Fatalf("production eval win-rate %.1f%% < 55%% bar (wins=%d games=%d)", rate, evalWins, games)
+	rate := 100 * float64(wins) / float64(games)
+	t.Logf("OwnerBot vs production eval (nodes=%d): %d/%d = %.1f%%", nodes, wins, games, rate)
+	if rate < 40 {
+		t.Fatalf("OwnerBot win-rate %.1f%% < 40%% bar (wins=%d games=%d)", rate, wins, games)
 	}
 }
