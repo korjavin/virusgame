@@ -184,12 +184,13 @@ func TestEvaluateWorkspaceMatchesOriginMainOracle(t *testing.T) {
 			_, _ = hash.Write(encoded[:])
 		}
 	}
-	// Self-consistency oracle for the vs-ai2.34 space-race evaluator
-	// (spaceRaceWeight = 32); no longer tracks origin/main bf74a44, whose
+	// Self-consistency oracle for the production evaluator. Re-pinned at
+	// vs-ai2.52 when defaultEvalParams was baked to the owner-targeted SPSA
+	// weights (spaceRaceWeight = 3); does not track origin/main bf74a44, whose
 	// evaluator lacked the space term.
-	const oracle = "fbb8646013184a0ab96861e82d2b8d884e79734699312ae1698a933467a35667"
+	const oracle = "59402e3e724151448fde0da15a5f622971711046345d1f9bea9c5b4a13256de8"
 	if got := fmt.Sprintf("%x", hash.Sum(nil)); got != oracle {
-		t.Fatalf("workspace evaluator digest = %s, want vs-ai2.34 oracle %s", got, oracle)
+		t.Fatalf("workspace evaluator digest = %s, want vs-ai2.52 oracle %s", got, oracle)
 	}
 }
 
@@ -222,17 +223,18 @@ func TestEvaluateWorkspaceGoldenStates(t *testing.T) {
 		state game.State
 		want  [4]int
 	}{
-		{"initial", initial, [4]int{36, -36, -500000000, -500000000}},
-		{"contact-threatened-cut", contact, [4]int{2036, -2036, -500000000, -500000000}},
-		{"neutral", neutral, [4]int{-2639, 2639, -500000000, -500000000}},
+		// vs-ai2.52 re-pin: production eval now runs the owner-targeted SPSA
+		// weights (defaultEvalParams), so these static scores shift from the
+		// prior hand-tuned goldens.
+		{"initial", initial, [4]int{69, -69, -500000000, -500000000}},
+		{"contact-threatened-cut", contact, [4]int{69, -69, -500000000, -500000000}},
+		{"neutral", neutral, [4]int{-1016, 1016, -500000000, -500000000}},
 		{"terminal", terminal, [4]int{mateScore, -mateScore, -mateScore, -mateScore}},
-		// vs-ai2.45 re-pin: eliminated players' cells now stay on the board
-		// (walls/targets), shifting the active players' space and territory terms.
-		{"eliminated", eliminated, [4]int{-500000000, 472, -472, -500000000}},
+		{"eliminated", eliminated, [4]int{-500000000, -226, 226, -500000000}},
 	} {
 		workspace := evalWorkspace{}
 		if got := evaluateAllWithWorkspace(fixture.state, &workspace); got != fixture.want {
-			t.Fatalf("%s scores = %v, want vs-ai2.34 golden %v", fixture.name, got, fixture.want)
+			t.Fatalf("%s scores = %v, want vs-ai2.52 golden %v", fixture.name, got, fixture.want)
 		}
 	}
 }
