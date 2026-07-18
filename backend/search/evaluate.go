@@ -71,14 +71,13 @@ type EvalParams struct {
 	PredatoryCutLossDiv int
 }
 
-// defaultEvalParams returns the production evaluation weights. These are the
-// vs-ai2.52 owner-targeted SPSA optimum (bestTheta from
+// evalParams1v1 returns the production weights for games with <=2 active
+// players. These are the vs-ai2.52 owner-targeted SPSA optimum (bestTheta from
 // /tmp/spsa-ownertarget.json: baseline 79.17 -> best 89.58 on the
 // OwnerBot-weight-3 gate-ladder objective, strength floors green, CutSeeker
-// holdout stable at 87.5%). The prior hand-tuned literals are preserved in the
-// summary's DefaultTheta and in git history. The tuner (cmd/spsatune) is still
-// the only injection point via SetEvalParams; production runs these by default.
-func defaultEvalParams() EvalParams {
+// holdout stable at 87.5%). The tuner (cmd/spsatune) is still the only
+// injection point via SetEvalParams; production runs these by default.
+func evalParams1v1() EvalParams {
 	return EvalParams{
 		Connected: 1, Normal: 3, Fortified: 12, Mobility: 0, Captures: 2,
 		Disconnected: 2, BaseExits: 343, BaseOpenings: 11, BaseAnchors: 452,
@@ -88,9 +87,33 @@ func defaultEvalParams() EvalParams {
 	}
 }
 
-// activeEvalParams holds the weights used by evaluateAllWithWorkspace. It is a
-// process global: only SetEvalParams mutates it, and only the tuner calls that.
+// evalParamsMulti returns the pre-vs-ai2.52 hand-tuned weights, used when more
+// than two players are active. The vs-ai2.52 SPSA fitness was 1v1-only, and
+// the full battery showed its optimum regresses the maxn multiplayer rungs
+// (e.g. 4p 2x-prod vs 2x-incumbent 87.5% -> 40.6% first-place) while winning
+// every 1v1 rung — the 1v1 optimum is not the multiplayer optimum, so
+// multiplayer keeps the proven hand-tuned vector. SpaceRace 32 is the
+// vs-ai2.34 sweep peak (see spaceRaceWeight comment).
+func evalParamsMulti() EvalParams {
+	return EvalParams{
+		Connected: 10, Normal: 30, Fortified: 6, Mobility: 1, Captures: 1,
+		Disconnected: 1, BaseExits: 180, BaseOpenings: 80, BaseAnchors: 240,
+		BaseThreat: 650, ThreatenedLossMult: 1, ThreatenedMult: 1,
+		SpaceRace: 32, SealedBasePenalty: 5000, NeutralUnusedBonus: 20,
+		MovesLeftTempo: 12, PredatoryCutBase: 150, PredatoryCutLossDiv: 2,
+	}
+}
+
+func defaultEvalParams() EvalParams { return evalParams1v1() }
+
+// activeEvalParams holds the 1v1 weights used by evaluateAllWithWorkspace
+// (multiplayer positions use the fixed evalParamsMulti instead). It is a
+// process global: only SetEvalParams mutates it, and only the tuner calls that
+// — the tuner's ladder is 1v1, so it injects into the 1v1 set only.
 var activeEvalParams = defaultEvalParams()
+
+// multiEvalParams is the fixed >2-active-player weight set (not tunable).
+var multiEvalParams = evalParamsMulti()
 
 // SetEvalParams overrides the active evaluation weights. It is the tuner-only
 // injection point (cmd/spsatune) and is NOT called on the production path.
@@ -263,18 +286,27 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 	var raw [4]int
 	active := 0
 	for player := game.Player(1); player <= 4; player++ {
+		if state.Active(player) {
+			active++
+		}
+	}
+	// vs-ai2.52 mode split: the SPSA-tuned vector was optimized (and wins)
+	// 1v1 only; with >2 active players the hand-tuned multiplayer set applies.
+	p := activeEvalParams
+	if active > 2 {
+		p = multiEvalParams
+	}
+	for player := game.Player(1); player <= 4; player++ {
 		if !state.Active(player) {
 			raw[player-1] = -mateScore / 2
 			continue
 		}
-		active++
 		index := player - 1
 		metrics[index] = analyzeWithConnectivity(state, player, cells, connected, &workspace.scratch,
 			workspace.articulation[index], workspace.cutLoss[index])
 		m := metrics[player-1]
 		area := state.Rows() * state.Cols()
 		owned := m.normal + m.fortified + 1 // include the base
-		p := activeEvalParams
 		raw[player-1] = normalized(m.connected, area, p.Connected) +
 			normalized(m.normal, area, p.Normal) + normalized(m.fortified, area, p.Fortified) +
 			normalized(m.mobility, area, p.Mobility) + normalized(m.captures, area, p.Captures) -
@@ -307,7 +339,7 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 			for index, cut := range metrics[opponent-1].articulation {
 				if cut && adjacentConnected(state, index, own.connectedCells) {
 					loss := int(metrics[opponent-1].cutLoss[index])
-					raw[player-1] += activeEvalParams.PredatoryCutBase + ratio(loss, max(1, metrics[opponent-1].connected))/activeEvalParams.PredatoryCutLossDiv
+					raw[player-1] += p.PredatoryCutBase + ratio(loss, max(1, metrics[opponent-1].connected))/p.PredatoryCutLossDiv
 				}
 			}
 		}

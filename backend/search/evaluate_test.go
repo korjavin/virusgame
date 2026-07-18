@@ -185,10 +185,11 @@ func TestEvaluateWorkspaceMatchesOriginMainOracle(t *testing.T) {
 		}
 	}
 	// Self-consistency oracle for the production evaluator. Re-pinned at
-	// vs-ai2.52 when defaultEvalParams was baked to the owner-targeted SPSA
-	// weights (spaceRaceWeight = 3); does not track origin/main bf74a44, whose
-	// evaluator lacked the space term.
-	const oracle = "59402e3e724151448fde0da15a5f622971711046345d1f9bea9c5b4a13256de8"
+	// vs-ai2.52: 2-active-player fixtures score with the SPSA-tuned 1v1 set
+	// (spaceRaceWeight = 3), 3p/4p fixtures with the hand-tuned multiplayer set
+	// (mode split); does not track origin/main bf74a44, whose evaluator lacked
+	// the space term.
+	const oracle = "1316cf0106fb38f3707e8aba8a46808e66d3872b24a12e9739147ba846c86852"
 	if got := fmt.Sprintf("%x", hash.Sum(nil)); got != oracle {
 		t.Fatalf("workspace evaluator digest = %s, want vs-ai2.52 oracle %s", got, oracle)
 	}
