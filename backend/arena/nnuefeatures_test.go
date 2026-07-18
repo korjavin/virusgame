@@ -2,6 +2,7 @@ package arena
 
 import (
 	"testing"
+	"virusgame/nnuefeat"
 
 	"virusgame/game"
 )
@@ -126,8 +127,8 @@ func TestNNUEFeaturesCaptureAndThreat(t *testing.T) {
 func TestFeaturesFlatVectorStable(t *testing.T) {
 	f := PlayerFeatures{Normal: 3, SealedBase: true, NeutralUnused: false, MovesLeftTempo: 2}
 	v := f.Features()
-	if len(v) != nnueFeatureCount {
-		t.Fatalf("Features len = %d, want %d", len(v), nnueFeatureCount)
+	if len(v) != nnuefeat.FeatureCount {
+		t.Fatalf("Features len = %d, want %d", len(v), nnuefeat.FeatureCount)
 	}
 	if v[0] != 3 {
 		t.Errorf("v[0] Normal = %v, want 3", v[0])

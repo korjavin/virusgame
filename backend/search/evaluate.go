@@ -229,6 +229,13 @@ func evaluateAll(state game.State) [4]int {
 }
 
 func evaluateWithWorkspace(state game.State, player game.Player, workspace *evalWorkspace) int {
+	// vs-ai2.56 Stage 3: env-gated NNUE-lite candidate path. Off by default, so
+	// the production eval below is byte-identical to origin-main. GameOver is
+	// handled by the caller (minimax) before any leaf eval, so nnueEvaluate only
+	// ever sees non-terminal positions.
+	if nnueEnabled {
+		return nnueEvaluate(state, player)
+	}
 	return evaluateAllWithWorkspace(state, workspace)[player-1]
 }
 
