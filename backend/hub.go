@@ -231,27 +231,10 @@ func (h *Hub) handleIllegalAction(game *Game, player int, msg *Message, reason s
 		h.sendToUser(user, &errorMsg)
 	}
 
-	// Eliminate player
-	// Remove all pieces for this player
-	for i := 0; i < game.Rows; i++ {
-		for j := 0; j < game.Cols; j++ {
-			cell := game.Board[i][j]
-			if cell != 0 && cell.Player() == player {
-				game.Board[i][j] = 0
-			}
-		}
-	}
-
-	// Send player_eliminated message
-	elimMsg := Message{
-		Type:             "player_eliminated",
-		GameID:           game.ID,
-		EliminatedPlayer: player,
-	}
-	h.broadcastToGame(game, &elimMsg)
-
-	// Check if game should end
+	// Eliminate player. Cells stay owned on the board (vs-ai2.58); only the flag
+	// flips, and the game may continue for the remaining players.
 	if game.IsMultiplayer {
+		h.eliminatePlayer(game, player)
 		h.checkMultiplayerStatus(game)
 	} else {
 		// For 1v1, illegal move = loss
@@ -1108,27 +1091,11 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		if !hasValidMoves && game.MovesLeft > 0 {
 			log.Printf("Player %d has no more valid moves (had %d moves left), eliminating player", playerNum, game.MovesLeft)
 
-			// Eliminate this player in multiplayer games
+			// Eliminate this player in multiplayer games. Cells stay owned
+			// (vs-ai2.58); idempotent if eliminateDisconnectedPlayers already
+			// flagged them above.
 			if game.IsMultiplayer {
-				// Remove all pieces for this player
-				for i := 0; i < game.Rows; i++ {
-					for j := 0; j < game.Cols; j++ {
-						cell := game.Board[i][j]
-						if cell != 0 && cell.Player() == playerNum {
-							game.Board[i][j] = 0
-						}
-					}
-				}
-
-				// Send player_eliminated message
-				elimMsg := Message{
-					Type:             "player_eliminated",
-					GameID:           game.ID,
-					EliminatedPlayer: playerNum,
-				}
-				h.broadcastToGame(game, &elimMsg)
-
-				// Check if game should end
+				h.eliminatePlayer(game, playerNum)
 				h.checkMultiplayerStatus(game)
 				if game.GameOver {
 					return
@@ -1264,62 +1231,11 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 
 	h.broadcastToGame(game, &neutralsMsg)
 
-	// End turn
-	if game.IsMultiplayer {
-		// Multiplayer: advance to next active player
-		nextPlayer := game.CurrentPlayer
-		for attempts := 0; attempts < game.ActivePlayers; attempts++ {
-			nextPlayer++
-			if nextPlayer > 4 {
-				nextPlayer = 1
-			}
-
-			// Check if this player is active
-			if game.Players[nextPlayer-1] != nil {
-				pieceCount := h.countPlayerPieces(game, nextPlayer)
-				// Check if player has any pieces left
-				if pieceCount > 0 {
-					game.CurrentPlayer = nextPlayer
-					game.MovesLeft = 3
-					break
-				}
-			}
-		}
-	} else {
-		// 1v1: toggle between 1 and 2
-		game.CurrentPlayer = 3 - playerNum
-		game.MovesLeft = 3
-	}
-
-	// Increment TurnCount when turn actually changes
-	game.TurnCount++
-
-	turnMsg := Message{
-		Type:      "turn_change",
-		GameID:    msg.GameID,
-		Player:    game.CurrentPlayer,
-		MovesLeft: game.MovesLeft,
-	}
-	turnSnapshot := gameSnapshot(game)
-	turnMsg.Snapshot = &turnSnapshot
-
-	// Send turn change to all players based on game type
-	if game.IsMultiplayer {
-		// Multiplayer lobby game: send to all players
-		for _, player := range game.Players {
-			if player != nil && player.User != nil {
-				h.sendToUser(player.User, &turnMsg)
-			}
-		}
-	} else {
-		// 1v1 game: send to both players
-		if game.Player1 != nil {
-			h.sendToUser(game.Player1, &turnMsg)
-		}
-		if game.Player2 != nil {
-			h.sendToUser(game.Player2, &turnMsg)
-		}
-	}
+	// Placing neutrals consumes the whole turn. Route through endTurn so the next
+	// player gets a move timer, stuck players are eliminated, and the game can end
+	// — the hand-rolled rotation here did none of that and froze the game
+	// permanently after a neutral placement (vs-ai2.58 P1-B).
+	h.endTurn(game)
 }
 
 func (h *Hub) handleRematch(user *User, msg *Message) {
@@ -1377,16 +1293,10 @@ func (h *Hub) handleResign(user *User, msg *Message) {
 			return // User not in this game
 		}
 
-		// Remove all cells of the resigned player from the board
-		for i := 0; i < game.Rows; i++ {
-			for j := 0; j < game.Cols; j++ {
-				cell := game.Board[i][j]
-				if cell != 0 && cell.Player() == resignedPlayer {
-					// Mark as killed (neutral)
-					game.Board[i][j] = NewCell(0, CellFlagKilled)
-				}
-			}
-		}
+		// Mark the player out of the game. Their cells stay on the board, owned and
+		// capturable per normal rules (vs-ai2.58) — a resigning player forfeits their
+		// turn, not their territory.
+		h.eliminatePlayer(game, resignedPlayer)
 
 		// If the resigned player was the current player, pass turn to next player
 		if game.CurrentPlayer == resignedPlayer && !game.GameOver {
@@ -1728,28 +1638,16 @@ func (h *Hub) handleMoveTimeout(msg *Message) {
 				resignMsg := &Message{GameID: game.ID}
 				h.handleResign(player.User, resignMsg)
 			} else if player.IsBot {
-				// Bot player - eliminate directly since bots don't have User objects
+				// Bot player - eliminate directly since bots don't have User objects.
+				// Cells stay owned (vs-ai2.58); only the flag flips.
 				log.Printf("Bot player %d timed out - eliminating", msg.Player)
+				h.eliminatePlayer(game, msg.Player)
 
-				// Remove all pieces for this bot
-				for i := 0; i < game.Rows; i++ {
-					for j := 0; j < game.Cols; j++ {
-						cell := game.Board[i][j]
-						if cell != 0 && cell.Player() == msg.Player {
-							game.Board[i][j] = 0
-						}
-					}
+				// A timed-out bot forfeits its turn like a resigning human; advance
+				// past it so the game does not stall on the bot's slot.
+				if game.CurrentPlayer == msg.Player && !game.GameOver {
+					h.endTurn(game)
 				}
-
-				// Send player_eliminated message
-				elimMsg := Message{
-					Type:             "player_eliminated",
-					GameID:           game.ID,
-					EliminatedPlayer: msg.Player,
-				}
-				h.broadcastToGame(game, &elimMsg)
-
-				// Check if game should end
 				h.checkMultiplayerStatus(game)
 			}
 		}
@@ -2708,7 +2606,10 @@ func (h *Hub) endTurn(game *Game) {
 
 	if game.IsMultiplayer {
 		log.Printf("endTurn: Starting turn rotation from player %d", game.CurrentPlayer)
-		// Find next active player who can actually make moves
+		// Find the next non-eliminated player who can actually make a move.
+		// Eliminated players are skipped by flag (their cells remain on the board
+		// but they never get a turn); a live player who is stuck is eliminated now
+		// (matching game.State.eliminateStuckPlayers) and rotation continues.
 		nextPlayer := game.CurrentPlayer
 		foundValidPlayer := false
 		for attempts := 0; attempts < 4; attempts++ {
@@ -2717,61 +2618,29 @@ func (h *Hub) endTurn(game *Game) {
 				nextPlayer = 1
 			}
 
-			log.Printf("endTurn: Attempt %d, checking player %d", attempts, nextPlayer)
+			if !game.playerActive(nextPlayer) {
+				continue // empty slot or already eliminated
+			}
 
-			// Check if this player is active and has pieces
-			if game.Players[nextPlayer-1] != nil {
-				pieceCount := h.countPlayerPieces(game, nextPlayer)
-				log.Printf("endTurn: Player %d exists, has %d pieces", nextPlayer, pieceCount)
+			game.CurrentPlayer = nextPlayer
+			game.MovesLeft = 3
+			if h.canMakeAnyMove(game, nextPlayer) {
+				foundValidPlayer = true
+				log.Printf("endTurn: Selected player %d as next player", nextPlayer)
+				break
+			}
 
-				if pieceCount > 0 {
-					// IMPORTANT: Also check if this player can actually make valid moves
-					// This prevents selecting a player who has pieces but is stuck
-					game.CurrentPlayer = nextPlayer
-					game.MovesLeft = 3
-					canMove := h.canMakeAnyMove(game, nextPlayer)
-					log.Printf("endTurn: Player %d can make moves: %v", nextPlayer, canMove)
-
-					if canMove {
-						foundValidPlayer = true
-						log.Printf("endTurn: Selected player %d as next player (has pieces and can move)", nextPlayer)
-						break
-					} else {
-						// This player has pieces but can't move - eliminate them now
-						log.Printf("endTurn: Player %d has pieces but no valid moves, eliminating immediately", nextPlayer)
-						for i := 0; i < game.Rows; i++ {
-							for j := 0; j < game.Cols; j++ {
-								cell := game.Board[i][j]
-								if cell != 0 {
-									if cell.Player() == nextPlayer {
-										game.Board[i][j] = 0
-									}
-								}
-							}
-						}
-
-						// Send player_eliminated message
-						elimMsg := Message{
-							Type:             "player_eliminated",
-							GameID:           game.ID,
-							EliminatedPlayer: nextPlayer,
-						}
-						h.broadcastToGame(game, &elimMsg)
-
-						// Notify about elimination
-						h.checkMultiplayerStatus(game)
-						if game.GameOver {
-							return
-						}
-					}
-				}
-			} else {
-				log.Printf("endTurn: Player %d slot is nil", nextPlayer)
+			// Live but stuck: eliminate now, keep rotating.
+			log.Printf("endTurn: Player %d has no valid moves, eliminating", nextPlayer)
+			h.eliminatePlayer(game, nextPlayer)
+			h.checkMultiplayerStatus(game)
+			if game.GameOver {
+				return
 			}
 		}
 
 		if !foundValidPlayer {
-			// No valid player found after checking all players - game should be over
+			// No live player can move - game should be over
 			log.Printf("endTurn: No valid player found, checking game status")
 			h.checkMultiplayerStatus(game)
 			return
@@ -2840,6 +2709,34 @@ func (h *Hub) endTurn(game *Game) {
 	// and make moves via normal WebSocket connection
 }
 
+// playerActive reports whether a multiplayer slot is occupied and not yet
+// eliminated. This is the single source of truth for aliveness — the board is
+// never scanned for pieces to decide who is still in the game (vs-ai2.58).
+func (game *Game) playerActive(player int) bool {
+	if player < 1 || player > 4 {
+		return false
+	}
+	return game.Players[player-1] != nil && !game.Eliminated[player-1]
+}
+
+// eliminatePlayer marks a player out of the game and announces it exactly once.
+// It mirrors game.State.eliminateStuckPlayers: only the flag flips — the
+// player's cells remain on the board, owned and capturable per normal rules.
+// Idempotent: repeat calls for an already-eliminated player are a no-op, so the
+// player_eliminated broadcast is never duplicated (vs-ai2.58).
+func (h *Hub) eliminatePlayer(game *Game, player int) {
+	if player < 1 || player > 4 || game.Eliminated[player-1] {
+		return
+	}
+	game.Eliminated[player-1] = true
+	log.Printf("Player %d eliminated in game %s (cells remain owned)", player, game.ID)
+	h.broadcastToGame(game, &Message{
+		Type:             "player_eliminated",
+		GameID:           game.ID,
+		EliminatedPlayer: player,
+	})
+}
+
 func (h *Hub) checkMultiplayerStatus(game *Game) {
 	if !game.IsMultiplayer {
 		// Use legacy win check for 1v1
@@ -2852,39 +2749,14 @@ func (h *Hub) checkMultiplayerStatus(game *Game) {
 		return
 	}
 
-	// Count active players (those with pieces)
+	// Count active players from the eliminated flag (not piece counts): eliminated
+	// players keep their cells, so aliveness must come from the flag.
 	activePlayers := 0
 	lastActivePlayer := 0
-	previousActivePlayers := game.ActivePlayers
-
 	for i := 1; i <= 4; i++ {
-		if game.Players[i-1] != nil {
-			pieceCount := h.countPlayerPieces(game, i)
-			if pieceCount > 0 {
-				activePlayers++
-				lastActivePlayer = i
-			}
-		}
-	}
-
-	// Only send elimination messages if active count decreased
-	if previousActivePlayers > activePlayers {
-		// Find which player(s) were eliminated
-		for i := 1; i <= 4; i++ {
-			if game.Players[i-1] != nil {
-				pieceCount := h.countPlayerPieces(game, i)
-				if pieceCount == 0 {
-					log.Printf("Player %d eliminated in game %s", i, game.ID)
-
-					// Send player_eliminated message
-					elimMsg := Message{
-						Type:             "player_eliminated",
-						GameID:           game.ID,
-						EliminatedPlayer: i,
-					}
-					h.broadcastToGame(game, &elimMsg)
-				}
-			}
+		if game.playerActive(i) {
+			activePlayers++
+			lastActivePlayer = i
 		}
 	}
 
@@ -2955,42 +2827,19 @@ func (h *Hub) eliminateDisconnectedPlayers(game *Game) {
 	}
 
 	if game.IsMultiplayer {
-		// Check all players in multiplayer game
+		// Eliminate every live player who is now stuck (base disconnected or fully
+		// blocked), mirroring game.State.eliminateStuckPlayers which runs after each
+		// action. Eliminated players keep their cells; only the flag flips.
 		for i := 1; i <= 4; i++ {
-			if game.Players[i-1] != nil {
-				pieceCount := h.countPlayerPieces(game, i)
-				if pieceCount > 0 {
-					// Player has pieces, check if they can make any valid moves
-					canMove := h.canMakeAnyMove(game, i)
-					if !canMove {
-						log.Printf("Player %d has %d pieces but no valid moves - eliminating", i, pieceCount)
-
-						// Remove all pieces for this player
-						for row := 0; row < game.Rows; row++ {
-							for col := 0; col < game.Cols; col++ {
-								cell := game.Board[row][col]
-								if cell != 0 {
-									if cell.Player() == i {
-										game.Board[row][col] = 0
-									}
-								}
-							}
-						}
-
-						// Send player_eliminated message
-						elimMsg := Message{
-							Type:             "player_eliminated",
-							GameID:           game.ID,
-							EliminatedPlayer: i,
-						}
-						h.broadcastToGame(game, &elimMsg)
-
-						// Check if game should end after elimination
-						h.checkMultiplayerStatus(game)
-						if game.GameOver {
-							return
-						}
-					}
+			if !game.playerActive(i) {
+				continue
+			}
+			if !h.canMakeAnyMove(game, i) {
+				log.Printf("Player %d has no valid moves - eliminating", i)
+				h.eliminatePlayer(game, i)
+				h.checkMultiplayerStatus(game)
+				if game.GameOver {
+					return
 				}
 			}
 		}

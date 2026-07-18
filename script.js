@@ -585,10 +585,11 @@ function endTurn() {
 
 function checkWinCondition() {
     if (gameOver) return;
-    // 3-4 player games: the server's game_end is authoritative (handleGameEnd);
-    // the 2-player piece count below would falsely end the game on the first
-    // mid-game elimination (vs-ai2.46).
-    if (typeof mpClient !== 'undefined' && mpClient.isMultiplayerGame) return;
+    // Any online game (1v1 or 3-4p): the server's game_end is authoritative
+    // (handleGameEnd). The 2-player piece count below would falsely end the game on
+    // the first mid-game elimination (vs-ai2.46) and, in online 1v1, race the
+    // server's ruling now that eliminated cells stay on the board (vs-ai2.58).
+    if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) return;
     const player1Pieces = board.flat().filter(cell => getPlayer(cell) === 1).length;
     const player2Pieces = board.flat().filter(cell => getPlayer(cell) === 2).length;
 

@@ -385,8 +385,8 @@ func TestMultiplayerCleanupPersistenceRetryAndVisibility(t *testing.T) {
 	h.users[player2.ID] = player2
 
 	// 1. Simulate game end due to elimination/normal win condition
-	// Let's make active players <= 1 by eliminating player 2
-	game.Board[1][1] = 0
+	// vs-ai2.58: aliveness is the eliminated flag, not piece count. Flag player 2.
+	game.Eliminated[1] = true
 	h.checkMultiplayerStatus(game)
 
 	// Game should be marked GameOver
@@ -463,8 +463,8 @@ func TestMultiplayerCleanupFailureRetry(t *testing.T) {
 	oldDB := db
 	db = nil
 
-	// End the game
-	game.Board[1][1] = 0
+	// End the game (vs-ai2.58: eliminate via flag, not piece wipe)
+	game.Eliminated[1] = true
 	h.checkMultiplayerStatus(game)
 
 	if !game.GameOver {

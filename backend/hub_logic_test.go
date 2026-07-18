@@ -139,11 +139,18 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 		t.Errorf("Expected eliminated player 1, got %d", msg.EliminatedPlayer)
 	}
 
-	// Verify pieces removed
+	// vs-ai2.58: eliminated player's cells STAY owned; only the flag flips.
 	var eliminatedPiece CellValue
-	runOnHub(h, func() { eliminatedPiece = mpGame.Board[0][0] })
-	if eliminatedPiece != 0 {
-		t.Error("Eliminated player pieces should be removed")
+	var flagged bool
+	runOnHub(h, func() {
+		eliminatedPiece = mpGame.Board[0][0]
+		flagged = mpGame.Eliminated[0]
+	})
+	if eliminatedPiece.Player() != 1 {
+		t.Error("Eliminated player's cells should remain owned (vs-ai2.58)")
+	}
+	if !flagged {
+		t.Error("Player 1 should be marked eliminated")
 	}
 }
 
@@ -261,12 +268,15 @@ func TestHub_Logic_EliminateDisconnected(t *testing.T) {
 
 	h.eliminateDisconnectedPlayers(game)
 
-	// P2 pieces should be removed
-	if game.Board[2][2] != 0 {
-		t.Error("P2 disconnected pieces should be removed")
+	// vs-ai2.58: a stuck player is eliminated by flag; their cells stay owned and
+	// capturable per normal rules.
+	if !game.Eliminated[1] {
+		t.Error("Stuck player 2 should be marked eliminated")
 	}
-	// Base should also be removed (all pieces)
-	if game.Board[4][4] != 0 {
-		t.Error("P2 base should be removed")
+	if game.Board[2][2].Player() != 2 {
+		t.Error("P2 disconnected piece should remain owned (vs-ai2.58)")
+	}
+	if game.Board[4][4].Player() != 2 {
+		t.Error("P2 base should remain owned (vs-ai2.58)")
 	}
 }
