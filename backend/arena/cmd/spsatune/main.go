@@ -2,8 +2,9 @@
 // virusgame/search by SPSA (Simultaneous Perturbation Stochastic
 // Approximation) against the deterministic gate-ladder objective: candidate
 // win-rate over the 12x12 rungs {Greedy, Legacy, BaseAttacker,
-// MobilityAttacker, MobilityBaseAttacker, incumbent-h2h}, weighted toward the
-// stranglers where eval quality actually shows. Small-board strength floors
+// MobilityAttacker, MobilityBaseAttacker, incumbent-h2h, OwnerBot}, weighted
+// toward the stranglers and heaviest on OwnerBot (the owner proxy) where eval
+// quality actually shows. Small-board strength floors
 // (Legacy >=85%, Greedy >=75%, incumbent h2h >=50%) are hard REJECT
 // constraints; CutSeeker is held out for validation only and never enters the
 // fitness sum.
@@ -92,6 +93,7 @@ type optimizer struct {
 	seed                                    int64
 	scale                                   []float64
 	verbose                                 bool
+	initTheta                               *search.EvalParams // warm start, nil => default
 }
 
 func newOptimizer(c configRecord, verbose bool) *optimizer {
@@ -202,6 +204,13 @@ func (o *optimizer) fitness(p search.EvalParams) (score float64, floorsOK bool, 
 		{arena.Instrument(arena.MobilityAttacker), 2, false},
 		{arena.Instrument(arena.MobilityBaseAttacker), 2, false},
 		{arena.TelemetryNodeBudget(o.nodes, true), 1, false}, // incumbent h2h
+		// OwnerBot is the owner proxy distilled from the loss corpus and the
+		// current eval loses to it badly from empty; weight it 3x so the search
+		// optimizes primarily against the opponent we actually care about beating.
+		// Pure function of position (slice-order scan, map lookups) => parallel-safe
+		// and order-independent like the other heuristic rungs. CutSeeker stays a
+		// held-out validation opponent (never a rung).
+		{arena.Instrument(arena.OwnerBot), 3, false},
 	}
 	var sum, wsum float64
 	for _, r := range rungs {
@@ -230,8 +239,18 @@ func (o *optimizer) run() (trace []iterRecord, summary summaryRecord, err error)
 
 	n := len(o.scale)
 	theta := make([]float64, n)
-	for i := range theta {
-		theta[i] = 1.0 // default weights == scale, so scaled space starts at 1
+	if o.initTheta != nil {
+		// Warm start: map the saved integer weights into SPSA scaled space
+		// (real/scale). Default weights == scale, so a default vector maps back to
+		// all-1.0 exactly, and any saved bestTheta resumes from where it left off.
+		vec := toVec(*o.initTheta)
+		for i := range theta {
+			theta[i] = vec[i] / o.scale[i]
+		}
+	} else {
+		for i := range theta {
+			theta[i] = 1.0 // default weights == scale, so scaled space starts at 1
+		}
 	}
 
 	defaultParams := search.DefaultEvalParams()
@@ -327,6 +346,7 @@ func main() {
 	seed := flag.Int64("seed", 1, "master seed for perturbations")
 	workers := flag.Int("workers", 0, "game workers per eval (0 => GOMAXPROCS)")
 	out := flag.String("out", "", "results JSON path (stdout summary if empty)")
+	init := flag.String("init", "", "warm-start theta: path to a results JSON (uses summary.bestTheta) or a bare EvalParams map")
 	flag.Parse()
 
 	w := *workers
@@ -338,6 +358,15 @@ func main() {
 		Nodes: *nodes, Seed: *seed, Workers: w,
 	}
 	o := newOptimizer(cfg, true)
+	if *init != "" {
+		theta, err := loadInitTheta(*init)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "spsatune: -init:", err)
+			os.Exit(1)
+		}
+		o.initTheta = &theta
+		fmt.Printf("warm start from %s: %+v\n", *init, theta)
+	}
 	trace, summary, err := o.run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "spsatune:", err)
@@ -353,6 +382,30 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("wrote", *out)
+}
+
+// loadInitTheta reads a warm-start vector from path, accepting either a full
+// results JSON (uses summary.bestTheta) or a bare EvalParams map. A results JSON
+// unmarshals into output with a non-zero BestTheta; a bare map leaves BestTheta
+// zero and is parsed directly. An all-zero result from either form is an error
+// (a degenerate/empty file, not a usable start).
+func loadInitTheta(path string) (search.EvalParams, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return search.EvalParams{}, err
+	}
+	var full output
+	if json.Unmarshal(b, &full) == nil && full.Summary.BestTheta != (search.EvalParams{}) {
+		return full.Summary.BestTheta, nil
+	}
+	var p search.EvalParams
+	if err := json.Unmarshal(b, &p); err != nil {
+		return p, fmt.Errorf("not a results JSON or EvalParams map: %w", err)
+	}
+	if p == (search.EvalParams{}) {
+		return p, fmt.Errorf("parsed to an all-zero vector")
+	}
+	return p, nil
 }
 
 func writeJSON(path string, v any) error {

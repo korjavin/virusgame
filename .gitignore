@@ -1,6 +1,8 @@
 # Compiled binaries
 backend/virusgame
+backend/nnuegen
 backend/bot-hoster
+tools/nnue-train/virusgame-nnue-train
 *.exe
 *.out
 *.bin
