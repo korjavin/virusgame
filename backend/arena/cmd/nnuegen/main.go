@@ -710,7 +710,17 @@ func main() {
 	boards := flag.String("boards", "8x8", "comma-separated board sizes, e.g. 8x8,12x12")
 	corpus := flag.String("corpus", "", "owner-corpus manifest path (enables the corpus source)")
 	resume := flag.Bool("resume", false, "scan existing shards and skip fingerprints already present")
+	residIn := flag.String("residualize", "", "rewrite shards from this dir with deepScore -= static eval, write to -out, then exit")
+	relabelIn := flag.String("relabel", "", "rewrite shards from this dir with deepScore re-searched at -budget, write to -out, then exit")
 	flag.Parse()
+	if *relabelIn != "" {
+		relabel(*relabelIn, *out, *budget, *workers)
+		return
+	}
+	if *residIn != "" {
+		residualize(*residIn, *out)
+		return
+	}
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "-out is required")
 		os.Exit(2)
