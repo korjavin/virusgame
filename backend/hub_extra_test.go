@@ -17,16 +17,14 @@ func TestHubIntegration_Disconnect(t *testing.T) {
 	u1 := c1.user
 	userID := u1.ID
 
-	var userExists bool
-	runOnHub(h, func() { _, userExists = h.users[userID] })
-	if !userExists {
+	if _, exists := h.users[userID]; !exists {
 		t.Error("User should exist")
 	}
 
 	h.unregister <- c1
+	time.Sleep(50 * time.Millisecond)
 
-	runOnHub(h, func() { _, userExists = h.users[userID] })
-	if userExists {
+	if _, exists := h.users[userID]; exists {
 		t.Error("User should be removed after disconnect")
 	}
 }
@@ -63,9 +61,7 @@ func TestHubIntegration_DeclineChallenge(t *testing.T) {
 
 	waitForMessage(t, c1, "challenge_declined")
 
-	var challengeCount int
-	runOnHub(h, func() { challengeCount = len(h.challenges) })
-	if challengeCount != 0 {
+	if len(h.challenges) != 0 {
 		t.Error("Challenges should be empty")
 	}
 }

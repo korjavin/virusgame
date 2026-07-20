@@ -14,14 +14,13 @@ func TestWebSocketIntegration(t *testing.T) {
 	h := newHub()
 	go h.run()
 
-	// Setup an isolated router that replicates main.go routing without
-	// polluting http.DefaultServeMux across repeated test runs.
-	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	// Setup Router
+	// We need to replicate main.go routing
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(h, w, r)
 	})
 
-	server := httptest.NewServer(mux)
+	server := httptest.NewServer(nil)
 	defer server.Close()
 
 	// Convert http URL to ws URL
@@ -78,13 +77,12 @@ func TestWebSocketBotConnection(t *testing.T) {
 	h := newHub()
 	go h.run()
 
-	// Route for bot on a test-local mux.
-	mux := http.NewServeMux()
-	mux.HandleFunc("/ws/bot", func(w http.ResponseWriter, r *http.Request) {
+	// Route for bot
+	http.HandleFunc("/ws/bot", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(h, w, r)
 	})
 
-	server := httptest.NewServer(mux)
+	server := httptest.NewServer(nil)
 	defer server.Close()
 
 	// Pass ?bot=true

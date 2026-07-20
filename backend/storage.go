@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -42,18 +41,13 @@ func InitDB(dbPath string) {
 		player4_name TEXT,
 		result INTEGER,
 		termination TEXT,
-		pgn_content TEXT,
-		rejected_attempt TEXT
+		pgn_content TEXT
 	);
 	`
 
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
 		log.Fatalf("Failed to create table: %v", err)
-	}
-	// Existing installations predate rejected-attempt diagnostics.
-	if _, err = db.Exec(`ALTER TABLE games ADD COLUMN rejected_attempt TEXT`); err != nil && !isDuplicateColumnError(err) {
-		log.Fatalf("Failed to migrate games table: %v", err)
 	}
 
 	log.Println("Database initialized successfully at", dbPath)
@@ -131,29 +125,16 @@ func saveGame(game *Game, termination string) error {
 	winner := game.Winner
 	endTime := game.EndTime
 
-	var rejectedAttempt any
-	if game.RejectedAttempt != nil {
-		encoded, err := json.Marshal(game.RejectedAttempt)
-		if err != nil {
-			return fmt.Errorf("encode rejected attempt: %w", err)
-		}
-		rejectedAttempt = string(encoded)
-	}
-
 	insertSQL := `
-		INSERT INTO games (id, started_at, ended_at, rows, cols, player1_name, player2_name, player3_name, player4_name, result, termination, pgn_content, rejected_attempt)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO games (id, started_at, ended_at, rows, cols, player1_name, player2_name, player3_name, player4_name, result, termination, pgn_content)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`
 	_, err = db.Exec(insertSQL,
 		gameID, startTime, endTime, rows, cols,
 		p1Name, p2Name, p3Name, p4Name,
-		winner, termination, pgnContent, rejectedAttempt,
+		winner, termination, pgnContent,
 	)
 	return err
-}
-
-func isDuplicateColumnError(err error) bool {
-	return err != nil && strings.Contains(strings.ToLower(err.Error()), "duplicate column name")
 }
 func getPlayerNameSafe(player *LobbyPlayer) string {
 	if player.User != nil {
@@ -174,8 +155,8 @@ type PGNTurn struct {
 
 type PGNMove struct {
 	Type       string    `json:"type"`
-	Row        int       `json:"row"`
-	Col        int       `json:"col"`
+	Row        int       `json:"row,omitempty"`
+	Col        int       `json:"col,omitempty"`
 	Cells      []CellPos `json:"cells,omitempty"`
 	DurationCS int       `json:"duration_cs"`
 }

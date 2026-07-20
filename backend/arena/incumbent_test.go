@@ -5,8 +5,10 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"virusgame/game"
+	"virusgame/search"
 	"virusgame/search/incumbent"
 )
 
@@ -58,6 +60,19 @@ func TestNodeBudgetExactCeilingAndTelemetry(t *testing.T) {
 		if _, err := state.Apply(action); err != nil {
 			t.Fatalf("frozen=%v illegal: %v", frozen, err)
 		}
+	}
+}
+
+func TestCurrentTelemetryMapsRootParallelCounters(t *testing.T) {
+	result := search.Result{Depth: 3, Nodes: 11, Evaluations: 7, CompletedTurnDepth: 1, Workers: 4, RootLegal: 20, RootSelected: 12, RootCompleted: 12, RootLegalNeutrals: 6, RootSelectedNeutrals: 2, IterationsStarted: 2, IterationsCompleted: 1, Elapsed: time.Millisecond}
+	got := currentTelemetry(result)
+	if got.Nodes != 11 || got.Evaluations != 7 || got.CompletedTurnDepth != 1 || got.Workers != 4 || got.RootCompleted != 12 || got.LegalRootActions != 20 || got.SearchedRootActions != 12 || got.LegalRootNeutrals != 6 || got.SearchedRootNeutrals != 2 || got.IterationsStarted != 2 || got.IterationsCompleted != 1 || got.SearchElapsed != time.Millisecond {
+		t.Fatalf("telemetry=%+v", got)
+	}
+	result.Depth = 0
+	got = currentTelemetry(result)
+	if got.SearchedRootActions != 0 || got.SearchedRootNeutrals != 0 {
+		t.Fatalf("fallback published coverage: %+v", got)
 	}
 }
 

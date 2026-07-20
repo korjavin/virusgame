@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -83,7 +85,7 @@ func TestNeutralActionsAreSearchedAsWholeTurns(t *testing.T) {
 		move(4, 4), move(4, 5), move(5, 4),
 	)
 	s := newSearcher(context.Background(), state)
-	children, ok := s.orderedChildren(state)
+	children, _, _, ok := s.orderedChildren(game.NewPosition(state), true)
 	if !ok {
 		t.Fatal("ordering canceled")
 	}
@@ -91,8 +93,9 @@ func TestNeutralActionsAreSearchedAsWholeTurns(t *testing.T) {
 	for _, child := range children {
 		if child.action.Kind == game.PlaceNeutrals {
 			found = true
-			if child.state.CurrentPlayer() == state.CurrentPlayer() || child.state.MovesLeft() != 3 {
-				t.Fatalf("neutral did not consume turn: player=%d moves=%d", child.state.CurrentPlayer(), child.state.MovesLeft())
+			next := child.position.State()
+			if next.CurrentPlayer() == state.CurrentPlayer() || next.MovesLeft() != 3 {
+				t.Fatalf("neutral did not consume turn: player=%d moves=%d", next.CurrentPlayer(), next.MovesLeft())
 			}
 		}
 	}
@@ -254,6 +257,53 @@ func TestCanceledFallbackPreservesActorAcrossSizesAndPlayers(t *testing.T) {
 	}
 }
 
+func TestFallbackFindsSolePreserverOmittedByBoundedCandidates(t *testing.T) {
+	const fixture = `{"rows":8,"cols":8,"board":[[{"Owner":1,"Kind":2},{"Owner":2,"Kind":1},{"Owner":2,"Kind":3},{"Owner":1,"Kind":3},{"Owner":1,"Kind":1},{"Owner":1,"Kind":1},{"Owner":2,"Kind":3},{"Owner":1,"Kind":1}],[{"Owner":0,"Kind":4},{"Owner":0,"Kind":4},{"Owner":2,"Kind":3},{"Owner":1,"Kind":1},{"Owner":2,"Kind":1},{"Owner":2,"Kind":1},{"Owner":1,"Kind":1},{"Owner":2,"Kind":1}],[{"Owner":2,"Kind":1},{"Owner":2,"Kind":3},{"Owner":0,"Kind":4},{"Owner":1,"Kind":1},{"Owner":0,"Kind":4},{"Owner":1,"Kind":1},{"Owner":1,"Kind":3},{"Owner":1,"Kind":3}],[{"Owner":1,"Kind":3},{"Owner":0,"Kind":0},{"Owner":0,"Kind":0},{"Owner":1,"Kind":1},{"Owner":2,"Kind":1},{"Owner":2,"Kind":3},{"Owner":1,"Kind":3},{"Owner":2,"Kind":1}],[{"Owner":2,"Kind":3},{"Owner":1,"Kind":3},{"Owner":1,"Kind":3},{"Owner":0,"Kind":0},{"Owner":1,"Kind":1},{"Owner":2,"Kind":1},{"Owner":0,"Kind":4},{"Owner":1,"Kind":1}],[{"Owner":1,"Kind":3},{"Owner":1,"Kind":1},{"Owner":0,"Kind":4},{"Owner":1,"Kind":1},{"Owner":1,"Kind":1},{"Owner":2,"Kind":1},{"Owner":1,"Kind":1},{"Owner":1,"Kind":1}],[{"Owner":1,"Kind":1},{"Owner":2,"Kind":3},{"Owner":0,"Kind":0},{"Owner":1,"Kind":1},{"Owner":1,"Kind":1},{"Owner":0,"Kind":0},{"Owner":1,"Kind":3},{"Owner":0,"Kind":0}],[{"Owner":2,"Kind":3},{"Owner":2,"Kind":3},{"Owner":2,"Kind":1},{"Owner":1,"Kind":1},{"Owner":2,"Kind":1},{"Owner":0,"Kind":4},{"Owner":2,"Kind":1},{"Owner":2,"Kind":2}]],"bases":[{"Row":0,"Col":0},{"Row":7,"Col":7}],"active":[true,true],"neutralUsed":[false,false],"currentPlayer":1,"movesLeft":3,"gameOver":false,"winner":0}`
+	var snapshot game.Snapshot
+	if err := json.Unmarshal([]byte(fixture), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	state, err := game.FromSnapshot(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	position := game.NewPosition(state)
+	boundedSurvivor := false
+	position.ForEachSearchAction(func(a game.Action) bool {
+		if position.ApplySearch(a).State().Active(1) {
+			boundedSurvivor = true
+		}
+		return true
+	})
+	if boundedSurvivor {
+		t.Fatal("fixture no longer proves bounded omission")
+	}
+	action, ok := preservingFallback(state)
+	if !ok {
+		t.Fatal("missing fallback")
+	}
+	next, err := state.Apply(action)
+	if err != nil || !next.Active(1) || action.Kind != game.PlaceNeutrals {
+		t.Fatalf("fallback=%+v active=%v err=%v", action, next.Active(1), err)
+	}
+}
+
+func TestShortDeadlinePublishesFallbackWithoutIteration(t *testing.T) {
+	state := syntheticContact(t, 12, 2)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	result, ok := Choose(ctx, state)
+	if !ok {
+		t.Fatal("no fallback")
+	}
+	if result.IterationsStarted != 0 || result.Depth != 0 || result.Elapsed >= 25*time.Millisecond {
+		t.Fatalf("short deadline result=%+v", result)
+	}
+	if _, err := state.Apply(result.Action); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCompletedSearchPreservesActorOnReachableStates(t *testing.T) {
 	var covered [2][3]bool
 	for seed := int64(0); seed < 12; seed++ {
@@ -394,7 +444,252 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 	}
 }
 
-func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
+func TestParallelRootEqualsSequentialReference(t *testing.T) {
+	for players := 2; players <= 4; players++ {
+		for seed := int64(1); seed <= 4; seed++ {
+			state := mustState(t, 5+int(seed%2), 6, players)
+			rng := rand.New(rand.NewSource(seed*100 + int64(players)))
+			for ply := 0; ply < 5 && !state.GameOver(); ply++ {
+				actions := state.LegalActions()
+				moves := 0
+				for moves < len(actions) && actions[moves].Kind == game.Move {
+					moves++
+				}
+				if moves == 0 {
+					break
+				}
+				var err error
+				state, err = state.Apply(actions[rng.Intn(moves)])
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if state.GameOver() {
+				continue
+			}
+			depth := min(2, state.MovesLeft())
+			sequentialSearcher := newSearcher(context.Background(), state)
+			want, ok := sequentialSearcher.atDepth(state, depth)
+			if !ok {
+				t.Fatal("sequential incomplete")
+			}
+			fallback, _ := preservingFallback(state)
+			for workers := 1; workers <= 4; workers++ {
+				for repeat := 0; repeat < 3; repeat++ {
+					s := newSearcher(context.Background(), state)
+					got, complete := s.atDepthParallel(state, depth, workers, fallback)
+					if !complete || got.Action != want.Action || got.Score != want.Score {
+						t.Fatalf("%dp seed%d workers%d repeat%d: got %+v complete=%v want %+v", players, seed, workers, repeat, got, complete, want)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestPVSEqualsFullWindowReference(t *testing.T) {
+	for players := 2; players <= 2; players++ {
+		for seed := int64(10); seed < 14; seed++ {
+			state := mustState(t, 5+int(seed%2), 6, players)
+			rng := rand.New(rand.NewSource(seed + int64(players)*1000))
+			for ply := 0; ply < 6 && !state.GameOver(); ply++ {
+				actions := state.LegalActions()
+				moves := 0
+				for moves < len(actions) && actions[moves].Kind == game.Move {
+					moves++
+				}
+				if moves == 0 {
+					break
+				}
+				var err error
+				state, err = state.Apply(actions[rng.Intn(moves)])
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if state.GameOver() {
+				continue
+			}
+			// Cross the turn boundary and search multiple minimizing replies; a
+			// current-turn-only oracle cannot exercise PVS null windows or bounds.
+			depth := state.MovesLeft() + 2
+			oracle := newSearcher(context.Background(), state)
+			oracle.pvs = false
+			want, ok := oracle.atDepth(state, depth)
+			if !ok {
+				t.Fatal("oracle incomplete")
+			}
+			candidate := newSearcher(context.Background(), state)
+			got, ok := candidate.atDepth(state, depth)
+			if !ok || got.Action != want.Action || got.Score != want.Score {
+				t.Fatalf("%dp seed%d got=%+v ok=%v want=%+v", players, seed, got, ok, want)
+			}
+		}
+	}
+}
+
+func TestCandidatesAreStableLegalUniqueAndRetainForcing(t *testing.T) {
+	for _, fixture := range []struct {
+		name    string
+		players int
+		root    bool
+		limit   int
+	}{{"root-2p", 2, true, rootOptionalLimit}, {"interior-2p", 2, false, interiorOptionalLimit}, {"interior-3p", 3, false, multiOptionalLimit}, {"interior-4p", 4, false, multiOptionalLimit}} {
+		t.Run(fixture.name, func(t *testing.T) {
+			assertCandidateSet(t, syntheticContact(t, 20, fixture.players), fixture.root, fixture.limit)
+		})
+	}
+}
+
+func assertCandidateSet(t *testing.T, state game.State, root bool, limit int) {
+	t.Helper()
+	s := newSearcher(context.Background(), state)
+	first, legal, _, ok := s.orderedChildren(game.NewPosition(state), root)
+	second, legal2, _, ok2 := s.orderedChildren(game.NewPosition(state), root)
+	if !ok || !ok2 || legal != legal2 || !reflect.DeepEqual(first, second) {
+		t.Fatal("candidate generation is not stable")
+	}
+	seen := map[game.Action]bool{}
+	selected := map[game.Action]bool{}
+	quiet := 0
+	before := activeCount(state)
+	actor := state.CurrentPlayer()
+	for _, c := range first {
+		if seen[c.action] {
+			t.Fatalf("duplicate %+v", c.action)
+		}
+		seen[c.action] = true
+		selected[c.action] = true
+		if _, err := state.Apply(c.action); err != nil {
+			t.Fatalf("illegal %+v: %v", c.action, err)
+		}
+		cell, _ := state.At(c.action.Target)
+		next := c.position.State()
+		forcing := next.Active(actor) && (next.GameOver() && next.Winner() == actor || activeCount(next) < before || c.action.Kind == game.Move && cell.Kind == game.Normal && cell.Owner != actor)
+		if !forcing {
+			quiet++
+		}
+	}
+	if quiet > limit {
+		t.Fatalf("quiet candidates=%d limit=%d", quiet, limit)
+	}
+	position := game.NewPosition(state)
+	availableQuiet := 0
+	position.ForEachSearchAction(func(a game.Action) bool {
+		next := position.ApplySearch(a).State()
+		cell, _ := state.At(a.Target)
+		forcing := next.Active(actor) && (next.GameOver() && next.Winner() == actor || activeCount(next) < before || a.Kind == game.Move && cell.Kind == game.Normal && cell.Owner != actor)
+		if forcing && !selected[a] {
+			t.Fatalf("forcing action omitted: %+v", a)
+		}
+		if !forcing && next.Active(actor) {
+			availableQuiet++
+		}
+		return true
+	})
+	if want := min(limit, availableQuiet); quiet != want {
+		t.Fatalf("quiet candidates=%d want exact cap %d from %d", quiet, want, availableQuiet)
+	}
+}
+
+func TestIncompleteParallelIterationIsNotPublished(t *testing.T) {
+	state := syntheticContact(t, 12, 2)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, ok := Choose(ctx, state)
+	if !ok {
+		t.Fatal("missing preserving fallback")
+	}
+	if result.Depth != 0 || result.IterationsCompleted != 0 || result.RootCompleted != 0 || result.RootSelected != 0 {
+		t.Fatalf("partial iteration leaked into result: %+v", result)
+	}
+	if _, err := state.Apply(result.Action); err != nil {
+		t.Fatalf("fallback illegal: %v", err)
+	}
+}
+
+func TestParallelTelemetryIsTruthful(t *testing.T) {
+	state := syntheticContact(t, 12, 2)
+	fallback, _ := preservingFallback(state)
+	s := newSearcher(context.Background(), state)
+	result, ok := s.atDepthParallel(state, 2, 3, fallback)
+	if !ok {
+		t.Fatal("parallel search incomplete")
+	}
+	if result.Workers != 3 || result.RootLegal < result.RootSelected || result.RootCompleted != result.RootSelected {
+		t.Fatalf("telemetry=%+v", result)
+	}
+}
+
+func TestParallelWorkersReportActualPeakForOneAndTwoRoots(t *testing.T) {
+	two := mustState(t, 2, 2, 2)
+	snapshot := two.Snapshot()
+	snapshot.Board[0][1] = game.Cell{Kind: game.Neutral}
+	one, err := game.FromSnapshot(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fixture := range []struct {
+		name  string
+		state game.State
+		roots int
+	}{{"one", one, 1}, {"two", two, 2}} {
+		t.Run(fixture.name, func(t *testing.T) {
+			fallback, _ := preservingFallback(fixture.state)
+			s := newSearcher(context.Background(), fixture.state)
+			result, ok := s.atDepthParallel(fixture.state, 1, 8, fallback)
+			if !ok {
+				t.Fatal("incomplete")
+			}
+			if result.RootSelected != fixture.roots || result.Workers != 1 {
+				t.Fatalf("result=%+v", result)
+			}
+		})
+	}
+}
+
+func TestCanceledParallelSearchReturnsWithoutWorkerLeaks(t *testing.T) {
+	state := syntheticContact(t, 12, 2)
+	fallback, _ := preservingFallback(state)
+	runtime.GC()
+	baseline := runtime.NumGoroutine()
+	for i := 0; i < 8; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Millisecond)
+		s := newSearcher(ctx, state)
+		_, complete := s.atDepthParallel(state, 9, 4, fallback)
+		cancel()
+		if complete {
+			t.Fatal("deadline search unexpectedly completed")
+		}
+	}
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+	if got := runtime.NumGoroutine(); got > baseline+2 {
+		t.Fatalf("goroutines grew from %d to %d", baseline, got)
+	}
+}
+
+func TestProductionLargeBoardSmoke(t *testing.T) {
+	for _, fixture := range []struct{ size, players int }{{28, 4}, {50, 2}} {
+		state := syntheticContact(t, fixture.size, fixture.players)
+		ctx, cancel := context.WithTimeout(context.Background(), 650*time.Millisecond)
+		started := time.Now()
+		result, ok := Choose(ctx, state)
+		elapsed := time.Since(started)
+		cancel()
+		if !ok {
+			t.Fatalf("%dx%d/%dp: no result", fixture.size, fixture.size, fixture.players)
+		}
+		if _, err := state.Apply(result.Action); err != nil {
+			t.Fatalf("%dx%d/%dp illegal: %v", fixture.size, fixture.size, fixture.players, err)
+		}
+		if elapsed > 750*time.Millisecond {
+			t.Fatalf("%dx%d/%dp took %s", fixture.size, fixture.size, fixture.players, elapsed)
+		}
+	}
+}
+
+func TestTurnAlignedSearchIsDeterministicAndNodeBudgetExact(t *testing.T) {
 	two := play(t, mustState(t, 5, 5, 2),
 		move(1, 1), move(2, 2), move(3, 3),
 		move(3, 4), move(2, 3), move(1, 2),
@@ -405,30 +700,30 @@ func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 		move(1, 3), move(2, 2), move(3, 1),
 	)
 	for _, fixture := range []struct {
-		name      string
-		state     game.State
-		wantDepth Result
-		wantNodes Result
+		name  string
+		state game.State
+		want  Result
 	}{
-		{
-			name: "minimax", state: two,
-			wantDepth: Result{Action: move(2, 3), Score: 6164, Depth: 2, Nodes: 216, Evaluations: 199},
-			wantNodes: Result{Action: move(2, 3), Score: 6164, Depth: 2, Nodes: 1000, Evaluations: 916, BudgetExhausted: true},
-		},
-		{
-			name: "maxn", state: three,
-			wantDepth: Result{Action: move(1, 2), Score: 1762, Depth: 2, Nodes: 46, Evaluations: 40},
-			wantNodes: Result{Action: move(1, 2), Score: 3946, Depth: 3, Nodes: 1000, Evaluations: 814, BudgetExhausted: true},
-		},
+		{"minimax", two, Result{Action: move(0, 1), Nodes: 1000, Evaluations: 913, BudgetExhausted: true, Workers: 1, IterationsStarted: 1}},
+		{"maxn", three, Result{Action: move(0, 1), Score: 3946, Depth: 3, Nodes: 1000, Evaluations: 772, BudgetExhausted: true, CompletedTurnDepth: 1, Workers: 1, RootLegal: 6, RootSelected: 6, RootCompleted: 6, IterationsStarted: 2, IterationsCompleted: 1}},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
-			depth, ok := ChooseDepth(context.Background(), fixture.state, 2)
-			if !ok || depth != fixture.wantDepth {
-				t.Fatalf("fixed-depth result = %+v ok=%v, want origin/main %+v", depth, ok, fixture.wantDepth)
+			a, ok := ChooseNodeBudget(fixture.state, 1000)
+			b, ok2 := ChooseNodeBudget(fixture.state, 1000)
+			if !ok || !ok2 || a != b {
+				t.Fatalf("node search differs: %+v / %+v", a, b)
 			}
-			nodes, ok := ChooseNodeBudget(fixture.state, 1000)
-			if !ok || nodes != fixture.wantNodes {
-				t.Fatalf("fixed-node result = %+v ok=%v, want origin/main %+v", nodes, ok, fixture.wantNodes)
+			if a != fixture.want {
+				t.Fatalf("golden changed: got %+v want %+v", a, fixture.want)
+			}
+			if a.Nodes != 1000 || !a.BudgetExhausted {
+				t.Fatalf("budget telemetry = %+v", a)
+			}
+			if a.Depth > 0 && (a.Depth-fixture.state.MovesLeft())%3 != 0 {
+				t.Fatalf("depth %d is not turn aligned", a.Depth)
+			}
+			if _, err := fixture.state.Apply(a.Action); err != nil {
+				t.Fatalf("illegal result: %v", err)
 			}
 		})
 	}
@@ -442,6 +737,110 @@ func BenchmarkDepthThree(b *testing.B) {
 			b.Fatal("search canceled")
 		}
 	}
+}
+
+func BenchmarkCandidateGeneration(b *testing.B) {
+	for _, size := range []int{5, 12, 20} {
+		state := syntheticContact(b, size, 2)
+		b.Run(fmt.Sprintf("%dx%d", size, size), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				s := newSearcher(context.Background(), state)
+				if _, _, _, ok := s.orderedChildren(game.NewPosition(state), true); !ok {
+					b.Fatal("canceled")
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkProductionContact(b *testing.B) {
+	for _, size := range []int{5, 12, 20} {
+		state := syntheticContact(b, size, 2)
+		b.Run(fmt.Sprintf("%dx%d", size, size), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				result, ok := Choose(context.Background(), state)
+				if !ok {
+					b.Fatal("no result")
+				}
+				b.ReportMetric(float64(result.Depth), "depth")
+				b.ReportMetric(float64(result.CompletedTurnDepth), "turns")
+				b.ReportMetric(float64(result.Nodes), "nodes")
+				b.ReportMetric(float64(result.IterationsStarted), "started")
+				b.ReportMetric(float64(result.IterationsCompleted), "completed")
+			}
+		})
+	}
+}
+
+func BenchmarkProductionSmoke(b *testing.B) {
+	for _, fixture := range []struct{ size, players int }{{28, 4}, {50, 2}} {
+		state := syntheticContact(b, fixture.size, fixture.players)
+		b.Run(fmt.Sprintf("%dx%d-%dp", fixture.size, fixture.size, fixture.players), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				result, ok := Choose(context.Background(), state)
+				if !ok {
+					b.Fatal("no result")
+				}
+				if _, err := state.Apply(result.Action); err != nil {
+					b.Fatal(err)
+				}
+				b.ReportMetric(float64(result.Depth), "depth")
+			}
+		})
+	}
+}
+
+func BenchmarkFixedContact(b *testing.B) {
+	state := syntheticContact(b, 20, 2)
+	for _, depth := range []int{3, 6} {
+		b.Run(fmt.Sprintf("depth%d", depth), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, ok := ChooseDepth(context.Background(), state, depth); !ok {
+					b.Fatal("incomplete")
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkFixedParallel5(b *testing.B) {
+	state := syntheticContact(b, 5, 2)
+	fallback, _ := preservingFallback(state)
+	for _, depth := range []int{3, 6, 9} {
+		b.Run(fmt.Sprintf("depth%d", depth), func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				s := newSearcher(context.Background(), state)
+				_, ok := s.atDepthParallel(state, depth, 6, fallback)
+				b.ReportMetric(float64(s.nodes), "nodes")
+				if !ok {
+					b.Fatal("incomplete")
+				}
+			}
+		})
+	}
+}
+
+func syntheticContact(tb testing.TB, size, players int) game.State {
+	tb.Helper()
+	state, err := game.New(size, size, players)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	snap := state.Snapshot()
+	for i := 1; i < size-1; i++ {
+		snap.Board[i][i] = game.Cell{Owner: 1, Kind: game.Normal}
+		snap.Board[size-1-i][size-1-i] = game.Cell{Owner: 2, Kind: game.Normal}
+	}
+	state, err = game.FromSnapshot(snap)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return state
 }
 
 func completedDepth(t *testing.T, state game.State, depth int) Result {

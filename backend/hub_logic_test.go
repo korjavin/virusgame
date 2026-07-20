@@ -59,13 +59,11 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 	for i := range game.Board {
 		game.Board[i] = make([]CellValue, 5)
 	}
-	runOnHub(h, func() {
-		h.games[game.ID] = game
-		c1.user.InGame = true
-		c1.user.GameID = game.ID
-		c2.user.InGame = true
-		c2.user.GameID = game.ID
-	})
+	h.games[game.ID] = game
+	c1.user.InGame = true
+	c1.user.GameID = game.ID
+	c2.user.InGame = true
+	c2.user.GameID = game.ID
 
 	// Call handleIllegalMove directly or trigger it
 	// Triggering via handleMove with invalid move covers path
@@ -81,7 +79,7 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 	// Let's verify handleIllegalMove specifically for Multiplayer elimination vs 1v1 game end
 
 	// 1v1 Case
-	runOnHub(h, func() { h.handleIllegalMove(game, 1, "test reason") })
+	h.handleIllegalMove(game, 1, "test reason")
 
 	// Should receive game_end
 	msg := waitForMessage(t, c2, "game_end")
@@ -123,12 +121,10 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 	mpGame.Board[4][4] = NewCell(2, CellFlagBase)
 	mpGame.Board[0][4] = NewCell(3, CellFlagBase)
 
-	runOnHub(h, func() {
-		h.games[mpGameID] = mpGame
+	h.games[mpGameID] = mpGame
 
-		// Player 1 makes illegal move
-		h.handleIllegalMove(mpGame, 1, "bad move")
-	})
+	// Player 1 makes illegal move
+	h.handleIllegalMove(mpGame, 1, "bad move")
 
 	// Should receive player_eliminated
 	msg = waitForMessage(t, c2, "player_eliminated")
@@ -140,9 +136,7 @@ func TestHub_Logic_IllegalMove(t *testing.T) {
 	}
 
 	// Verify pieces removed
-	var eliminatedPiece CellValue
-	runOnHub(h, func() { eliminatedPiece = mpGame.Board[0][0] })
-	if eliminatedPiece != 0 {
+	if mpGame.Board[0][0] != 0 {
 		t.Error("Eliminated player pieces should be removed")
 	}
 }
@@ -163,19 +157,15 @@ func TestHub_Logic_DisconnectCleanup(t *testing.T) {
 		Host:       c1.user,
 	}
 	lobby.Players[0] = &LobbyPlayer{User: c1.user, Index: 0}
-	runOnHub(h, func() {
-		h.lobbies[lobbyID] = lobby
-		c1.user.InLobby = true
-		c1.user.LobbyID = lobbyID
+	h.lobbies[lobbyID] = lobby
+	c1.user.InLobby = true
+	c1.user.LobbyID = lobbyID
 
-		// Disconnect
-		h.handleDisconnect(c1)
-	})
+	// Disconnect
+	h.handleDisconnect(c1)
 
 	// Lobby should be closed (host left)
-	var lobbyExists bool
-	runOnHub(h, func() { _, lobbyExists = h.lobbies[lobbyID] })
-	if lobbyExists {
+	if _, ok := h.lobbies[lobbyID]; ok {
 		t.Error("Lobby should be closed when host disconnects")
 	}
 }

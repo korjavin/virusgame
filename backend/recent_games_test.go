@@ -184,7 +184,7 @@ func newRecentGamesTestDB(t *testing.T) *sql.DB {
 		id TEXT PRIMARY KEY, started_at DATETIME, ended_at DATETIME,
 		rows INTEGER, cols INTEGER, player1_name TEXT, player2_name TEXT,
 		player3_name TEXT, player4_name TEXT, result INTEGER,
-		termination TEXT, pgn_content TEXT, rejected_attempt TEXT
+		termination TEXT, pgn_content TEXT
 	)`)
 	if err != nil {
 		t.Fatal(err)
@@ -206,9 +206,9 @@ func insertRecentGame(t *testing.T, database *sql.DB, game recentGameFixture) {
 	if game.cols == 0 {
 		game.cols = 10
 	}
-	_, err := database.Exec(`INSERT INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := database.Exec(`INSERT INTO games VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		game.id, game.startedAt, game.endedAt, game.rows, game.cols,
-		game.player1, game.player2, "", "", game.result, game.termination, game.history, nil)
+		game.player1, game.player2, "", "", game.result, game.termination, game.history)
 	if err != nil {
 		t.Fatal(err)
 	}

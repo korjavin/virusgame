@@ -31,30 +31,28 @@ func TestHub_TurnRotation_Multiplayer(t *testing.T) {
 		game.Board[i] = make([]CellValue, 5)
 	}
 
-	runOnHub(h, func() {
-		// Setup players
-		for i := 0; i < 3; i++ {
-			game.Players[i] = &LobbyPlayer{User: clients[i].user, Index: i, Symbol: "P"}
-			clients[i].user.InGame = true
-			clients[i].user.GameID = gameID
-		}
+	// Setup players
+	for i := 0; i < 3; i++ {
+		game.Players[i] = &LobbyPlayer{User: clients[i].user, Index: i, Symbol: "P"}
+		clients[i].user.InGame = true
+		clients[i].user.GameID = gameID
+	}
 
-		// Set bases and connected pieces
-		game.Board[0][0] = NewCell(1, CellFlagBase)
-		game.Board[0][1] = NewCell(1, CellFlagNormal) // P1 can move from here
+	// Set bases and connected pieces
+	game.Board[0][0] = NewCell(1, CellFlagBase)
+	game.Board[0][1] = NewCell(1, CellFlagNormal) // P1 can move from here
 
-		game.Board[4][4] = NewCell(2, CellFlagBase)
-		game.Board[4][3] = NewCell(2, CellFlagNormal) // P2 can move
+	game.Board[4][4] = NewCell(2, CellFlagBase)
+	game.Board[4][3] = NewCell(2, CellFlagNormal) // P2 can move
 
-		game.Board[0][4] = NewCell(3, CellFlagBase)
-		game.Board[1][4] = NewCell(3, CellFlagNormal) // P3 can move
+	game.Board[0][4] = NewCell(3, CellFlagBase)
+	game.Board[1][4] = NewCell(3, CellFlagNormal) // P3 can move
 
-		game.PlayerBases[0] = CellPos{0, 0}
-		game.PlayerBases[1] = CellPos{4, 4}
-		game.PlayerBases[2] = CellPos{0, 4}
+	game.PlayerBases[0] = CellPos{0, 0}
+	game.PlayerBases[1] = CellPos{4, 4}
+	game.PlayerBases[2] = CellPos{0, 4}
 
-		h.games[gameID] = game
-	})
+	h.games[gameID] = game
 
 	// P1 makes a move (movesLeft=1 -> 0 -> Turn Change)
 	r, c := 1, 1
@@ -77,12 +75,7 @@ func TestHub_TurnRotation_Multiplayer(t *testing.T) {
 	waitForMessage(t, clients[1], "move_made")
 	waitForMessage(t, clients[1], "turn_change")
 
-	var currentPlayer, movesLeft int
-	runOnHub(h, func() {
-		currentPlayer = game.CurrentPlayer
-		movesLeft = game.MovesLeft
-	})
-	if currentPlayer != 2 {
+	if game.CurrentPlayer != 2 {
 		t.Error("Internal state should be Player 2")
 	}
 
@@ -98,17 +91,17 @@ func TestHub_TurnRotation_Multiplayer(t *testing.T) {
 	// C2 should receive ITS OWN move_made now
 	waitForMessage(t, clients[1], "move_made")
 
-	// Observe state through the Hub command barrier after move processing.
-	runOnHub(h, func() {
-		currentPlayer = game.CurrentPlayer
-		movesLeft = game.MovesLeft
-	})
-	if currentPlayer != 2 {
+	// Wait a bit for processing to update internal state (movesLeft)
+	// move_made is broadcasted, but we need to check internal state
+	// It's usually sync in hub thread but we read it from test thread.
+	// Since handleMessage processes sequentially, if we got move_made, state should be updated.
+
+	if game.CurrentPlayer != 2 {
 		t.Error("Turn should still be Player 2")
 	}
 
-	if movesLeft != 2 {
-		t.Errorf("Expected 2 moves left, got %d", movesLeft)
+	if game.MovesLeft != 2 {
+		t.Errorf("Expected 2 moves left, got %d", game.MovesLeft)
 	}
 }
 
@@ -138,18 +131,16 @@ func TestHub_Attack(t *testing.T) {
 	for i := range game.Board {
 		game.Board[i] = make([]CellValue, 5)
 	}
-	runOnHub(h, func() {
-		h.games[gameID] = game
-		clients[0].user.InGame = true
-		clients[0].user.GameID = gameID
+	h.games[gameID] = game
+	clients[0].user.InGame = true
+	clients[0].user.GameID = gameID
 
-		// Setup P1 attacking P2
-		game.Board[0][0] = NewCell(1, CellFlagBase)
-		game.Board[0][1] = NewCell(1, CellFlagNormal)
+	// Setup P1 attacking P2
+	game.Board[0][0] = NewCell(1, CellFlagBase)
+	game.Board[0][1] = NewCell(1, CellFlagNormal)
 
-		// P2 piece at (0,2)
-		game.Board[0][2] = NewCell(2, CellFlagNormal)
-	})
+	// P2 piece at (0,2)
+	game.Board[0][2] = NewCell(2, CellFlagNormal)
 
 	// P1 attacks (0,2)
 	r, c := 0, 2
@@ -162,8 +153,7 @@ func TestHub_Attack(t *testing.T) {
 	waitForMessage(t, clients[0], "move_made")
 
 	// Check if cell is fortified
-	var cell CellValue
-	runOnHub(h, func() { cell = game.Board[0][2] })
+	cell := game.Board[0][2]
 	if cell.Player() != 1 {
 		t.Errorf("Expected cell to be owned by Player 1, got %d", cell.Player())
 	}

@@ -43,15 +43,6 @@ func sendMessage(h *Hub, c *Client, msg *Message) {
 	}
 }
 
-// runOnHub executes fixture setup and observations under the same ownership
-// discipline as production Hub mutations. The acknowledgement is also a
-// deterministic barrier for preceding events.
-func runOnHub(h *Hub, apply func()) {
-	done := make(chan struct{})
-	h.commands <- hubCommand{apply: apply, done: done}
-	<-done
-}
-
 func TestHubIntegration_Connect(t *testing.T) {
 	h := newHub()
 	go h.run()
@@ -109,19 +100,17 @@ func TestHubIntegration_LobbyAndGame(t *testing.T) {
 	waitForMessage(t, c2, "challenge_received")
 
 	// Verify Challenge exists
-	var challengeCount int
-	var challengeID string
-	runOnHub(h, func() {
-		challengeCount = len(h.challenges)
-		for id := range h.challenges {
-			challengeID = id
-		}
-	})
-	if challengeCount != 1 {
-		t.Errorf("Expected 1 challenge, got %d", challengeCount)
+	if len(h.challenges) != 1 {
+		t.Errorf("Expected 1 challenge, got %d", len(h.challenges))
 	}
 
 	// Client 2 accepts
+	// Find challenge ID
+	var challengeID string
+	for id := range h.challenges {
+		challengeID = id
+	}
+
 	acceptMsg := &Message{
 		Type:        "accept_challenge",
 		ChallengeID: challengeID,
@@ -132,10 +121,8 @@ func TestHubIntegration_LobbyAndGame(t *testing.T) {
 	waitForMessage(t, c1, "game_start")
 	waitForMessage(t, c2, "game_start")
 
-	var gameCount int
-	runOnHub(h, func() { gameCount = len(h.games) })
-	if gameCount != 1 {
-		t.Errorf("Expected 1 active game, got %d", gameCount)
+	if len(h.games) != 1 {
+		t.Errorf("Expected 1 active game, got %d", len(h.games))
 	}
 }
 
@@ -180,13 +167,11 @@ func TestHubIntegration_Move(t *testing.T) {
 	game.Board[0][1] = NewCell(1, CellFlagNormal)
 	game.Board[4][4] = NewCell(2, CellFlagBase)
 
-	runOnHub(h, func() {
-		h.games[gameID] = game
-		u1.InGame = true
-		u1.GameID = gameID
-		u2.InGame = true
-		u2.GameID = gameID
-	})
+	h.games[gameID] = game
+	u1.InGame = true
+	u1.GameID = gameID
+	u2.InGame = true
+	u2.GameID = gameID
 
 	// Player 1 makes a move at (1,1) (valid)
 	r, c := 1, 1
@@ -203,12 +188,7 @@ func TestHubIntegration_Move(t *testing.T) {
 	waitForMessage(t, c2, "move_made")
 
 	// Check if move was applied
-	var movedPlayer, currentPlayer int
-	runOnHub(h, func() {
-		movedPlayer = game.Board[1][1].Player()
-		currentPlayer = game.CurrentPlayer
-	})
-	if movedPlayer != 1 {
+	if game.Board[1][1].Player() != 1 {
 		t.Error("Board not updated after move")
 	}
 
@@ -216,7 +196,7 @@ func TestHubIntegration_Move(t *testing.T) {
 	waitForMessage(t, c1, "turn_change")
 	waitForMessage(t, c2, "turn_change")
 
-	if currentPlayer != 2 {
+	if game.CurrentPlayer != 2 {
 		t.Error("Turn should switch to Player 2")
 	}
 }
@@ -260,11 +240,9 @@ func TestHubIntegration_Neutrals(t *testing.T) {
 	game.Board[0][1] = NewCell(1, CellFlagNormal)
 	game.Board[1][0] = NewCell(1, CellFlagNormal)
 
-	runOnHub(h, func() {
-		h.games[gameID] = game
-		u1.InGame = true
-		u1.GameID = gameID
-	})
+	h.games[gameID] = game
+	u1.InGame = true
+	u1.GameID = gameID
 
 	neutralsMsg := &Message{
 		Type:   "neutrals",
@@ -282,9 +260,7 @@ func TestHubIntegration_Neutrals(t *testing.T) {
 	// Should receive turn_change
 	waitForMessage(t, c1, "turn_change")
 
-	var killed bool
-	runOnHub(h, func() { killed = game.Board[0][1].IsKilled() })
-	if !killed {
+	if !game.Board[0][1].IsKilled() {
 		t.Error("Cell (0,1) should be killed")
 	}
 }
@@ -312,13 +288,11 @@ func TestHubIntegration_Resign(t *testing.T) {
 		CurrentPlayer: 1,
 		MovesLeft:     3,
 	}
-	runOnHub(h, func() {
-		h.games[gameID] = game
-		u1.InGame = true
-		u1.GameID = gameID
-		u2.InGame = true
-		u2.GameID = gameID
-	})
+	h.games[gameID] = game
+	u1.InGame = true
+	u1.GameID = gameID
+	u2.InGame = true
+	u2.GameID = gameID
 
 	resignMsg := &Message{
 		Type:   "resign",
@@ -328,17 +302,11 @@ func TestHubIntegration_Resign(t *testing.T) {
 
 	waitForMessage(t, c2, "game_end")
 
-	var gameOver bool
-	var winner int
-	runOnHub(h, func() {
-		gameOver = game.GameOver
-		winner = game.Winner
-	})
-	if !gameOver {
+	if !game.GameOver {
 		t.Error("Game should be over")
 	}
-	if winner != 2 {
-		t.Errorf("Player 2 should win, got %d", winner)
+	if game.Winner != 2 {
+		t.Errorf("Player 2 should win, got %d", game.Winner)
 	}
 }
 

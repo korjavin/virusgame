@@ -1,6 +1,6 @@
 ---
 name: architect-codex
-description: Architect autonomous Virusgame delivery with Beads, Claude Opus, Agy, or Jules executors, evidence gates, PR review, merge, deployment verification, and production-game learning. Never use ralphex or Codex coding subagents.
+description: Architect autonomous Virusgame delivery with Beads, parallel direct or Jules executors, evidence gates, PR review, merge, deployment verification, and production-game learning. Never use ralphex.
 ---
 
 # Architect Codex
@@ -12,7 +12,7 @@ Ralphex is retired. Ignore any older workflow that requires it.
 1. Investigate the real code path; establish root cause with file and line evidence.
 2. Create actionable Beads epics/tasks with acceptance criteria, design, risks, labels, and dependencies.
 3. Schedule by file ownership: disjoint work may run in parallel; shared files serialize or bundle.
-4. Claim a ready bead, select the owner-directed external executor, and launch it in a fresh worktree from current `origin/main`.
+4. Claim a ready bead and launch an executor in a fresh worktree from current `origin/main`.
 5. The executor follows `develop-codex`, implements directly, tests, self-reviews, commits, pushes, and opens a draft PR.
 6. Review the hard invariant, diff scope, tests, Ponytail complexity, and CI.
 7. Return non-trivial corrections to the owning executor.
@@ -29,21 +29,15 @@ Ralphex is retired. Ignore any older workflow that requires it.
 
 ## Executor selection and recovery
 
-- Do not launch Codex subagents for implementation. Codex is the architect, monitor, integrator, and reviewer; reserve subagents for bounded read-only review only when independent review is necessary.
-- Send complex implementation to Claude Code with Opus. Run non-interactively in the isolated worktree with `claude -p --model opus`; grant only the tools required by the Bead, or use the repository's approved non-interactive permission mode.
-- Send simpler synchronous implementation to Agy with `agy --print` in the isolated worktree. Give it the same Bead, skill, verification, branch, and PR contract.
-- Send simple asynchronous implementation to Jules through `jules-beads-executor`.
-- Never silently substitute a Codex coding subagent when Claude, Agy, or Jules is unavailable. Record the failure, try the next owner-approved executor appropriate to the task, or report the external-tool blocker.
-- Jules is a cheap, asynchronous, failure-prone executor, not a model.
+- Prefer direct `develop-codex` executors for precise branch ownership and review loops.
+- Jules is a cheap, asynchronous, failure-prone executor, not a model. Use `jules-beads-executor` when useful.
 - A failed Jules session is not exceptional: inspect its remote patch without applying it to a dirty checkout, record useful evidence, correct the prompt, and retry Jules or hand the Bead to a direct executor.
 - If a Jules session is slow, launch a second independent Jules session for the same self-contained Bead when capacity is cheap (the owner currently has roughly 100 attempts/day). Keep separate branches/sessions, never let both mutate Beads, and review/select or combine results deliberately. Do not merge duplicate implementations blindly.
-- Poll Claude, Agy, and Jules processes/sessions and PR checks proactively. Retry or reassign stalled work; never make the owner monitor executors.
 - Never wait indefinitely for one executor while independent work is ready.
 
 ## Executor contract
 
-- Include this contract verbatim or by explicit file reference in every Claude, Agy, and Jules prompt.
-- First read `.agents/skills/develop-codex/SKILL.md`, repository guidance, the Bead, and applicable skills.
+- First read `.agents/skills/develop-codex/SKILL.md`, repository guidance, the bead, and applicable skills.
 - Use a fresh isolated worktree and confirm it contains current `origin/main`.
 - Do not invoke ralphex or create ralphex artifacts.
 - Apply Ponytail full: reuse and standard library first; minimum coherent code; no speculative dependencies or configuration.

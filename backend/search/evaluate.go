@@ -101,23 +101,37 @@ func evaluateAllWithWorkspace(state game.State, workspace *evalWorkspace) [4]int
 		m := metrics[player-1]
 		area := state.Rows() * state.Cols()
 		owned := m.normal + m.fortified + 1 // include the base
-		raw[player-1] = normalized(m.connected, area, 10) +
-			normalized(m.normal, area, 30) + normalized(m.fortified, area, 6) +
-			normalized(m.mobility, area, 1) + normalized(m.captures, area, 1) -
-			normalized(m.disconnected, owned, 1) +
-			180*m.baseExits + 80*m.baseOpenings + 240*m.baseAnchors -
-			650*m.baseThreat*m.threatTempo -
-			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
-			m.threatTempo*ratio(m.threatened, max(1, m.connected))
+		var features [numFeatures]int
+		features[featBaseExits] = m.baseExits
+		features[featBaseOpenings] = m.baseOpenings
+		features[featBaseAnchors] = m.baseAnchors
+		features[featBaseThreatTempo] = m.baseThreat * m.threatTempo
 		if m.baseExits+m.baseOpenings == 0 {
-			raw[player-1] -= 5000
+			features[featBaseClosed] = 1
 		}
 		if !state.NeutralUsed(player) {
-			raw[player-1] += 20
+			features[featNeutralUnused] = 1
 		}
 		if state.CurrentPlayer() == player {
-			raw[player-1] += state.MovesLeft() * 12
+			features[featMovesLeft] = state.MovesLeft()
 		}
+
+		dot := 0
+		for i, v := range features {
+			dot += v * incumbentWeights[i]
+		}
+
+		// Terms that cannot be perfectly factored into a constant weight vector due to
+		// division/rounding order or opponent-dependent state are kept fixed outside.
+		raw[player-1] = dot +
+			normalized(m.connected, area, 10) +
+			normalized(m.normal, area, 30) +
+			normalized(m.fortified, area, 6) +
+			normalized(m.mobility, area, 1) +
+			normalized(m.captures, area, 1) -
+			normalized(m.disconnected, owned, 1) -
+			m.threatTempo*ratio(m.threatenedLoss, max(1, m.connected)) -
+			m.threatTempo*ratio(m.threatened, max(1, m.connected))
 	}
 
 	for player := game.Player(1); player <= 4; player++ {

@@ -26,8 +26,9 @@ func TelemetryNodeBudget(nodes uint64, frozen bool) TelemetryAgent {
 			return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: searched, LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals, BudgetShortfall: !result.BudgetExhausted && !result.SearchComplete}, ok
 		}
 		result, ok := search.ChooseNodeBudget(state, nodes)
-		legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
-		return result.Action, DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations, CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth), LegalRootActions: legal, SearchedRootActions: searched, LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals, BudgetShortfall: !result.BudgetExhausted && !result.SearchComplete}, ok
+		telemetry := currentTelemetry(result)
+		telemetry.BudgetShortfall = !result.BudgetExhausted && !result.SearchComplete
+		return result.Action, telemetry, ok
 	}
 }
 
@@ -58,14 +59,7 @@ func Tournament(depth int) Agent {
 func TelemetryTournament(depth int) TelemetryAgent {
 	return func(state game.State) (game.Action, DecisionTelemetry, bool) {
 		result, ok := search.ChooseDepth(context.Background(), state, depth)
-		legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
-		return result.Action, DecisionTelemetry{
-			Nodes:              result.Nodes,
-			Evaluations:        result.Evaluations,
-			CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth),
-			LegalRootActions:   legal, SearchedRootActions: searched,
-			LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals,
-		}, ok
+		return result.Action, currentTelemetry(result), ok
 	}
 }
 
@@ -93,15 +87,22 @@ func TelemetryProduction() TelemetryAgent {
 		ctx, cancel := context.WithTimeout(context.Background(), search.ProductionBudget)
 		defer cancel()
 		result, ok := search.Choose(ctx, state)
-		legal, searched, neutrals, searchedNeutrals := rootCoverage(state, result.Depth)
-		return result.Action, DecisionTelemetry{
-			Nodes:              result.Nodes,
-			Evaluations:        result.Evaluations,
-			CompletedTurnDepth: completedTurns(state.MovesLeft(), result.Depth),
-			LegalRootActions:   legal, SearchedRootActions: searched,
-			LegalRootNeutrals: neutrals, SearchedRootNeutrals: searchedNeutrals,
-		}, ok
+		return result.Action, currentTelemetry(result), ok
 	}
+}
+
+func currentTelemetry(result search.Result) DecisionTelemetry {
+	searched, searchedNeutrals := 0, 0
+	if result.Depth > 0 {
+		searched = result.RootSelected
+		searchedNeutrals = result.RootSelectedNeutrals
+	}
+	return DecisionTelemetry{Nodes: result.Nodes, Evaluations: result.Evaluations,
+		CompletedTurnDepth: result.CompletedTurnDepth, LegalRootActions: result.RootLegal,
+		SearchedRootActions: searched, LegalRootNeutrals: result.RootLegalNeutrals,
+		SearchedRootNeutrals: searchedNeutrals, Workers: result.Workers, RootCompleted: result.RootCompleted,
+		IterationsStarted: result.IterationsStarted, IterationsCompleted: result.IterationsCompleted,
+		SearchElapsed: result.Elapsed}
 }
 
 func TelemetryFrozenProduction() TelemetryAgent {

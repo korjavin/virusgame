@@ -187,43 +187,11 @@ type Game struct {
 	EndTime        time.Time
 	LastActionTime time.Time
 
-	// Request history makes websocket retries idempotent. It is only accessed
-	// by the hub goroutine and is deliberately bounded per player.
-	actionRequests  [4]*actionRequestHistory
-	RejectedAttempt *RejectedAttempt
-
 	// The first terminal path owns the immutable database snapshot; later
 	// terminal signals observe the same durable row.
 	persistenceMu          sync.Mutex
 	persisted              bool
 	persistenceTermination string
-}
-
-const actionRequestHistoryLimit = 64
-
-type actionRequestHistory struct {
-	byID  map[string]actionRequestRecord
-	order []string
-}
-
-type actionRequestRecord struct {
-	Fingerprint [32]byte
-}
-
-// RejectedAttempt is captured before an illegal action mutates the game. The
-// snapshot and its digest let operators reproduce the exact validation state.
-type RejectedAttempt struct {
-	Player    int            `json:"player"`
-	Action    string         `json:"action"`
-	Row       *int           `json:"row,omitempty"`
-	Col       *int           `json:"col,omitempty"`
-	Cells     []CellPos      `json:"cells,omitempty"`
-	Reason    string         `json:"reason"`
-	Turn      int            `json:"turn"`
-	MovesLeft int            `json:"moves_left"`
-	RequestID string         `json:"request_id,omitempty"`
-	StateHash string         `json:"state_hash"`
-	Snapshot  *game.Snapshot `json:"snapshot"`
 }
 
 type MoveAction struct {

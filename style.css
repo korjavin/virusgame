@@ -1758,6 +1758,3 @@ body.dark-theme .chat-player-symbol {
     from { opacity: 0; transform: translateY(5px); }
     to { opacity: 1; transform: translateY(0); }
 }
-#game-board.input-locked {
-    pointer-events: none;
-}
