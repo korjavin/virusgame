@@ -224,6 +224,12 @@ func evaluate(state game.State, player game.Player) int {
 	return evaluateAll(state)[player-1]
 }
 
+// StaticEval exposes the hand-tuned leaf evaluation (no search) for player, used
+// to distill the eval into an external NNUE. Higher = better for player.
+func StaticEval(state game.State, player game.Player) int {
+	return evaluate(state, player)
+}
+
 func evaluateAll(state game.State) [4]int {
 	return evaluateAllWithWorkspace(state, &evalWorkspace{})
 }
