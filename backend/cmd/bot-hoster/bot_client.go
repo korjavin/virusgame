@@ -699,6 +699,16 @@ func actionMessage(gameID string, result gamesearch.Result, timeMs int64) *Messa
 	} else {
 		row, col := result.Action.Target.Row, result.Action.Target.Col
 		msg = &Message{Type: "move", GameID: gameID, Row: &row, Col: &col}
+		for _, alt := range result.Alternatives {
+			if alt.Action.Kind != game.Move {
+				continue
+			}
+			msg.AlternativeMoves = append(msg.AlternativeMoves, AlternativeMove{
+				Row:   alt.Action.Target.Row,
+				Col:   alt.Action.Target.Col,
+				Score: float64(alt.Score),
+			})
+		}
 	}
 
 	score := float64(result.Score)

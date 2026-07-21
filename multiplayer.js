@@ -69,14 +69,28 @@ function renderBotDiagnostics(msg) {
         clearBotDiagnostics();
         return;
     }
-    const text = (typeof i18n !== 'undefined')
-        ? i18n.t('botDiagnostics', {
-            eval: formatBotEval(msg.score),
-            depth: msg.depth,
-            nodes: formatBotNodes(msg.nodesEvaluated),
-            time: formatBotTime(msg.timeMs),
-        })
-        : `eval ${formatBotEval(msg.score)} · d${msg.depth} · ${formatBotNodes(msg.nodesEvaluated)} nodes · ${formatBotTime(msg.timeMs)}`;
+    const hasI18n = (typeof i18n !== 'undefined');
+    // Book/short paths carry a real eval but no search (depth 0, 0 nodes) —
+    // label them "book" instead of the misleading "d0 · 0 nodes" (vs-ai2.60).
+    const isBook = msg.depth === 0 && msg.nodesEvaluated === 0;
+    let text = isBook
+        ? (hasI18n
+            ? i18n.t('botDiagBook', { eval: formatBotEval(msg.score) })
+            : `eval ${formatBotEval(msg.score)} · book`)
+        : (hasI18n
+            ? i18n.t('botDiagnostics', {
+                eval: formatBotEval(msg.score),
+                depth: msg.depth,
+                nodes: formatBotNodes(msg.nodesEvaluated),
+                time: formatBotTime(msg.timeMs),
+            })
+            : `eval ${formatBotEval(msg.score)} · d${msg.depth} · ${formatBotNodes(msg.nodesEvaluated)} nodes · ${formatBotTime(msg.timeMs)}`);
+    if (Array.isArray(msg.alternativeMoves) && msg.alternativeMoves.length) {
+        const alts = msg.alternativeMoves
+            .map(a => `(${a.row},${a.col}) ${formatBotEval(a.score)}`)
+            .join(', ');
+        text += ' · ' + (hasI18n ? i18n.t('botDiagAlt', { alts }) : `alt: ${alts}`);
+    }
     el.textContent = text;
     el.hidden = false;
 }
