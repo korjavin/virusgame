@@ -603,13 +603,41 @@ function checkWinCondition() {
     if (winner > 0) {
         gameOver = true;
 
-        // Multiplayer mode
+        // Multiplayer mode (handled by server, but fallback here just in case)
         if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
             const youWon = winner === mpClient.yourPlayer;
             statusDisplay.textContent = youWon ? i18n.t('youWin') : i18n.t('youLose');
         } else {
             // Local mode
-            statusDisplay.textContent = i18n.t('playerWins', { player: winner });
+            const winnerText = i18n.t('playerWins', { player: winner });
+            statusDisplay.textContent = winnerText;
+
+            // Show explicit banner for local game outcome
+            const banner = document.getElementById('game-over-banner');
+            const title = document.getElementById('game-over-title');
+            const message = document.getElementById('game-over-message');
+            const bannerContent = banner ? banner.querySelector('.banner-content') : null;
+            const rematchBtn = document.getElementById('rematch-button');
+
+            if (banner && title && message && bannerContent) {
+                // Clear previous classes
+                bannerContent.classList.remove('victory', 'defeat', 'draw');
+
+                // Hide the rematch button since it's local
+                if (rematchBtn) rematchBtn.style.display = 'none';
+
+                if (winner === 1) {
+                    bannerContent.classList.add('victory');
+                    title.textContent = 'Player 1 Wins!';
+                    message.innerHTML = aiEnabled ? `You defeated the AI!` : `Player 1 defeated Player 2!`;
+                } else if (winner === 2) {
+                    bannerContent.classList.add('defeat');
+                    title.textContent = 'Player 2 Wins!';
+                    message.innerHTML = aiEnabled ? `You were defeated by the AI.` : `Player 2 defeated Player 1!`;
+                }
+
+                banner.style.display = 'block';
+            }
         }
     }
 }

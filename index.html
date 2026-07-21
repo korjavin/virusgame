@@ -129,6 +129,21 @@
         </div>
     </div>
 
+    <!-- Game Over Banner Modal -->
+    <div id="game-over-banner" class="modal">
+        <div class="modal-content banner-content">
+            <span class="modal-close" id="game-over-close">&times;</span>
+            <h2 id="game-over-title">Game Over</h2>
+            <div id="game-over-message" class="modal-section" style="text-align: center; font-size: 18px; margin-bottom: 20px;">
+                <!-- Final outcome details go here -->
+            </div>
+            <div class="modal-actions">
+                <button id="rematch-button" class="primary-btn">🔄 Rematch</button>
+                <button id="close-banner-button" class="secondary-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Rules Modal -->
     <div id="rules-modal" class="modal">
         <div class="modal-content">
@@ -249,8 +264,17 @@
         window.addEventListener('click', function(event) {
             const rulesModal = document.getElementById('rules-modal');
             const tutorialModal = document.getElementById('tutorial-modal');
+            const gameOverBanner = document.getElementById('game-over-banner');
             if (event.target === rulesModal) {
                 rulesModal.style.display = 'none';
+            }
+            if (event.target === gameOverBanner) {
+                // Ignore clicking outside for game over banner to force them to use buttons,
+                // or we could close it. Let's allow closing it.
+                gameOverBanner.style.display = 'none';
+                if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+                    mpClient.endMultiplayerGame();
+                }
             }
             if (event.target === tutorialModal) {
                 tutorialModal.style.display = 'none';
@@ -262,6 +286,30 @@
         document.getElementById('start-tutorial-btn').addEventListener('click', function() {
             document.getElementById('rules-modal').style.display = 'none';
             if (typeof Tutorial !== 'undefined') Tutorial.start();
+        });
+
+        // Game Over Banner controls
+        document.getElementById('game-over-close').addEventListener('click', function() {
+            document.getElementById('game-over-banner').style.display = 'none';
+            if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+                mpClient.endMultiplayerGame();
+            }
+        });
+
+        document.getElementById('close-banner-button').addEventListener('click', function() {
+            document.getElementById('game-over-banner').style.display = 'none';
+            if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode) {
+                mpClient.endMultiplayerGame();
+            }
+        });
+
+        document.getElementById('rematch-button').addEventListener('click', function() {
+            document.getElementById('game-over-banner').style.display = 'none';
+            if (typeof mpClient !== 'undefined' && mpClient.multiplayerMode && mpClient.opponentId) {
+                mpClient.challengeUser(mpClient.opponentId);
+                mpClient.showNotification('Challenge Sent', `Rematch challenge sent!`);
+                mpClient.endMultiplayerGame();
+            }
         });
 
         // Initialize multiplayer on page load

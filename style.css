@@ -1012,6 +1012,71 @@ body.dark-theme #tutorial-progress {
     }
 }
 
+/* Game Over Banner Styling */
+.banner-content {
+    max-width: 500px;
+    text-align: center;
+    border: 3px solid #3498db;
+    animation: scaleUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes scaleUp {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.banner-content h2 {
+    font-size: 36px;
+    margin-bottom: 15px;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.banner-content.victory {
+    border-color: #2ecc71;
+    box-shadow: 0 0 20px rgba(46, 204, 113, 0.4);
+}
+
+.banner-content.victory h2 {
+    color: #27ae60;
+}
+
+body.dark-theme .banner-content.victory h2 {
+    color: #2ecc71;
+}
+
+.banner-content.defeat {
+    border-color: #e74c3c;
+    box-shadow: 0 0 20px rgba(231, 76, 60, 0.4);
+}
+
+.banner-content.defeat h2 {
+    color: #c0392b;
+}
+
+body.dark-theme .banner-content.defeat h2 {
+    color: #e74c3c;
+}
+
+.banner-content.draw {
+    border-color: #f1c40f;
+    box-shadow: 0 0 20px rgba(241, 196, 15, 0.4);
+}
+
+.banner-content.draw h2 {
+    color: #f39c12;
+}
+
+body.dark-theme .banner-content.draw h2 {
+    color: #f1c40f;
+}
+
 /* Mobile responsiveness for modals */
 @media (max-width: 768px) {
     .modal-content {

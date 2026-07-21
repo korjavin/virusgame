@@ -327,15 +327,60 @@ class MultiplayerClient {
             }
             this.showLeaveGameButton();
         } else {
-            // 1v1 mode - show result and auto-cleanup
-            const winnerText = msg.winner === this.yourPlayer ? 'You win!' : 'You lose!';
+            // 1v1 mode - show result and prompt with modal banner
+            let winnerText = '';
+            let isWin = false;
+            let isDraw = false;
+
+            if (msg.winner === this.yourPlayer) {
+                winnerText = i18n.t('youWin') || 'Victory!';
+                isWin = true;
+            } else if (msg.winner > 0) {
+                winnerText = i18n.t('youLose') || 'Defeat!';
+            } else {
+                winnerText = 'Draw!';
+                isDraw = true;
+            }
+
             if (statusDisplay) {
                 statusDisplay.textContent = `Game Over! ${winnerText}`;
             }
-            // Auto-cleanup 1v1 game state after a short delay
-            setTimeout(() => {
-                this.endMultiplayerGame();
-            }, 100);
+
+            // Render explicit win/loss outcome banner
+            const banner = document.getElementById('game-over-banner');
+            const title = document.getElementById('game-over-title');
+            const message = document.getElementById('game-over-message');
+            const bannerContent = banner.querySelector('.banner-content');
+
+            if (banner && title && message) {
+                title.textContent = winnerText;
+
+                // Clear previous classes
+                bannerContent.classList.remove('victory', 'defeat', 'draw');
+
+                // Show the rematch button since it's multiplayer 1v1
+                const rematchBtn = document.getElementById('rematch-button');
+                if (rematchBtn) rematchBtn.style.display = 'inline-block';
+
+                if (isWin) {
+                    bannerContent.classList.add('victory');
+                    message.innerHTML = `You won against <strong>${this.opponentUsername || 'your opponent'}</strong>!`;
+                } else if (isDraw) {
+                    bannerContent.classList.add('draw');
+                    message.innerHTML = `The game ended in a draw.`;
+                } else {
+                    bannerContent.classList.add('defeat');
+                    message.innerHTML = `You were defeated by <strong>${this.opponentUsername || 'your opponent'}</strong>.`;
+                }
+
+                // Show the banner modal
+                banner.style.display = 'block';
+            } else {
+                // Fallback to auto-cleanup if banner elements are missing
+                setTimeout(() => {
+                    this.endMultiplayerGame();
+                }, 100);
+            }
         }
     }
 
