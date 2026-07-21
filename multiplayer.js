@@ -19,6 +19,68 @@
 //
 // See resetGameState() for the single source of truth for cleanup.
 
+// --- Bot search diagnostics display (vs-ai2.59) -------------------------------
+// Display-only rendering of the optional search fields a bot attaches to its
+// move (score/depth/nodesEvaluated/timeMs). Human moves omit them, so the line
+// is hidden on human turns and cleared on new games via clearBotDiagnostics().
+
+// mateScore is 1e9 in the engine (backend/search/evaluate.go); near-mate scores
+// sit just below it. Anything this large is a forced win/loss, not a positional
+// eval, so we show "mate" rather than a huge number.
+const BOT_DIAG_MATE_THRESHOLD = 1e8;
+
+// Score is the engine's internal eval (int units, positive = good for the mover
+// who searched, i.e. the bot). We scale by /1000 to a compact signed value —
+// these are NOT centipawns/game points, hence the "eval" label.
+function formatBotEval(score) {
+    if (Math.abs(score) >= BOT_DIAG_MATE_THRESHOLD) {
+        const mate = (typeof i18n !== 'undefined') ? i18n.t('botDiagMate') : 'mate';
+        return (score >= 0 ? '+' : '−') + mate;
+    }
+    const scaled = score / 1000;
+    return (scaled >= 0 ? '+' : '') + scaled.toFixed(1);
+}
+
+function formatBotNodes(nodes) {
+    if (nodes >= 1e6) return (nodes / 1e6).toFixed(1) + 'M';
+    if (nodes >= 1e3) return Math.round(nodes / 1e3) + 'k';
+    return String(nodes);
+}
+
+function formatBotTime(ms) {
+    // Bot search times are typically hundreds of ms to seconds; show seconds
+    // (1 decimal) once we're past 100ms, raw ms only for very fast moves.
+    if (ms >= 100) return (ms / 1000).toFixed(1) + 's';
+    return ms + 'ms';
+}
+
+function clearBotDiagnostics() {
+    const el = (typeof document !== 'undefined') && document.getElementById('bot-diagnostics');
+    if (!el) return;
+    el.hidden = true;
+    el.textContent = '';
+}
+
+function renderBotDiagnostics(msg) {
+    const el = (typeof document !== 'undefined') && document.getElementById('bot-diagnostics');
+    if (!el) return;
+    if (msg.score === undefined || msg.depth === undefined ||
+        msg.nodesEvaluated === undefined || msg.timeMs === undefined) {
+        clearBotDiagnostics();
+        return;
+    }
+    const text = (typeof i18n !== 'undefined')
+        ? i18n.t('botDiagnostics', {
+            eval: formatBotEval(msg.score),
+            depth: msg.depth,
+            nodes: formatBotNodes(msg.nodesEvaluated),
+            time: formatBotTime(msg.timeMs),
+        })
+        : `eval ${formatBotEval(msg.score)} · d${msg.depth} · ${formatBotNodes(msg.nodesEvaluated)} nodes · ${formatBotTime(msg.timeMs)}`;
+    el.textContent = text;
+    el.hidden = false;
+}
+
 class MultiplayerClient {
     constructor(actionSessionId = null) {
         this.ws = null;
@@ -68,6 +130,7 @@ class MultiplayerClient {
         this.inFlightAction = null;
         this.updateActionInputLock();
         this.stopMoveTimer();
+        clearBotDiagnostics();
     }
 
     connect() {
@@ -393,6 +456,9 @@ class MultiplayerClient {
             updateStatus();
             checkWinCondition();
         }
+
+        // vs-ai2.59: bot moves carry search diagnostics; human moves don't.
+        renderBotDiagnostics(msg);
     }
 
     handleNeutralsPlaced(msg) {
@@ -1112,5 +1178,5 @@ function initGameMultiplayerMode(rowsVal, colsVal, gamePlayers, yourPlayerIndex)
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {MultiplayerClient};
+    module.exports = {MultiplayerClient, formatBotEval, formatBotNodes, formatBotTime};
 }

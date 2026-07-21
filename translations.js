@@ -50,6 +50,8 @@ const i18n = {
 
             // Game status
             yourTurn: 'Your turn ({symbol}) vs {opponent}. Moves left: {moves}.',
+            botDiagnostics: 'eval {eval} · d{depth} · {nodes} nodes · {time}',
+            botDiagMate: 'mate',
             opponentTurn: '{opponent}\'s turn. Waiting...',
             playerTurn: 'Player {player}\'s turn. Moves left: {moves}.',
             placeNeutral: 'Place {count} neutral field(s).',
@@ -209,6 +211,8 @@ const i18n = {
 
             // Game status
             yourTurn: 'Du bist dran ({symbol}) gegen {opponent}. Züge übrig: {moves}.',
+            botDiagnostics: 'Bewertung {eval} · T{depth} · {nodes} Knoten · {time}',
+            botDiagMate: 'Matt',
             opponentTurn: '{opponent} ist dran. Warten...',
             playerTurn: 'Spieler {player} ist dran. Züge übrig: {moves}.',
             placeNeutral: 'Platziere {count} neutrale(s) Feld(er).',

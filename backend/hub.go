@@ -1070,6 +1070,13 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		Player:    playerNum,
 		MovesLeft: game.MovesLeft,
 		RequestID: msg.RequestID,
+		// Forward bot search diagnostics when present (omitempty pointers;
+		// human moves carry none — don't fabricate). vs-ai2.59.
+		Score:            msg.Score,
+		Depth:            msg.Depth,
+		NodesEvaluated:   msg.NodesEvaluated,
+		TimeMs:           msg.TimeMs,
+		AlternativeMoves: msg.AlternativeMoves,
 	}
 	h.broadcastToGame(game, &moveMsg)
 
