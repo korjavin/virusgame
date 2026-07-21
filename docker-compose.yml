@@ -4,7 +4,7 @@ version: "3.8"
 services:
   virusgame:
     # The image tag will be replaced by the GitHub Actions workflow
-    image: ghcr.io/korjavin/virusgame:latest
+    image: ghcr.io/korjavin/virusgame:8525ff88e42a51910e9eda886d580986ec7d4ed3
     container_name: virusgame-backend
     networks:
       - virusgame-network
