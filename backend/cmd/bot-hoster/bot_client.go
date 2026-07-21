@@ -109,6 +109,19 @@ type Message struct {
 	PlayerSymbol     string         `json:"playerSymbol,omitempty"`
 	IsMultiplayer    bool           `json:"isMultiplayer,omitempty"`
 	Snapshot         *game.Snapshot `json:"snapshot,omitempty"`
+
+	// Diagnostics
+	Score            *float64          `json:"score,omitempty"`
+	Depth            *int              `json:"depth,omitempty"`
+	NodesEvaluated   *int              `json:"nodesEvaluated,omitempty"`
+	TimeMs           *int64            `json:"timeMs,omitempty"`
+	AlternativeMoves []AlternativeMove `json:"alternativeMoves,omitempty"`
+}
+
+type AlternativeMove struct {
+	Row   int     `json:"row"`
+	Col   int     `json:"col"`
+	Score float64 `json:"score"`
 }
 
 // BotSettings is retained only to decode the additive legacy wire field; production ignores every value.
@@ -568,11 +581,13 @@ func (b *Bot) cancelSearchLocked() {
 }
 
 func (b *Bot) calculateAndQueueAction(ctx context.Context, choose func(context.Context, game.State) (gamesearch.Result, bool), position game.State, gameID string, version uint64) {
+	start := time.Now()
 	result, ok := choose(ctx, position)
 	if !ok {
 		return
 	}
-	message := actionMessage(gameID, result.Action)
+	timeMs := time.Since(start).Milliseconds()
+	message := actionMessage(gameID, result, timeMs)
 	data, err := json.Marshal(message)
 	if err != nil {
 		log.Printf("[Bot %s] Failed to marshal action: %v", b.Username, err)
@@ -592,15 +607,26 @@ func (b *Bot) calculateAndQueueAction(ctx context.Context, choose func(context.C
 	}
 }
 
-func actionMessage(gameID string, action game.Action) *Message {
-	if action.Kind == game.PlaceNeutrals {
-		return &Message{Type: "neutrals", GameID: gameID, Cells: []CellPos{
-			{Row: action.Neutrals[0].Row, Col: action.Neutrals[0].Col},
-			{Row: action.Neutrals[1].Row, Col: action.Neutrals[1].Col},
+func actionMessage(gameID string, result gamesearch.Result, timeMs int64) *Message {
+	var msg *Message
+	if result.Action.Kind == game.PlaceNeutrals {
+		msg = &Message{Type: "neutrals", GameID: gameID, Cells: []CellPos{
+			{Row: result.Action.Neutrals[0].Row, Col: result.Action.Neutrals[0].Col},
+			{Row: result.Action.Neutrals[1].Row, Col: result.Action.Neutrals[1].Col},
 		}}
+	} else {
+		row, col := result.Action.Target.Row, result.Action.Target.Col
+		msg = &Message{Type: "move", GameID: gameID, Row: &row, Col: &col}
 	}
-	row, col := action.Target.Row, action.Target.Col
-	return &Message{Type: "move", GameID: gameID, Row: &row, Col: &col}
+
+	score := float64(result.Score)
+	depth := result.Depth
+	nodes := int(result.Nodes)
+	msg.Score = &score
+	msg.Depth = &depth
+	msg.NodesEvaluated = &nodes
+	msg.TimeMs = &timeMs
+	return msg
 }
 
 func (b *Bot) handleGameEnd(msg *Message) {

@@ -94,6 +94,13 @@ type Message struct {
 	BotSettings *BotSettings   `json:"botSettings,omitempty"`
 	Snapshot    *game.Snapshot `json:"snapshot,omitempty"`
 
+	// Diagnostics
+	Score            *float64          `json:"score,omitempty"`
+	Depth            *int              `json:"depth,omitempty"`
+	NodesEvaluated   *int              `json:"nodesEvaluated,omitempty"`
+	TimeMs           *int64            `json:"timeMs,omitempty"`
+	AlternativeMoves []AlternativeMove `json:"alternativeMoves,omitempty"`
+
 	// Chat fields
 	MessageID string `json:"messageId,omitempty"` // Translation key
 	Content   string `json:"content,omitempty"`   // Fallback text or custom message
@@ -116,6 +123,12 @@ type UserInfo struct {
 type CellPos struct {
 	Row int `json:"row"`
 	Col int `json:"col"`
+}
+
+type AlternativeMove struct {
+	Row   int     `json:"row"`
+	Col   int     `json:"col"`
+	Score float64 `json:"score"`
 }
 
 type LobbyInfo struct {

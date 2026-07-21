@@ -1,42 +1,35 @@
 # Continuity Ledger
 
 ## Goal
-**Fix Neutral Field Logic and Harden Game Validation**
-- Fix a bug where bots could retake neutral fields.
-- Implement strict server-side validation to defeat players who attempt illegal moves.
-- Add backend unit tests to verify validation logic.
-- Ensure bots explicitly avoid neutral fields.
+**Enhance Bot Telemetry: Add Diagnostic Fields to Protocol**
+- Add optional diagnostic fields (`score`, `depth`, `nodesEvaluated`, `timeMs`, `alternativeMoves`) to the WebSocket message protocol.
+- Allow bots to broadcast their search metadata for debug and replay value.
 
 ## Constraints/Assumptions
-- **Neutral Fields**: Immutable `CellFlagKilled` (0x30). Cannot be attacked or used for connectivity.
-- **Illegal Moves**: Result in immediate elimination/defeat for the offending player.
-- **Testing**: Need to establish a new `go test` suite for the backend.
+- **Non-breaking Changes:** All new JSON fields use `omitempty` to remain backward-compatible with older clients.
+- **Bot Behavior:** Only built-in bots running on `bot-hoster` automatically populate these values right now.
+- **Struct Uniformity:** The structs must match across `backend/types.go`, `bot-client.go`, and the standard Go bot template.
 
 ## Key Decisions
-- **Defeat by Illegal Move**: Instead of silently rejecting illegal moves, the server will now actively eliminate the player. This protects the game integrity against buggy or malicious clients.
-- **Strict Validation**: Explicit checks for `IsKilled()` will be added to `isValidMove` in both backend and bot code.
-- **Connectivity Check**: `handleMove` now enforces connectivity checks via `isValidMove`, closing a major loophole.
+- Created a new `AlternativeMove` struct for consistency.
+- Standard search values inside `bot-hoster` are marshaled into the new message fields by passing `timeMs` manually.
+- The `Score` is cast to a `float64` to comply with the issue request, though the engine calculates it natively as an `int`.
 
 ## State
 - **Done**:
-  - Implemented V2 Bot Architecture.
-  - Implemented Bot Hoster.
-  - Created backend unit tests (`backend/hub_test.go`) covering validation logic.
-  - Implemented "Defeat on Illegal Move" in `backend/hub.go`.
-  - Added strict validation (neutral check + connectivity) to `backend/hub.go` and `backend/cmd/bot-hoster/ai_engine.go`.
-  - Updated `BOT_DEVELOPMENT_GUIDE.md` with strict rules.
-  - Merged PR #44.
-- **Now**:
-  - Monitoring for regressions.
+  - Updated `backend/types.go` struct.
+  - Updated `backend/cmd/bot-hoster/bot_client.go` struct and updated `calculateAndQueueAction` / `actionMessage` logic.
+  - Fixed integration tests inside `bot_search_test.go` broken by the parameter change.
+  - Updated `bot-templates/go/protocol.go`.
+  - Tests pass, compilation checks out.
 - **Next**:
-  - Verify visually in frontend if possible (optional).
-  - Deploy and monitor.
+  - Submit.
 
 ## Open Questions
 - None.
 
 ## Working Set
-- `backend/hub.go`
-- `backend/hub_test.go`
-- `backend/cmd/bot-hoster/ai_engine.go`
-- `BOT_DEVELOPMENT_GUIDE.md`
+- `backend/types.go`
+- `backend/cmd/bot-hoster/bot_client.go`
+- `backend/cmd/bot-hoster/bot_search_test.go`
+- `bot-templates/go/protocol.go`
