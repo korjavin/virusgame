@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	neturl "net/url"
 	"reflect"
 	"strings"
@@ -50,6 +51,12 @@ type Bot struct {
 	State      BotState
 	Manager    *BotManager
 	BackendURL string
+
+	// Challenger role (set by the manager when config.Challenger is on): a
+	// challenger initiates games against idle acceptor peers; an acceptor only
+	// responds. lastChallenge rate-limits initiation.
+	IsChallenger  bool
+	lastChallenge time.Time
 
 	// Current activity
 	CurrentLobby string
@@ -116,6 +123,10 @@ type Message struct {
 	NodesEvaluated   *int              `json:"nodesEvaluated,omitempty"`
 	TimeMs           *int64            `json:"timeMs,omitempty"`
 	AlternativeMoves []AlternativeMove `json:"alternativeMoves,omitempty"`
+
+	// Self-sparring (challenger mode)
+	TargetUserID string     `json:"targetUserId,omitempty"`
+	Users        []UserInfo `json:"users,omitempty"`
 }
 
 type AlternativeMove struct {
@@ -153,6 +164,13 @@ type GamePlayerInfo struct {
 	Symbol      string `json:"symbol"`
 	IsBot       bool   `json:"isBot"`
 	IsActive    bool   `json:"isActive"`
+}
+
+type UserInfo struct {
+	UserID   string `json:"userId"`
+	Username string `json:"username"`
+	InGame   bool   `json:"inGame"`
+	InLobby  bool   `json:"inLobby"`
 }
 
 type CellPos struct {
@@ -356,9 +374,58 @@ func (b *Bot) handleMessage(msg *Message) {
 	case "lobby_closed":
 		b.handleLobbyClosed(msg)
 
+	case "users_update":
+		b.handleUsersUpdate(msg)
+
 	default:
-		// Ignore other message types (users_update, etc.)
+		// Ignore other message types
 	}
+}
+
+// handleUsersUpdate drives challenger-mode self-sparring. On each user-list
+// broadcast (sent on connect and after every game ends), an idle challenger bot
+// challenges a random idle acceptor peer. The manager knows which peers are
+// acceptors; picking only acceptors (who never initiate) plus flipping the
+// acceptor busy the moment it accepts means no bot is ever double-booked.
+func (b *Bot) handleUsersUpdate(msg *Message) {
+	if b.Manager == nil || !b.Manager.config.Challenger {
+		return
+	}
+	b.mu.RLock()
+	eligible := b.IsChallenger && b.State == BotIdle && b.UserID != "" &&
+		time.Since(b.lastChallenge) >= 5*time.Second
+	myID := b.UserID
+	b.mu.RUnlock()
+	if !eligible {
+		return
+	}
+
+	var targets []string
+	for _, u := range msg.Users {
+		if u.UserID == myID || u.InGame || u.InLobby {
+			continue
+		}
+		if b.Manager.IsAcceptor(u.UserID) {
+			targets = append(targets, u.UserID)
+		}
+	}
+	if len(targets) == 0 {
+		return
+	}
+	target := targets[rand.Intn(len(targets))]
+
+	// Re-check + stamp under the write lock so one users_update burst can't fire
+	// two challenges.
+	b.mu.Lock()
+	if b.State != BotIdle || time.Since(b.lastChallenge) < 5*time.Second {
+		b.mu.Unlock()
+		return
+	}
+	b.lastChallenge = time.Now()
+	b.mu.Unlock()
+
+	b.sendMessage(&Message{Type: "challenge", TargetUserID: target, Rows: 12, Cols: 12})
+	log.Printf("[Bot %s] Challenging %s (bot-vs-bot)", b.Username, target)
 }
 
 func (b *Bot) handleWelcome(msg *Message) {
@@ -372,17 +439,23 @@ func (b *Bot) handleWelcome(msg *Message) {
 }
 
 func (b *Bot) handleChallengeReceived(msg *Message) {
-	b.mu.RLock()
-	isIdle := b.State == BotIdle
-	b.mu.RUnlock()
-
-	if !isIdle {
+	b.mu.Lock()
+	if b.State != BotIdle {
+		b.mu.Unlock()
 		// Bot is busy, decline the challenge
 		log.Printf("[Bot %s] Received challenge from %s but bot is busy, declining",
 			b.Username, msg.FromUsername)
 		b.declineChallenge(msg.ChallengeID)
 		return
 	}
+	// In self-sparring (challenger) mode, optimistically mark busy before
+	// accepting so a second challenge arriving in the same instant is declined
+	// instead of double-accepted. Left off in normal/prod mode so behavior is
+	// unchanged there (state flips on game_start as before).
+	if b.Manager != nil && b.Manager.config.Challenger {
+		b.State = BotInGame
+	}
+	b.mu.Unlock()
 
 	log.Printf("[Bot %s] Received 1v1 challenge from %s (%dx%d), accepting...",
 		b.Username, msg.FromUsername, msg.Rows, msg.Cols)
@@ -587,6 +660,15 @@ func (b *Bot) calculateAndQueueAction(ctx context.Context, choose func(context.C
 		return
 	}
 	timeMs := time.Since(start).Milliseconds()
+	// Epsilon-greedy exploration: with probability ExploreEpsilon, play a random
+	// legal move instead of the best one. Diversifies otherwise-deterministic
+	// self-play so the generated games aren't near-identical. (Search diagnostics
+	// still reflect the best move; they are display-only metadata.)
+	if b.Manager != nil && b.Manager.config.ExploreEpsilon > 0 && rand.Float64() < b.Manager.config.ExploreEpsilon {
+		if legal := position.LegalActions(); len(legal) > 0 {
+			result.Action = legal[rand.Intn(len(legal))]
+		}
+	}
 	message := actionMessage(gameID, result, timeMs)
 	data, err := json.Marshal(message)
 	if err != nil {

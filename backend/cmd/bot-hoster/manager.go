@@ -26,6 +26,12 @@ func (m *BotManager) Start() error {
 	for i := 0; i < m.config.PoolSize; i++ {
 		bot := NewBot(m.config.BackendURL, m)
 
+		// Challenger mode: split the pool so even-indexed bots initiate games
+		// against odd-indexed (acceptor) peers → up to PoolSize/2 concurrent games.
+		if m.config.Challenger {
+			bot.IsChallenger = i%2 == 0
+		}
+
 		if err := bot.Connect(); err != nil {
 			log.Printf("Failed to connect bot %d: %v (continuing with remaining bots)", i+1, err)
 			continue
@@ -65,6 +71,24 @@ func (m *BotManager) Stop() {
 	}
 
 	log.Printf("All %d bots stopped", len(m.bots))
+}
+
+// IsAcceptor reports whether the given server userId belongs to one of this
+// pool's acceptor bots (a bot that never initiates). Challengers use this to
+// target only acceptors, guaranteeing no two bots challenge each other.
+func (m *BotManager) IsAcceptor(userID string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, bot := range m.bots {
+		bot.mu.RLock()
+		id, isCh := bot.UserID, bot.IsChallenger
+		bot.mu.RUnlock()
+		if id == userID {
+			return !isCh
+		}
+	}
+	return false
 }
 
 // GetStats returns current pool statistics
