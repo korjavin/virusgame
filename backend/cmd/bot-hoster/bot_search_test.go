@@ -104,9 +104,9 @@ func TestProductionSearchQueuesDeadlineResult(t *testing.T) {
 }
 
 func TestActionMessageConversion(t *testing.T) {
-	standard := actionMessage("g", game.Action{Kind: game.Move, Target: game.Pos{Row: 2, Col: 3}})
+	standard := actionMessage("g", gamesearch.Result{Action: game.Action{Kind: game.Move, Target: game.Pos{Row: 2, Col: 3}}}, 0)
 	assertStandardMessage(t, standard)
-	neutral := actionMessage("g", game.Action{Kind: game.PlaceNeutrals, Neutrals: [2]game.Pos{{Row: 1, Col: 2}, {Row: 3, Col: 4}}})
+	neutral := actionMessage("g", gamesearch.Result{Action: game.Action{Kind: game.PlaceNeutrals, Neutrals: [2]game.Pos{{Row: 1, Col: 2}, {Row: 3, Col: 4}}}}, 0)
 	if neutral.Type != "neutrals" || len(neutral.Cells) != 2 || neutral.Cells[0] != (CellPos{Row: 1, Col: 2}) || neutral.Cells[1] != (CellPos{Row: 3, Col: 4}) {
 		t.Fatalf("neutral conversion = %+v", neutral)
 	}
