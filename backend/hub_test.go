@@ -221,6 +221,155 @@ func TestHubIntegration_Move(t *testing.T) {
 	}
 }
 
+// vs-ai2.59: a bot move carrying search diagnostics must round-trip the
+// Score/Depth/NodesEvaluated/TimeMs/AlternativeMoves fields into move_made.
+func TestHubIntegration_MoveForwardsDiagnostics(t *testing.T) {
+	h := newHub()
+	go h.run()
+
+	c1 := &Client{hub: h, send: make(chan []byte, 256)}
+	c2 := &Client{hub: h, send: make(chan []byte, 256)}
+	h.register <- c1
+	h.register <- c2
+
+	waitForMessage(t, c1, "welcome")
+	waitForMessage(t, c2, "welcome")
+
+	u1 := c1.user
+	u2 := c2.user
+
+	gameID := "test-game-diag"
+	rows, cols := 5, 5
+	board := make(Board, rows)
+	for i := range board {
+		board[i] = make([]CellValue, cols)
+	}
+	game := &Game{
+		ID:             gameID,
+		Player1:        u1,
+		Player2:        u2,
+		Board:          board,
+		Rows:           rows,
+		Cols:           cols,
+		CurrentPlayer:  1,
+		MovesLeft:      1,
+		Player1Base:    CellPos{0, 0},
+		Player2Base:    CellPos{4, 4},
+		MoveHistory:    []MoveAction{},
+		LastActionTime: time.Now(),
+	}
+	game.Board[0][0] = NewCell(1, CellFlagBase)
+	game.Board[0][1] = NewCell(1, CellFlagNormal)
+	game.Board[4][4] = NewCell(2, CellFlagBase)
+
+	runOnHub(h, func() {
+		h.games[gameID] = game
+		u1.InGame = true
+		u1.GameID = gameID
+		u2.InGame = true
+		u2.GameID = gameID
+	})
+
+	// Bot move at (1,1) carrying diagnostics.
+	r, c := 1, 1
+	score := 1.234
+	depth := 6
+	nodes := 58000
+	timeMs := int64(900)
+	moveMsg := &Message{
+		Type:             "move",
+		GameID:           gameID,
+		Row:              &r,
+		Col:              &c,
+		Score:            &score,
+		Depth:            &depth,
+		NodesEvaluated:   &nodes,
+		TimeMs:           &timeMs,
+		AlternativeMoves: []AlternativeMove{{Row: 2, Col: 2, Score: 0.5}},
+	}
+	sendMessage(h, c1, moveMsg)
+
+	got := waitForMessage(t, c2, "move_made")
+	if got == nil {
+		t.Fatal("no move_made received")
+	}
+	if got.Score == nil || *got.Score != score {
+		t.Errorf("Score not forwarded: got %v want %v", got.Score, score)
+	}
+	if got.Depth == nil || *got.Depth != depth {
+		t.Errorf("Depth not forwarded: got %v want %v", got.Depth, depth)
+	}
+	if got.NodesEvaluated == nil || *got.NodesEvaluated != nodes {
+		t.Errorf("NodesEvaluated not forwarded: got %v want %v", got.NodesEvaluated, nodes)
+	}
+	if got.TimeMs == nil || *got.TimeMs != timeMs {
+		t.Errorf("TimeMs not forwarded: got %v want %v", got.TimeMs, timeMs)
+	}
+	if len(got.AlternativeMoves) != 1 {
+		t.Errorf("AlternativeMoves not forwarded: got %v", got.AlternativeMoves)
+	}
+}
+
+// A human move (no diagnostics) must not fabricate diag fields on move_made.
+func TestHubIntegration_MoveNoDiagnosticsForHuman(t *testing.T) {
+	h := newHub()
+	go h.run()
+
+	c1 := &Client{hub: h, send: make(chan []byte, 256)}
+	c2 := &Client{hub: h, send: make(chan []byte, 256)}
+	h.register <- c1
+	h.register <- c2
+
+	waitForMessage(t, c1, "welcome")
+	waitForMessage(t, c2, "welcome")
+
+	u1 := c1.user
+	u2 := c2.user
+
+	gameID := "test-game-nodiag"
+	rows, cols := 5, 5
+	board := make(Board, rows)
+	for i := range board {
+		board[i] = make([]CellValue, cols)
+	}
+	game := &Game{
+		ID:             gameID,
+		Player1:        u1,
+		Player2:        u2,
+		Board:          board,
+		Rows:           rows,
+		Cols:           cols,
+		CurrentPlayer:  1,
+		MovesLeft:      1,
+		Player1Base:    CellPos{0, 0},
+		Player2Base:    CellPos{4, 4},
+		MoveHistory:    []MoveAction{},
+		LastActionTime: time.Now(),
+	}
+	game.Board[0][0] = NewCell(1, CellFlagBase)
+	game.Board[0][1] = NewCell(1, CellFlagNormal)
+	game.Board[4][4] = NewCell(2, CellFlagBase)
+
+	runOnHub(h, func() {
+		h.games[gameID] = game
+		u1.InGame = true
+		u1.GameID = gameID
+		u2.InGame = true
+		u2.GameID = gameID
+	})
+
+	r, c := 1, 1
+	sendMessage(h, c1, &Message{Type: "move", GameID: gameID, Row: &r, Col: &c})
+
+	got := waitForMessage(t, c2, "move_made")
+	if got == nil {
+		t.Fatal("no move_made received")
+	}
+	if got.Score != nil || got.Depth != nil || got.NodesEvaluated != nil || got.TimeMs != nil || got.AlternativeMoves != nil {
+		t.Errorf("human move fabricated diagnostics: %+v", got)
+	}
+}
+
 func TestHubIntegration_Neutrals(t *testing.T) {
 	h := newHub()
 	go h.run()

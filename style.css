@@ -602,6 +602,24 @@ body.dark-theme #ai-progress {
     padding: 0 10px;
 }
 
+/* Bot search diagnostics (vs-ai2.59): compact, unobtrusive line under status. */
+.bot-diagnostics {
+    margin: 0 auto 10px auto;
+    font-size: 12px;
+    font-weight: normal;
+    text-align: center;
+    color: #7f8c8d;
+    max-width: 100%;
+    padding: 0 10px;
+    white-space: nowrap;
+    overflow-x: auto;
+    letter-spacing: 0.02em;
+}
+
+body.dark-theme .bot-diagnostics {
+    color: #95a5a6;
+}
+
 #status.your-turn {
     animation: flash-attention 1s infinite;
     color: #27ae60;
