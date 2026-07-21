@@ -32,6 +32,47 @@ type Result struct {
 	Evaluations     uint64
 	BudgetExhausted bool
 	SearchComplete  bool
+	// Alternatives holds the next-best root candidates (besides the chosen
+	// Action) from the final completed iteration, best-first. Output-only
+	// diagnostics metadata (vs-ai2.60): populating it never changes the chosen
+	// Action/Score/Nodes/Depth or any deterministic node-budget behaviour.
+	Alternatives []RootMove
+}
+
+// RootMove is a root candidate action with its search score. Non-chosen scores
+// come from alpha-beta scout searches and may be bounds rather than exact, which
+// is fine for a diagnostics readout.
+type RootMove struct {
+	Action game.Action
+	Score  int
+}
+
+// maxAlternatives caps how many next-best root moves Result carries.
+const maxAlternatives = 4
+
+// topAlternatives returns the best next-best root moves (excluding chosen),
+// best-first, capped at maxAlternatives.
+func topAlternatives(roots []RootMove, chosen game.Action) []RootMove {
+	if len(roots) <= 1 {
+		return nil
+	}
+	sorted := make([]RootMove, len(roots))
+	copy(sorted, roots)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Score > sorted[j].Score })
+	alts := make([]RootMove, 0, maxAlternatives)
+	for _, rm := range sorted {
+		if rm.Action == chosen {
+			continue
+		}
+		alts = append(alts, rm)
+		if len(alts) == maxAlternatives {
+			break
+		}
+	}
+	if len(alts) == 0 {
+		return nil
+	}
+	return alts
 }
 
 type tableEntry struct {
@@ -163,6 +204,7 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 	}
 	children = preservingChildren(children, s.root)
 	best := Result{Action: children[0].action, Score: -infScore}
+	roots := make([]RootMove, 0, len(children))
 	alpha, beta := -infScore, infScore
 	for i, child := range children {
 		var values [4]int
@@ -185,6 +227,7 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 		if s.multi {
 			score = values[s.root-1]
 		}
+		roots = append(roots, RootMove{Action: child.action, Score: score})
 		if score > best.Score {
 			best.Action, best.Score = child.action, score
 		}
@@ -193,6 +236,7 @@ func (s *searcher) atDepth(state game.State, depth int) (Result, bool) {
 		}
 	}
 	s.table[key] = tableEntry{depth: depth, ply: 0, flag: flagExact, bestAction: best.Action, values: [4]int{best.Score}}
+	best.Alternatives = topAlternatives(roots, best.Action)
 	return best, true
 }
 

@@ -112,6 +112,29 @@ func TestActionMessageConversion(t *testing.T) {
 	}
 }
 
+func TestActionMessageForwardsAlternatives(t *testing.T) {
+	msg := actionMessage("g", gamesearch.Result{
+		Action: game.Action{Kind: game.Move, Target: game.Pos{Row: 2, Col: 3}},
+		Alternatives: []gamesearch.RootMove{
+			{Action: game.Action{Kind: game.Move, Target: game.Pos{Row: 4, Col: 5}}, Score: 900},
+			{Action: game.Action{Kind: game.PlaceNeutrals}, Score: 500}, // non-Move: skipped
+			{Action: game.Action{Kind: game.Move, Target: game.Pos{Row: 0, Col: 1}}, Score: 400},
+		},
+	}, 0)
+	want := []AlternativeMove{
+		{Row: 4, Col: 5, Score: 900},
+		{Row: 0, Col: 1, Score: 400},
+	}
+	if len(msg.AlternativeMoves) != len(want) {
+		t.Fatalf("AlternativeMoves = %+v, want %+v", msg.AlternativeMoves, want)
+	}
+	for i, alt := range msg.AlternativeMoves {
+		if alt != want[i] {
+			t.Fatalf("AlternativeMoves[%d] = %+v, want %+v", i, alt, want[i])
+		}
+	}
+}
+
 func testBot(t *testing.T, player int) *Bot {
 	t.Helper()
 	position, err := game.New(6, 6, 2)

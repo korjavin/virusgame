@@ -13,7 +13,14 @@ func openingBookResult(state game.State) (Result, bool) {
 	if !ok {
 		return Result{}, false
 	}
-	return Result{Action: action, SearchComplete: true}, true
+	// The book plays by fiat, but a real static eval of the resulting position
+	// gives the diagnostics UI a meaningful number instead of +0.0 (vs-ai2.60).
+	// Depth/Nodes stay 0 so the client can label the move "book".
+	score := 0
+	if next, err := state.Apply(action); err == nil {
+		score = evaluate(next, state.CurrentPlayer())
+	}
+	return Result{Action: action, Score: score, SearchComplete: true}, true
 }
 
 // openingBookMove returns the canonical thick first-turn placement for the

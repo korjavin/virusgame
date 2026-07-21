@@ -369,7 +369,7 @@ func TestChooseDepthPrefersLongestForcedLoss(t *testing.T) {
 		t.Fatalf("selected faster loss %+v", result.Action)
 	}
 	again, ok := ChooseDepth(context.Background(), state, 8)
-	if !ok || again != result {
+	if !ok || !reflect.DeepEqual(again, result) {
 		t.Fatalf("forced-loss tie was non-deterministic: %+v / %+v", result, again)
 	}
 }
@@ -381,7 +381,7 @@ func TestChooseDepthIsDeterministicAndCancelable(t *testing.T) {
 		t.Fatal("fixed-depth search failed")
 	}
 	b, ok := ChooseDepth(context.Background(), state, 2)
-	if !ok || a != b {
+	if !ok || !reflect.DeepEqual(a, b) {
 		t.Fatalf("fixed-depth results differ: %+v / %+v", a, b)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -442,14 +442,49 @@ func TestSearchMatchesOriginMainAtFixedDepthAndNodes(t *testing.T) {
 				t.Fatalf("pinned node action %+v is illegal: %v", fixture.wantNodes.Action, err)
 			}
 			depth, ok := ChooseDepth(context.Background(), fixture.state, 2)
-			if !ok || depth != fixture.wantDepth {
+			if !ok || !sameCore(depth, fixture.wantDepth) {
 				t.Fatalf("fixed-depth result = %+v ok=%v, want vs-ai2.34 golden %+v", depth, ok, fixture.wantDepth)
 			}
 			nodes, ok := ChooseNodeBudget(fixture.state, 1000)
-			if !ok || nodes != fixture.wantNodes {
+			if !ok || !sameCore(nodes, fixture.wantNodes) {
 				t.Fatalf("fixed-node result = %+v ok=%v, want vs-ai2.34 golden %+v", nodes, ok, fixture.wantNodes)
 			}
 		})
+	}
+}
+
+// sameCore compares every byte-frozen Result field, ignoring the output-only
+// Alternatives metadata (vs-ai2.60). It proves the chosen move stays identical.
+func sameCore(a, b Result) bool {
+	return a.Action == b.Action && a.Score == b.Score && a.Depth == b.Depth &&
+		a.Nodes == b.Nodes && a.Evaluations == b.Evaluations &&
+		a.BudgetExhausted == b.BudgetExhausted && a.SearchComplete == b.SearchComplete
+}
+
+// TestResultCarriesRootAlternatives proves a real search populates next-best
+// root moves (vs-ai2.60), best-first and excluding the chosen action.
+func TestResultCarriesRootAlternatives(t *testing.T) {
+	state := play(t, mustState(t, 5, 5, 2),
+		move(1, 1), move(2, 2), move(3, 3),
+		move(3, 4), move(2, 3), move(1, 2),
+	)
+	result, ok := ChooseDepth(context.Background(), state, 2)
+	if !ok {
+		t.Fatal("search did not complete")
+	}
+	if len(result.Alternatives) == 0 {
+		t.Fatal("Alternatives empty; expected next-best root moves")
+	}
+	if len(result.Alternatives) > maxAlternatives {
+		t.Fatalf("Alternatives = %d, want <= %d", len(result.Alternatives), maxAlternatives)
+	}
+	for i, alt := range result.Alternatives {
+		if alt.Action == result.Action {
+			t.Fatalf("alternative %d equals the chosen action %+v", i, result.Action)
+		}
+		if i > 0 && result.Alternatives[i-1].Score < alt.Score {
+			t.Fatalf("alternatives not best-first: %d < %d", result.Alternatives[i-1].Score, alt.Score)
+		}
 	}
 }
 
