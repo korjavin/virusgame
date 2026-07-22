@@ -23,6 +23,9 @@ func nodeAgent(nodes uint64) Agent {
 }
 
 func TestReducedSearchStrength(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow strength test in short mode")
+	}
 	const ref uint64 = 200_000 // strong reference ~= what production reaches in ~1s
 	strong := func(uint64) Agent { return nodeAgent(ref) }
 	boards := []Board{{Rows: 12, Cols: 12}}
