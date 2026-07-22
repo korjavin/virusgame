@@ -154,6 +154,9 @@ func TestMultiplayerRandomReachableSearchActionsMatchOracle(t *testing.T) {
 }
 
 func TestPositionMatureSeeded1v1FrontierEquivalence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow position frontier test in short mode")
+	}
 	rng := rand.New(rand.NewSource(550020260715))
 	boards := [][2]int{{5, 50}, {50, 5}, {19, 37}, {50, 50}}
 	for _, board := range boards {

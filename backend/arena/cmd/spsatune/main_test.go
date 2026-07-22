@@ -19,6 +19,9 @@ import (
 // parallel fold. A full cross-process proof at the overnight regime lives in
 // results/README.md (two separate invocations, byte-identical output).
 func TestSPSAReproducible(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow SPSA reproducibility test in short mode")
+	}
 	cfg := configRecord{Iters: 3, Openings: 2, FloorOpenings: 2, Nodes: 200, Seed: 1, Workers: 4}
 
 	marshal := func() []byte {
@@ -71,6 +74,9 @@ func TestLoadInitTheta(t *testing.T) {
 // TestWarmStartDefaultIsColdStart asserts warm-starting from the default vector
 // reproduces a cold start exactly: the default maps to all-1.0 in scaled space.
 func TestWarmStartDefaultIsColdStart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow SPSA warm start test in short mode")
+	}
 	cfg := configRecord{Iters: 2, Openings: 2, FloorOpenings: 2, Nodes: 200, Seed: 1, Workers: 4}
 
 	cold, _, err := newOptimizer(cfg, false).run()
