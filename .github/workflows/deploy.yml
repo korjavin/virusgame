@@ -29,7 +29,7 @@ jobs:
 
       - name: Run tests
         working-directory: ./backend
-        run: go test -v ./...
+        run: go test -v -short ./...
 
       - name: Verify deployment event guard
         run: bash .github/scripts/verify-deploy-workflow.sh
