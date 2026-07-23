@@ -64,7 +64,8 @@ type actionJSON struct {
 type record struct {
 	Board       [][]cellJSON `json:"board"`
 	Player      int          `json:"player"`
-	Depth       int          `json:"depth"`
+	Depth       int          `json:"depth,omitempty"`
+	NodeLimit   int          `json:"nodeLimit,omitempty"`
 	Score       int          `json:"score"`
 	Action      actionJSON   `json:"action"`
 	MovesLeft   int          `json:"movesLeft"`
@@ -120,6 +121,27 @@ func toRecords(state game.State, depths []int, timeout time.Duration) []record {
 	return out
 }
 
+// toNodeBudgetRecord runs the deterministic node-limited iterative-deepening
+// search (search.ChooseNodeBudget) — the same core the live Choose path uses,
+// plus the opening book that ChooseDepth skips. Emitting its chosen action+score
+// gives the Java port a deterministic live-path oracle (bd nnue-trainer-0dj.4).
+func toNodeBudgetRecord(state game.State, limit uint64) (record, bool) {
+	result, ok := search.ChooseNodeBudget(state, limit)
+	if !ok {
+		return record{}, false
+	}
+	snap := state.Snapshot()
+	return record{
+		Board:       boardJSON(snap),
+		Player:      int(state.CurrentPlayer()),
+		NodeLimit:   int(limit),
+		Score:       result.Score,
+		Action:      encodeAction(result.Action),
+		MovesLeft:   snap.MovesLeft,
+		NeutralUsed: snap.NeutralUsed,
+	}, true
+}
+
 func next(rng *uint64) uint64 {
 	*rng ^= *rng << 13
 	*rng ^= *rng >> 7
@@ -142,7 +164,7 @@ func roster() []arena.Agent {
 
 // selfPlay plays one game, emitting oracle records for every Nth non-terminal
 // position (sampling keeps depth-5 search cost bounded while staying diverse).
-func selfPlay(rows, cols int, agentA, agentB arena.Agent, depths []int, sample int, timeout time.Duration, w *bufio.Writer) int {
+func selfPlay(rows, cols int, agentA, agentB arena.Agent, depths []int, sample int, timeout time.Duration, w, wNode *bufio.Writer, nodeLimit uint64) int {
 	state, err := game.New(rows, cols, 2)
 	if err != nil {
 		return 0
@@ -156,6 +178,14 @@ func selfPlay(rows, cols int, agentA, agentB arena.Agent, depths []int, sample i
 					w.Write(b)
 					w.WriteByte('\n')
 					written++
+				}
+			}
+			if wNode != nil {
+				if rec, ok := toNodeBudgetRecord(state, nodeLimit); ok {
+					if b, err := json.Marshal(rec); err == nil {
+						wNode.Write(b)
+						wNode.WriteByte('\n')
+					}
 				}
 			}
 		}
@@ -178,6 +208,8 @@ func selfPlay(rows, cols int, agentA, agentB arena.Agent, depths []int, sample i
 
 func main() {
 	out := flag.String("out", "", "output JSONL path (required)")
+	nodeOut := flag.String("nodebudget-out", "", "optional JSONL path for deterministic ChooseNodeBudget records")
+	nodeLimit := flag.Uint64("nodelimit", 50000, "node budget for ChooseNodeBudget records")
 	target := flag.Int("positions", 400, "approximate number of records to emit")
 	sample := flag.Int("sample", 3, "emit records every Nth ply of a game")
 	timeoutMs := flag.Int("timeout", 800, "per-position ChooseDepth wall-clock cap (ms); wider positions are skipped, kept records are fully completed")
@@ -197,13 +229,27 @@ func main() {
 	w := bufio.NewWriter(f)
 	defer w.Flush()
 
+	var wNode *bufio.Writer
+	if *nodeOut != "" {
+		fn, err := os.Create(*nodeOut)
+		if err != nil {
+			panic(err)
+		}
+		defer fn.Close()
+		wNode = bufio.NewWriter(fn)
+		defer wNode.Flush()
+	}
+
 	agents := roster()
 	rng := *seed | 1
 	written := 0
 	for written < *target {
 		a := agents[int(next(&rng)%uint64(len(agents)))]
 		b := agents[int(next(&rng)%uint64(len(agents)))]
-		written += selfPlay(12, 12, a, b, depths, *sample, timeout, w)
+		written += selfPlay(12, 12, a, b, depths, *sample, timeout, w, wNode, *nodeLimit)
 	}
 	fmt.Printf("wrote %d records to %s\n", written, *out)
+	if *nodeOut != "" {
+		fmt.Printf("wrote node-budget records (limit %d) to %s\n", *nodeLimit, *nodeOut)
+	}
 }
