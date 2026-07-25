@@ -6,9 +6,13 @@ package arena
 // its search, not its static eval -- which explains why cloning only the eval
 // (the distilled Java NNUE, val MSE 0.015 yet 0/7 vs GoBot) fails to reach parity.
 //
-// Run: go test ./backend/arena -run TestReducedSearchStrength -v -timeout 900s
+// Run: VS_REDUCED_SEARCH=1 go test ./backend/arena -run TestReducedSearchStrength -v -timeout 900s
+//
+// Env-gated like the other arena experiments: 12x12 self-play at 200k nodes
+// takes ~7 min, which is not something `go test ./...` should pay on every push.
 
 import (
+	"os"
 	"testing"
 
 	"virusgame/game"
@@ -23,6 +27,9 @@ func nodeAgent(nodes uint64) Agent {
 }
 
 func TestReducedSearchStrength(t *testing.T) {
+	if os.Getenv("VS_REDUCED_SEARCH") != "1" {
+		t.Skip("set VS_REDUCED_SEARCH=1 to run the reduced-search experiment")
+	}
 	const ref uint64 = 200_000 // strong reference ~= what production reaches in ~1s
 	strong := func(uint64) Agent { return nodeAgent(ref) }
 	boards := []Board{{Rows: 12, Cols: 12}}

@@ -19,7 +19,9 @@ import (
 // parallel fold. A full cross-process proof at the overnight regime lives in
 // results/README.md (two separate invocations, byte-identical output).
 func TestSPSAReproducible(t *testing.T) {
-	cfg := configRecord{Iters: 3, Openings: 2, FloorOpenings: 2, Nodes: 200, Seed: 1, Workers: 4}
+	// Small on purpose: this asserts determinism, not tuning quality. Two
+	// iterations already exercise the perturb/accept/carry-forward path.
+	cfg := configRecord{Iters: 2, Openings: 1, FloorOpenings: 1, Nodes: 60, Seed: 1, Workers: 4}
 
 	marshal := func() []byte {
 		trace, summary, err := newOptimizer(cfg, false).run()

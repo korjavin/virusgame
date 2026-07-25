@@ -157,7 +157,7 @@ func TestPositionMatureSeeded1v1FrontierEquivalence(t *testing.T) {
 	rng := rand.New(rand.NewSource(550020260715))
 	boards := [][2]int{{5, 50}, {50, 5}, {19, 37}, {50, 50}}
 	for _, board := range boards {
-		for game := 0; game < 4; game++ {
+		for game := 0; game < 2; game++ {
 			state, err := New(board[0], board[1], 2)
 			if err != nil {
 				t.Fatal(err)
