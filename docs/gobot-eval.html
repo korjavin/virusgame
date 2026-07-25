@@ -1,146 +1,232 @@
 <title>GoBot Static Eval — Feature Guide</title>
 <style>
   :root{
-    --bg:#f6f7f9; --card:#fff; --ink:#1a1d21; --muted:#5b636c; --line:#e2e5e9;
-    --pos:#1f9d55; --neg:#d64545; --accent:#3b6fd4;
-    --p1:#3b6fd4; --p1f:#22458f; --emptycell:#eceef2; --enemy:#d64545; --enemyf:#8f2222; --wall:#c9ced6;
+    --bg:#f6f7f9;--card:#fff;--ink:#1a1d21;--muted:#5b636c;--line:#e2e5e9;
+    --pos:#1f9d55;--neg:#d64545;--accent:#3b6fd4;
+    --p1:#3b6fd4;--p1f:#22458f;--emptycell:#eceef2;--enemy:#d64545;--enemyf:#8f2222;--wall:#b7823a;
+    --goodbg:rgba(31,157,85,.08);--badbg:rgba(214,69,69,.07);
   }
   @media (prefers-color-scheme:dark){
     :root{--bg:#14171b;--card:#1d2127;--ink:#e8ebef;--muted:#9aa3ad;--line:#2b313a;
-      --emptycell:#2a2f37;--wall:#3a4049;}
+      --emptycell:#2a2f37;--wall:#8a6528;--goodbg:rgba(31,157,85,.13);--badbg:rgba(214,69,69,.11);}
   }
-  :root[data-theme="dark"]{--bg:#14171b;--card:#1d2127;--ink:#e8ebef;--muted:#9aa3ad;--line:#2b313a;--emptycell:#2a2f37;--wall:#3a4049;}
-  :root[data-theme="light"]{--bg:#f6f7f9;--card:#fff;--ink:#1a1d21;--muted:#5b636c;--line:#e2e5e9;--emptycell:#eceef2;--wall:#c9ced6;}
+  :root[data-theme="dark"]{--bg:#14171b;--card:#1d2127;--ink:#e8ebef;--muted:#9aa3ad;--line:#2b313a;--emptycell:#2a2f37;--wall:#8a6528;--goodbg:rgba(31,157,85,.13);--badbg:rgba(214,69,69,.11)}
+  :root[data-theme="light"]{--bg:#f6f7f9;--card:#fff;--ink:#1a1d21;--muted:#5b636c;--line:#e2e5e9;--emptycell:#eceef2;--wall:#b7823a;--goodbg:rgba(31,157,85,.08);--badbg:rgba(214,69,69,.07)}
   *{box-sizing:border-box}
   body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:2rem 1rem}
-  .wrap{max-width:1080px;margin:0 auto}
+  .wrap{max-width:1120px;margin:0 auto}
   h1{font-size:1.7rem;margin:0 0 .3rem}
-  .sub{color:var(--muted);margin:0 0 1.5rem;max-width:70ch}
+  .sub{color:var(--muted);margin:0 0 1.3rem;max-width:74ch}
   .sub code{background:var(--emptycell);padding:.1em .35em;border-radius:4px;font-size:.85em}
-  .legend{display:flex;flex-wrap:wrap;gap:.9rem;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem;margin-bottom:1.5rem}
-  .legend div{display:flex;align-items:center;gap:.4rem;font-size:.85rem;color:var(--muted)}
-  .sw{width:16px;height:16px;border-radius:4px;display:inline-block}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem}
+  .legend{display:flex;flex-wrap:wrap;gap:.8rem 1.1rem;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem;margin-bottom:1.4rem}
+  .legend div{display:flex;align-items:center;gap:.45rem;font-size:.83rem;color:var(--muted)}
+  .sw{width:16px;height:16px;border-radius:4px;display:inline-block;flex:none}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem;display:flex;flex-direction:column}
-  .card h3{margin:0;font-size:1.05rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+  .card h3{margin:0;font-size:1.06rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
   .w{font:600 .72rem/1 ui-monospace,monospace;padding:.28em .5em;border-radius:6px;background:var(--emptycell);color:var(--muted)}
-  .w.pos{color:var(--pos)} .w.neg{color:var(--neg)}
+  .w.pos{color:var(--pos)}.w.neg{color:var(--neg)}
   .field{font:.72rem/1 ui-monospace,monospace;color:var(--accent)}
-  .card p{color:var(--muted);font-size:.9rem;margin:.6rem 0 0}
-  .board{margin-top:.9rem;display:grid;gap:2px;width:max-content}
-  .cell{width:26px;height:26px;border-radius:4px;background:var(--emptycell)}
-  .cell.p1{background:var(--p1)} .cell.p1f{background:var(--p1f)}
-  .cell.e{background:var(--enemy)} .cell.ef{background:var(--enemyf)}
+  .meta{font-size:.86rem;margin:.55rem 0 0;color:var(--ink)}
+  .meta b{color:var(--muted);font-weight:600;font-size:.7rem;letter-spacing:.03em;text-transform:uppercase;display:inline-block;min-width:4.6em;margin-right:.3em}
+  .ex{display:flex;gap:.7rem;margin-top:.9rem;flex-wrap:wrap}
+  .exbox{flex:1 1 130px;border-radius:9px;padding:.55rem;border:1px solid var(--line)}
+  .exbox.good{background:var(--goodbg)}.exbox.bad{background:var(--badbg)}
+  .exhdr{font:700 .68rem/1 system-ui;letter-spacing:.05em;margin-bottom:.5rem}
+  .exbox.good .exhdr{color:var(--pos)}.exbox.bad .exhdr{color:var(--neg)}.exbox.plain .exhdr{color:var(--muted)}
+  .board{display:grid;gap:2px;width:max-content}
+  .cell{width:22px;height:22px;border-radius:3px;background:var(--emptycell)}
+  .cell.p1{background:var(--p1)}.cell.p1f{background:var(--p1f)}
+  .cell.e{background:var(--enemy)}.cell.ef{background:var(--enemyf)}
   .cell.wall{background:var(--wall)}
   .cell.base{box-shadow:inset 0 0 0 3px #f4c542}
+  .cell.ebase{box-shadow:inset 0 0 0 3px #f4c542}
   .cell.mark{outline:2px dashed var(--pos);outline-offset:-2px}
   .cell.markn{outline:2px dashed var(--neg);outline-offset:-2px}
-  .note{font-size:.78rem;color:var(--muted);margin-top:.5rem}
+  .cap{font-size:.75rem;color:var(--muted);margin-top:.5rem;line-height:1.35}
+  .chips{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.9rem}
+  .chip{font:.78rem/1 ui-monospace,monospace;background:var(--emptycell);border-radius:6px;padding:.4em .6em;color:var(--ink)}
   footer{color:var(--muted);font-size:.8rem;margin-top:2rem;border-top:1px solid var(--line);padding-top:1rem}
+  footer code{background:var(--emptycell);padding:.1em .35em;border-radius:4px}
 </style>
 <div class="wrap">
   <h1>GoBot Static Evaluation — Feature Guide</h1>
-  <p class="sub">These are the hand-picked features and hand-tuned weights the GoBot scores a position with at every search leaf.
-  Source: <code>backend/search/evaluate.go</code> → <code>defaultEvalParams()</code>. No neural net on the default path.
-  Final score for a player = its raw score minus the average of opponents' raw scores.</p>
+  <p class="sub">Every feature the GoBot scores a position with at a search leaf, with a <b>good</b> vs <b>bad</b> board for each.
+  Source: <code>backend/search/evaluate.go</code> → <code>defaultEvalParams()</code>. Boards are didactic, not from a real game.
+  Final score for a player = its raw score − the average of opponents' raw scores.
+  Rules recap: you expand a <b>Normal</b> onto an empty cell next to your group; moving onto an enemy Normal <b>captures</b> it as a locked <b>Fortified</b>; bases sit in the corners.</p>
 
   <div class="legend">
-    <div><span class="sw" style="background:var(--p1)"></span>Your normal cell</div>
-    <div><span class="sw" style="background:var(--p1f)"></span>Your fortified cell</div>
+    <div><span class="sw" style="background:var(--p1)"></span>Your normal</div>
+    <div><span class="sw" style="background:var(--p1f)"></span>Your fortified (captured, locked)</div>
     <div><span class="sw" style="background:var(--enemy)"></span>Enemy normal</div>
     <div><span class="sw" style="background:var(--enemyf)"></span>Enemy fortified</div>
     <div><span class="sw" style="background:var(--emptycell)"></span>Empty</div>
-    <div><span class="sw" style="background:var(--wall)"></span>Blocked</div>
+    <div><span class="sw" style="background:var(--wall)"></span>Neutral wall</div>
     <div><span class="sw" style="box-shadow:inset 0 0 0 3px #f4c542;background:transparent"></span>Base</div>
-    <div><span class="sw" style="outline:2px dashed var(--pos);outline-offset:-2px;background:transparent"></span>Counted (good)</div>
-    <div><span class="sw" style="outline:2px dashed var(--neg);outline-offset:-2px;background:transparent"></span>Counted (bad)</div>
+    <div><span class="sw" style="outline:2px dashed var(--pos);outline-offset:-2px;background:transparent"></span>Counts (good)</div>
+    <div><span class="sw" style="outline:2px dashed var(--neg);outline-offset:-2px;background:transparent"></span>Counts (penalty)</div>
   </div>
 
   <div class="grid" id="grid"></div>
 
-  <footer>v1 — generated from the actual weights in <code>evaluate.go</code>. Weights are raw integers; the material terms
-  (Connected/Normal/Fortified/Mobility/Captures/Disconnected/SpaceRace) are area-normalized before scaling, base &amp; tactical
-  terms are applied directly. NNUE path exists but is off unless <code>VS_NNUE</code> is set.</footer>
+  <footer>v2 — weights from the real <code>defaultEvalParams()</code>. Material terms
+  (Connected/Normal/Fortified/Mobility/Captures/Disconnected/SpaceRace) are area-normalized before scaling; base &amp; tactical
+  terms apply directly. NNUE path exists but is off unless <code>VS_NNUE</code> is set.</footer>
 </div>
 
 <script>
-// board grammar: . empty, # blocked, p your normal, P your fortified, e enemy, E enemy fortified, B your base
-// second string per row (mask): space=none, + good mark, - bad mark
-const FEATURES = [
-  {name:"Connected", field:"Connected", w:10, kind:"pos",
-   desc:"Your cells reachable from your base — your living mass. Everything you own that's still linked to home.",
-   board:["Bpp","ppp","p.e"], mask:["+++","+++","+  "]},
-  {name:"Normal", field:"Normal", w:30, kind:"pos",
-   desc:"Count of your ordinary (non-fortified) cells. The biggest per-cell weight — raw material dominates.",
-   board:["Bpp","pPp"], mask:["+++","+ +"]},
-  {name:"Fortified", field:"Fortified", w:6, kind:"pos",
-   desc:"Your fortified cells — locked, can't be captured. Valuable defensively but weighted low: they don't expand.",
-   board:["BPp","pPp"], mask:[" + "," + "]},
-  {name:"Mobility", field:"Mobility", w:1, kind:"pos",
-   desc:"Distinct empty-or-capturable cells next to your connected cells — legal move targets. Freedom of action.",
-   board:["Bp.","pp.",".ee"], mask:["  +","  +","+  "]},
-  {name:"Captures", field:"Captures", w:1, kind:"pos",
-   desc:"Subset of mobility that lands on an enemy normal — moves that actually take a piece. Aggression signal.",
-   board:["Bpe","ppe"], mask:["  -","  -"]},
-  {name:"Disconnected", field:"Disconnected", w:1, kind:"neg",
-   desc:"Your cells cut off from base — dead weight. Subtracted. Normalized against how much you own.",
-   board:["Bpp","p##","#.p"], mask:["   ","   ","  -"]},
-  {name:"Base exits", field:"BaseExits", w:180, kind:"pos",
-   desc:"Your connected cells sitting directly next to your base — escape routes out of home. Heavily weighted.",
-   board:[".p.","pBp",".p."], mask:[" + ","+ +"," + "]},
-  {name:"Base openings", field:"BaseOpenings", w:80, kind:"pos",
-   desc:"Empty (or capturable) cells adjacent to your base — room left to grow from home.",
-   board:[".. ","#B.","..."], mask:["++ ","  +","+++"]},
-  {name:"Base anchors", field:"BaseAnchors", w:240, kind:"pos",
-   desc:"Fortified cells hugging your base — defended home neighbors. Highest single weight: a safe base is gold.",
-   board:[".P.","PBP"], mask:[" + ","+ +"]},
-  {name:"Base threat", field:"BaseThreat", w:650, kind:"neg",
-   desc:"Enemy can capture into your base region — subtracted, and multiplied by tempo. A base under attack is dire.",
-   board:["eB.","..."], mask:["-  ","   "]},
-  {name:"Threatened", field:"ThreatenedMult", w:1, kind:"neg",
-   desc:"Your connected normals an enemy can capture next move. Penalty scaled by how much of your mass is exposed.",
-   board:["Bpp","ppe"], mask:["   ","  -"]},
-  {name:"Threatened loss", field:"ThreatenedLossMult", w:1, kind:"neg",
-   desc:"Extra penalty when a threatened cell is also a cut point — losing it splits your territory. Weighted by the split size.",
-   board:["Bp.","..p","pePe".slice(0,3)], mask:["   ","   ","   "]},
-  {name:"Space race", field:"SpaceRace", w:32, kind:"pos",
-   desc:"Voronoi partition of empty cells: how many you reach first vs opponents (Tron-style territory). Sees walls forming plies ahead.",
-   board:["Bp..e","pp..e",".....",".....","...ee"], mask:["+++  ","+++  ","++   ","+    ","     "]},
-  {name:"Sealed base", field:"SealedBasePenalty", w:5000, kind:"neg",
-   desc:"Flat −5000 if your base has no exits AND no openings — you're walled in and functionally dead.",
-   board:["#B#","###"], mask:["   ","   "]},
-  {name:"Neutral unused", field:"NeutralUnusedBonus", w:20, kind:"pos",
-   desc:"Small bonus while your one-time neutral/special move is still in hand — an unspent option is worth something.",
-   board:null},
-  {name:"Moves-left tempo", field:"MovesLeftTempo", w:12, kind:"pos",
-   desc:"Bonus per remaining action on your turn (side to move only) — reward for having plays left before passing.",
-   board:null},
-  {name:"Predatory cut", field:"PredatoryCutBase", w:150, kind:"pos",
-   desc:"Bonus for sitting next to an enemy cut point — you're one move from severing their mass. Plus a share of the split size.",
-   board:["Ee.","..p",".e."], mask:[" - ","  +","   "]},
+// board chars: . empty  # neutral-wall  p your-normal  P your-fortified  e enemy-normal  E enemy-fortified  B your-base  b enemy-base
+// mask chars:  (space) none   + counts-good   - counts-penalty
+const F = [
+ {n:"Connected",f:"Connected",w:10,k:"pos",
+  m:"Your cells still linked to your base by a chain of your own cells.",
+  y:"Only connected mass can keep moving and attacking. Cut-off cells are dead weight.",
+  ex:[
+   {t:"good",b:["Bpp.","ppp.",".pp."],k:["+++ ","+++ "," ++ "],c:"One solid group — every cell (and the base) counts."},
+   {t:"bad", b:["Bp#p","pp#p","..#P"],k:["++  ","++  ","    "],c:"A neutral wall strands the right column — those 3 cells score 0 to Connected."}]},
+
+ {n:"Normal",f:"Normal",w:30,k:"pos",
+  m:"Count of your ordinary, un-captured cells.",
+  y:"Heaviest per-cell weight. Raw material dominates the score — more board = more points.",
+  ex:[
+   {t:"good",b:["Bppp","pppp"],k:[" +++","++++"],c:"7 normals × +30."},
+   {t:"bad", b:["Bp..","p..."],k:[" +  ","+   "],c:"2 normals × +30 — a small army scores little."}]},
+
+ {n:"Fortified",f:"Fortified",w:6,k:"pos",
+  m:"Cells you captured from an enemy — now locked and safe (can't be re-taken).",
+  y:"Durable but cheap (+6 vs +30 for a normal): they defend, but can't spawn new growth.",
+  ex:[
+   {t:"good",b:["BPp","Ppp"],k:[" + ","+  "],c:"2 captured cells shielding the base — safe, +6 each."},
+   {t:"bad", b:["BPP","PPP"],k:[" ++","+++"],c:"Everything locked: safe but frozen, and still only +6 apiece."}]},
+
+ {n:"Mobility",f:"Mobility",w:1,k:"pos",
+  m:"Distinct cells you could move into next turn (empty or capturable), next to your group.",
+  y:"Freedom to act. Low weight but many cells — a boxed-in group is nearly dead even if large.",
+  ex:[
+   {t:"good",b:["Bp..","pp..","...."],k:["  + ","  + ","+++ "],c:"5 open frontier cells to expand into."},
+   {t:"bad", b:["Bp#","pp#","###"],k:["   ","   ","   "],c:"Walled in on all sides — almost no legal moves."}]},
+
+ {n:"Captures",f:"Captures",w:1,k:"pos",
+  m:"Frontier cells that are enemy normals — moves that actually take a piece.",
+  y:"Direct pressure. Every capture swings a cell and turns it into your fortified.",
+  ex:[
+   {t:"good",b:["Bpe","ppe"],k:["  +","  +"],c:"2 enemy normals in reach — capturable now."},
+   {t:"bad", b:["Bp.","pp."],k:["   ","   "],c:"No enemy contact — 0 captures available."}]},
+
+ {n:"Disconnected",f:"Disconnected",w:1,k:"neg",
+  m:"Your cells NOT reachable from your base.",
+  y:"Penalty — the flip side of Connected. Stranded cells can't be defended or grow.",
+  ex:[
+   {t:"good",b:["Bpp","ppp"],k:["   ","   "],c:"All linked to base — 0 penalty."},
+   {t:"bad", b:["Bp#p","pp#p","..#P"],k:["   -","   -","   -"],c:"3 cells cut off behind the wall — each adds penalty."}]},
+
+ {n:"Base exits",f:"BaseExits",w:180,k:"pos",
+  m:"Your own connected cells sitting directly next to your base.",
+  y:"Escape lanes from home. Big weight — a base that can pour out cells is powerful.",
+  ex:[
+   {t:"good",b:[".p.","pBp",".p."],k:[" + ","+ +"," + "],c:"4 cells manning the base's exits."},
+   {t:"bad", b:["pB#",".#."],k:["+  ","   "],c:"Only 1 exit — the base is nearly bottled up."}]},
+
+ {n:"Base openings",f:"BaseOpenings",w:80,k:"pos",
+  m:"Empty cells next to your base — space you can still expand into from home.",
+  y:"Growth potential. Fewer openings means you're closer to being sealed in.",
+  ex:[
+   {t:"good",b:[".B.","..."],k:["+ +","+++"],c:"5 open cells to grow into from the base."},
+   {t:"bad", b:["eBe","ppp"],k:["   ","   "],c:"Every neighbor is filled — 0 room to expand."}]},
+
+ {n:"Base anchors",f:"BaseAnchors",w:240,k:"pos",
+  m:"Fortified (captured, locked) cells adjacent to your base.",
+  y:"Highest single weight. A fortified ring can't be taken, so the base becomes nearly unkillable.",
+  ex:[
+   {t:"good",b:[".P.","PBP",".P."],k:[" + ","+ +"," + "],c:"Locked ring on the doorstep — base is armored."},
+   {t:"bad", b:[".p.","pBp",".p."],k:["   ","   ","   "],c:"Only fragile normals guard it — 0 anchors."}]},
+
+ {n:"Base threat",f:"BaseThreat",w:650,k:"neg",
+  m:"An enemy can capture into your base's neighborhood.",
+  y:"Multiplied penalty — losing base cells can collapse the whole group. Defend immediately.",
+  ex:[
+   {t:"good",b:[".B.","...","..."],k:["   ","   ","   "],c:"No enemy near the base."},
+   {t:"bad", b:["eB.","...","..."],k:["-  ","   ","   "],c:"Enemy touching the base region — heavy penalty."}]},
+
+ {n:"Threatened",f:"ThreatenedMult",w:1,k:"neg",
+  m:"Your connected normals an enemy could capture on their next move.",
+  y:"Exposed material. Penalty scales with how much of your mass is left hanging.",
+  ex:[
+   {t:"good",b:["Bpp","pp."],k:["   ","   "],c:"No enemy contact — nothing threatened."},
+   {t:"bad", b:["Bpp","ppe"],k:["  -"," - "],c:"2 normals the enemy can capture next move."}]},
+
+ {n:"Threatened loss",f:"ThreatenedLossMult",w:1,k:"neg",
+  m:"A threatened cell that's ALSO a cut-point — losing it splits your territory.",
+  y:"Worse than a plain loss: weighted by the size of the chunk that would break off.",
+  ex:[
+   {t:"good",b:["Bpp","..e"],k:["  -","   "],c:"Threatened cell is a dead-end — losing it costs just 1."},
+   {t:"bad", b:["Bpp",".ep","ppp"],k:["   ","  -","---"],c:"Enemy sits on the neck: capturing it strands the whole bottom row."}]},
+
+ {n:"Space race",f:"SpaceRace",w:32,k:"pos",
+  m:"Empty cells you'd reach before any opponent (nearest-owner / Tron-style territory).",
+  y:"Sees the board being partitioned many moves ahead — who's walling off the bigger region.",
+  ex:[
+   {t:"good",b:["Bp...","pp...",".....",".....","...e."],k:["  +++","  +++","+++  ","++   ","     "],c:"You reach the shaded region first — you own the larger territory."},
+   {t:"bad", b:["B#...",".#...",".#...",".#...",".#..e"],k:["     ","     ","     ","     ","     "],c:"A wall boxes you into the left strip — the opponent owns the open board."}]},
+
+ {n:"Sealed base",f:"SealedBasePenalty",w:5000,k:"neg",
+  m:"Your base has zero exits AND zero openings — completely walled in.",
+  y:"Flat −5000: effectively dead, no way to generate any move from home.",
+  ex:[
+   {t:"good",b:[".B.","..."],k:["+++","+++"],c:"Still has openings — not sealed."},
+   {t:"bad", b:["#B#","###"],k:["   ","   "],c:"Every neighbor is a wall — sealed. Flat −5000."}]},
+
+ {n:"Neutral unused",f:"NeutralUnusedBonus",w:20,k:"pos",
+  m:"Your one-time “place two neutral walls” special is still available.",
+  y:"Small bonus for keeping the option — an unspent tool has value.",
+  ex:[
+   {t:"good",b:["Bp.","pp."],k:["   ","   "],c:"Special still in hand — +20."},
+   {t:"bad", b:["B#.","p#p"],k:["   ","   "],c:"Special spent (two walls placed) — bonus gone."}]},
+
+ {n:"Moves-left tempo",f:"MovesLeftTempo",w:12,k:"pos",
+  m:"Actions remaining in your current turn (you are the side to move).",
+  y:"Rewards having plays left before you pass — a small tempo nudge.",
+  chips:["3 left → +36","2 left → +24","1 left → +12","passed → 0"]},
+
+ {n:"Predatory cut",f:"PredatoryCutBase",w:150,k:"pos",
+  m:"You sit next to an enemy cut-point — one move from severing their group.",
+  y:"Offensive mirror of Base threat: threatening to split the opponent, plus a share of the chunk size.",
+  ex:[
+   {t:"good",b:["ee.","pe.",".e."],k:["   "," + ","   "],c:"Your cell is on the enemy's neck — one move splits their group."},
+   {t:"bad", b:["Bpp","...","..e"],k:["   ","   ","   "],c:"No enemy cut-point in reach — 0."}]},
 ];
 
-const cls={".":"","#":"wall","p":"p1","P":"p1f","e":"e","E":"ef","B":"p1 base"," ":""};
+const cls={".":"","#":"wall","p":"p1","P":"p1f","e":"e","E":"ef","B":"p1 base","b":"e ebase"," ":""};
+function renderBoard(rows,mask){
+  const cols=Math.max(...rows.map(r=>r.length));
+  let h=`<div class="board" style="grid-template-columns:repeat(${cols},22px)">`;
+  rows.forEach((row,r)=>{
+    for(let i=0;i<cols;i++){
+      const ch=row[i]||".";
+      const mk=(mask&&mask[r]&&mask[r][i])||" ";
+      const m=mk==="+"?" mark":mk==="-"?" markn":"";
+      h+=`<div class="cell ${cls[ch]||""}${m}"></div>`;
+    }
+  });
+  return h+"</div>";
+}
 const grid=document.getElementById("grid");
-for(const f of FEATURES){
+for(const f of F){
   const c=document.createElement("div");c.className="card";
-  const badge=`<span class="w ${f.kind}">${f.kind==="neg"?"−":"+"}${f.w}</span>`;
-  let html=`<h3>${f.name} ${badge}<span class="field">${f.field}</span></h3><p>${f.desc}</p>`;
-  if(f.board){
-    const cols=f.board[0].length;
-    let b=`<div class="board" style="grid-template-columns:repeat(${cols},26px)">`;
-    f.board.forEach((row,r)=>{
-      for(let i=0;i<cols;i++){
-        const ch=row[i]||".";
-        const mk=(f.mask&&f.mask[r]&&f.mask[r][i])||" ";
-        const m=mk==="+"?" mark":mk==="-"?" markn":"";
-        b+=`<div class="cell ${cls[ch]||""}${m}"></div>`;
-      }
-    });
-    b+=`</div>`;
-    html+=b;
-    html+=`<div class="note">Dashed = cells this feature counts in this position.</div>`;
+  const badge=`<span class="w ${f.k}">${f.k==="neg"?"−":"+"}${f.w}</span>`;
+  let h=`<h3>${f.n} ${badge}<span class="field">${f.f}</span></h3>`;
+  h+=`<div class="meta"><b>Measures</b>${f.m}</div><div class="meta"><b>Why</b>${f.y}</div>`;
+  if(f.chips){
+    h+=`<div class="chips">`+f.chips.map(x=>`<span class="chip">${x}</span>`).join("")+`</div>`;
+  }else{
+    h+=`<div class="ex">`;
+    for(const e of f.ex){
+      const lbl=e.t==="good"?"GOOD":e.t==="bad"?"BAD":"";
+      h+=`<div class="exbox ${e.t}"><div class="exhdr">${lbl}</div>${renderBoard(e.b,e.k)}<div class="cap">${e.c}</div></div>`;
+    }
+    h+=`</div>`;
   }
-  c.innerHTML=html;grid.appendChild(c);
+  c.innerHTML=h;grid.appendChild(c);
 }
 </script>
