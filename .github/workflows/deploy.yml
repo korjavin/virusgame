@@ -62,36 +62,49 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Docker refuses an uppercase repository name, but GitHub owner/repo names
+      # keep their case (a fork under `MegaTorg/` produced an invalid tag). There
+      # is no lowercase function in workflow expressions, so do it in bash.
+      - name: Resolve image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: Build and push Docker image
         id: build-and-push
         uses: docker/build-push-action@v5
         with:
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
           build-args: |
             COMMIT_SHA=${{ github.sha }}
 
+      # Deploy steps below only work on the upstream repo: the compose files
+      # pin the upstream image name (so the sed is a no-op elsewhere, and the
+      # commit then fails on an empty tree) and the Portainer secrets are not
+      # available to forks. Build-and-push above still runs everywhere.
       - name: Update and commit docker-compose.yml
+        if: ${{ !github.event.repository.fork }}
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           git checkout -B deploy
           # Anchor on a literal tag ([alnum] to end of line) so ${CANARY_IMAGE_TAG:-canary}
           # and other env-templated image tags are left untouched.
-          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:[a-zA-Z0-9]*$|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" docker-compose.yml
-          sed -i "s|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:[a-zA-Z0-9]*$|image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.sha }}|g" bot-hoster-compose.yml
+          sed -i "s|image: ${IMAGE}:[a-zA-Z0-9]*$|image: ${IMAGE}:${GITHUB_SHA}|g" docker-compose.yml
+          sed -i "s|image: ${IMAGE}:[a-zA-Z0-9]*$|image: ${IMAGE}:${GITHUB_SHA}|g" bot-hoster-compose.yml
 
           git add docker-compose.yml bot-hoster-compose.yml
-          git commit -m "ci: Update image tag to ${{ github.sha }}"
+          git commit -m "ci: Update image tag to ${GITHUB_SHA}"
           git push origin deploy --force
 
       - name: Trigger Portainer Redeploy Webhook
+        if: ${{ !github.event.repository.fork }}
         uses: distributhor/workflow-webhook@v3
         with:
           webhook_url: ${{ secrets.PORTAINER_REDEPLOY_HOOK }}
           webhook_secret: "trigger"
-          
+
       - name: Trigger Portainer Redeploy Webhook Bot
+        if: ${{ !github.event.repository.fork }}
         uses: distributhor/workflow-webhook@v3
         with:
           webhook_url: ${{ secrets.PORTAINER_REDEPLOY_HOOK_BOT }}
@@ -122,12 +135,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: Build and push canary Docker image
         uses: docker/build-push-action@v5
         with:
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:canary
-            ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:canary-${{ github.sha }}
+            ${{ env.IMAGE }}:canary
+            ${{ env.IMAGE }}:canary-${{ github.sha }}
           build-args: |
             COMMIT_SHA=${{ github.sha }}
