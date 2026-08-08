@@ -649,6 +649,7 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 		YourPlayer:       1,
 		Rows:             rows,
 		Cols:             cols,
+		Snapshot:         snapshotOf(game), // additive, for bot clients; ignored by existing clients
 	}
 	h.sendToUser(challenge.FromUser, &p1Msg)
 
@@ -660,6 +661,7 @@ func (h *Hub) handleAcceptChallenge(user *User, msg *Message) {
 		YourPlayer:       2,
 		Rows:             rows,
 		Cols:             cols,
+		Snapshot:         snapshotOf(game), // additive, for bot clients; ignored by existing clients
 	}
 	h.sendToUser(challenge.ToUser, &p2Msg)
 
@@ -789,6 +791,7 @@ func (h *Hub) handleMove(user *User, msg *Message) {
 		Col:       msg.Col,
 		Player:    playerNum,
 		MovesLeft: game.MovesLeft,
+		Snapshot:  snapshotOf(game), // additive, for bot clients; ignored by existing clients
 	}
 	h.broadcastToGame(game, &moveMsg)
 
@@ -948,10 +951,11 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 
 	// Broadcast to other players
 	neutralsMsg := Message{
-		Type:   "neutrals_placed",
-		GameID: msg.GameID,
-		Player: playerNum,
-		Cells:  msg.Cells,
+		Type:     "neutrals_placed",
+		GameID:   msg.GameID,
+		Player:   playerNum,
+		Cells:    msg.Cells,
+		Snapshot: snapshotOf(game), // additive, for bot clients; ignored by existing clients
 	}
 
 	if game.IsMultiplayer {
@@ -1009,6 +1013,7 @@ func (h *Hub) handleNeutrals(user *User, msg *Message) {
 		GameID:    msg.GameID,
 		Player:    game.CurrentPlayer,
 		MovesLeft: game.MovesLeft,
+		Snapshot:  snapshotOf(game), // additive, for bot clients; ignored by existing clients
 	}
 
 	// Send turn change to all players based on game type
@@ -2435,6 +2440,7 @@ func (h *Hub) endTurn(game *Game) {
 		GameID:    game.ID,
 		Player:    game.CurrentPlayer,
 		MovesLeft: game.MovesLeft,
+		Snapshot:  snapshotOf(game), // additive, for bot clients; ignored by existing clients
 	}
 	h.broadcastToGame(game, &turnMsg)
 

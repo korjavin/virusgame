@@ -93,6 +93,9 @@ type Message struct {
 	// Chat fields
 	MessageID string `json:"messageId,omitempty"` // Translation key
 	Content   string `json:"content,omitempty"`   // Fallback text or custom message
+
+	// Read-only board snapshot for bot clients (see snapshot.go).
+	Snapshot *GameSnapshot `json:"snapshot,omitempty"`
 }
 
 type UserInfo struct {
