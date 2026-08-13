@@ -37,9 +37,23 @@ var nnueEnabled = func() bool {
 // concern for when the net actually ships — the smoke net's strength is
 // meaningless, so exact multi-seat perspective is not worth building now.
 func nnueEvaluate(state game.State, player game.Player) int {
-	pred := int(nnueweights.Predict(nnuefeat.Input(state)))
-	if player == state.CurrentPlayer() {
-		return pred
+	// Residual mode (vs-ai2.56 v5): the net predicts deepScore - staticEval,
+	// so play-time eval = frozen hand-tuned eval + learned correction. The
+	// combined eval degrades gracefully toward hand-tuned when the net is
+	// uncertain, and the net only has to learn what the formula misses.
+	resid := int(nnueweights.Predict(nnuefeat.Input(state)))
+	if player != state.CurrentPlayer() {
+		resid = -resid
 	}
-	return -pred
+	workspace := evalWorkspace{}
+	// Call the classic eval directly — evaluateWithWorkspace would route back
+	// here (VS_NNUE is set) and recurse.
+	return evaluateAllWithWorkspace(state, &workspace)[player-1] + resid
+}
+
+// StaticEval exposes the frozen hand-tuned evaluation for offline tooling
+// (residual-target computation in tools/nnue-train). Not used in play.
+func StaticEval(state game.State, player game.Player) int {
+	workspace := evalWorkspace{}
+	return evaluateAllWithWorkspace(state, &workspace)[player-1]
 }

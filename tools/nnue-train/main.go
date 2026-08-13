@@ -126,6 +126,12 @@ func loadShards(dir string) ([]Sample, error) {
 				file.Close()
 				return nil, fmt.Errorf("%s: %w", path, err)
 			}
+			// Mate-magnitude labels dwarf positional residuals (std explodes,
+			// z-norm crushes real signal to zero — measured on deep labels).
+			// The net cannot infer forced mates from static features anyway.
+			if rec.DeepScore > 200000 || rec.DeepScore < -200000 {
+				continue
+			}
 			vec, err := rec.input()
 			if err != nil {
 				file.Close()

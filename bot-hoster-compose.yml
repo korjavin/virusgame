@@ -27,3 +27,4 @@ services:
       - BACKEND_URL=${BACKEND_URL:-ws://virusgame-backend:8080/ws}
       - BOT_POOL_SIZE=${CANARY_BOT_POOL_SIZE:-3}
       - BOT_NAME_PREFIX=${CANARY_BOT_NAME_PREFIX:-Canary}
+      - VS_NNUE=${CANARY_VS_NNUE:-1}
